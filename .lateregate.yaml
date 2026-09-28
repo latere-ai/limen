@@ -1,0 +1,67 @@
+# The shared quality bar, read by `go tool lateregate`. The gates live in
+# latere.ai/x/ci-gate, pinned in go.mod; only decisions this repository
+# makes are written here, each with its reason.
+
+# Limen ships a contract and, for now, nothing that serves it. The role
+# becomes `core`, with Limen's audience and API group, in the change that
+# adds limend (specs/001-architecture.md).
+identity:
+  role: none
+
+# Apache-2.0, like the research implementation the engine is ported from
+# (github.com/changkun/trustcalib) and the harness-side cores it serves.
+license:
+  spdx: Apache-2.0
+  holder: Latere AI
+  extensions: ['.go']
+  names: [Makefile]
+
+spec:
+  # The lifecycle of specs/README.md. `superseded` is terminal beside
+  # `complete` for a design a later spec replaces.
+  status:
+    - vague
+    - drafted
+    - validated
+    - dispatched
+    - in-progress
+    - testing
+    - complete
+    - stale
+    - superseded
+  # Every spec says what it changes and what it waits for, so the index
+  # can order the work queue.
+  require: [title, status, track, depends_on, affects, effort, created, updated, author]
+  wikilinks: true
+  numbered: true
+  started: [dispatched, in-progress, testing, complete]
+  settled: [complete, superseded]
+  require_section:
+    - Overview
+    - Design
+    - Acceptance criteria
+  require_section_by_status:
+    complete: [Outcome]
+  # The API spec and the principles are tables of routes, codes and
+  # invariants; a row whose cell count drifts renders as a missing column.
+  tables: true
+
+# The contract's dependency invariant (specs/002-contract.md): the root
+# package, which every harness imports, reaches the standard library and
+# nothing else, and the authorizer vocabulary adds only the shared
+# authorizer contract.
+depcheck:
+  packages:
+    latere.ai/x/limen:
+      decision: >-
+        the contract is imported into every harness's hot path, so it
+        reaches the standard library only; an engine dependency lives in
+        engine/, never here
+      allow: {}
+    latere.ai/x/limen/authorizer:
+      decision: >-
+        the vocabulary is data for the shared authorizer contract and
+        reaches that contract and the standard library
+      allow:
+        latere.ai/x/pkg: the shared authorizer contract, latere.ai/x/pkg/authz
+        github.com/google/uuid: reached through latere.ai/x/pkg/authz and its httpjson, which parses UUID path parameters with it
