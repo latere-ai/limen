@@ -1,0 +1,914 @@
+openapi: 3.1.0
+info:
+  title: Limen
+  version: "1"
+  summary: The learned input to an agent harness's allow, ask, or block decision.
+  description: >-
+    Limen assesses a proposed tool call for the person an agent acts for: the
+    probability that they would approve it, and the verdict that probability
+    implies under the organization's stated costs. It learns from the
+    person's answers, samples a share of automatic verdicts for review, and
+    reports how often its own verdicts, or a judge's, allow what the person
+    would deny. The server serves these routes under /v1; a platform may
+    mount them under a prefix of its own. Every route asks the installation's
+    authorizer for the action named in x-limen-action before it acts.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+security:
+- bearer: []
+paths:
+  /v1/assessments:
+    post:
+      operationId: createAssessment
+      summary: Assess a call
+      description: >-
+        Assess one proposed call. The request is idempotent on the action's
+        subject and call_id: a repeat returns the first assessment unchanged,
+        audit sample included, so a caller cannot draw a second sample by
+        asking again.
+      x-limen-action: assessment.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Action"
+      responses:
+        "200":
+          description: The assessment, new or the one already recorded for this call.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Assessment"
+        "400":
+          $ref: "#/components/responses/invalid_action"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_profile"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/unavailable"
+    get:
+      operationId: listAssessments
+      summary: List a person's calls
+      description: >-
+        List one subject's assessed calls with their actions and answers,
+        oldest first. With pending=true, only the calls that still need an
+        answer: asks nobody has answered, and flagged or audited calls
+        awaiting review.
+      x-limen-action: assessment.list
+      parameters:
+      - name: subject
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: pending
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: cursor
+        in: query
+        description: The next_cursor of the previous page.
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+      responses:
+        "200":
+          description: One page of records.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPage"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/assessments/{id}:
+    get:
+      operationId: getAssessment
+      summary: Read one call
+      description: One assessment with the action it answers and the answer it received, if any.
+      x-limen-action: assessment.read
+      parameters:
+      - $ref: "#/components/parameters/assessment"
+      responses:
+        "200":
+          description: The record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Record"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_assessment"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/assessments/{id}/answer:
+    post:
+      operationId: answerAssessment
+      summary: Answer a call
+      description: >-
+        Record the person's answer to an assessed call. Who answered is the
+        verified subject of the credential. A call takes one decision; a
+        later dispute is sent with kind contest, which trains the model and
+        never enters an error estimate.
+      x-limen-action: assessment.answer
+      parameters:
+      - $ref: "#/components/parameters/assessment"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Answer"
+      responses:
+        "204":
+          description: The answer is recorded.
+        "400":
+          $ref: "#/components/responses/invalid_answer"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_assessment"
+        "409":
+          $ref: "#/components/responses/already_answered"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/reliability:
+    get:
+      operationId: getReliability
+      summary: Report error rates
+      description: >-
+        How often the automatic verdicts of Limen (of=learned), or of one
+        signal source such as a judge (of=judge/claude-auto-mode), disagree
+        with one person over one window. Each answered call counts with
+        weight one over the probability with which it was going to be
+        answered. A rate is null, not zero, when no answer in the window
+        has a known probability.
+      x-limen-action: reliability.read
+      parameters:
+      - name: subject
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: of
+        in: query
+        required: true
+        schema:
+          type: string
+          examples:
+          - learned
+          - judge/claude-auto-mode
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reliability"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/profiles/{org}:
+    get:
+      operationId: getOrgProfile
+      summary: Read an organization's cost profile
+      x-limen-action: profile.read
+      parameters:
+      - $ref: "#/components/parameters/org"
+      responses:
+        "200":
+          description: The profile with its derived thresholds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_profile"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+    put:
+      operationId: putOrgProfile
+      summary: Save an organization's cost profile
+      description: >-
+        Validate and store the profile. The path sets its id, and its
+        thresholds are derived from its costs; values sent for either are
+        ignored.
+      x-limen-action: profile.write
+      parameters:
+      - $ref: "#/components/parameters/org"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Profile"
+      responses:
+        "200":
+          description: The stored profile with its derived thresholds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/invalid_profile"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "422":
+          $ref: "#/components/responses/empty_ask_band"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/profiles/{org}/agents/{agent}:
+    get:
+      operationId: getAgentProfile
+      summary: Read one agent's cost profile
+      x-limen-action: profile.read
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/agent"
+      responses:
+        "200":
+          description: The profile with its derived thresholds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_profile"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+    put:
+      operationId: putAgentProfile
+      summary: Save one agent's cost profile
+      description: >-
+        A profile for one agent overrides the organization's for that
+        agent's calls. The path sets its id, and its thresholds are derived
+        from its costs.
+      x-limen-action: profile.write
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/agent"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Profile"
+      responses:
+        "200":
+          description: The stored profile with its derived thresholds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/invalid_profile"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "422":
+          $ref: "#/components/responses/empty_ask_band"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/replays:
+    post:
+      operationId: createReplay
+      summary: Replay recorded calls
+      description: >-
+        Assess recorded calls in time order, each before its own answer is
+        learned, and report what Limen would have done. Nothing is applied
+        and nothing is kept: a replay learns in a scratch model.
+      x-limen-action: replay.create
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              $ref: "#/components/schemas/ReplayRecord"
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayReport"
+        "400":
+          $ref: "#/components/responses/invalid_action"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/unknown_profile"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+  /v1/subjects/forget:
+    post:
+      operationId: forgetSubject
+      summary: Forget a person
+      description: >-
+        Delete everything Limen holds about one subject: answers,
+        assessments, and the model learned from them. Idempotent.
+      x-limen-action: subject.forget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgetRequest"
+      responses:
+        "204":
+          description: Nothing about the subject remains.
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/authorizer_unavailable"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A token from an issuer this installation lists, carrying the audience it verifies.
+  parameters:
+    assessment:
+      name: id
+      in: path
+      required: true
+      description: The assessment's id, as createAssessment returned it.
+      schema:
+        type: string
+        pattern: "^asm_"
+    org:
+      name: org
+      in: path
+      required: true
+      schema:
+        type: string
+    agent:
+      name: agent
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    Verdict:
+      type: string
+      description: Ordered from most to least permissive. Composing verdicts keeps the least permissive one.
+      enum: [allow, flag, ask, block]
+    Probability:
+      type: number
+      minimum: 0
+      maximum: 1
+    Action:
+      type: object
+      description: One proposed call, described by what a harness can observe before it runs.
+      properties:
+        subject:
+          type: string
+          description: The person whose approvals Limen learns from, rendered as the issuer and the token's sub joined by a pipe.
+          examples:
+          - https://issuer.example|usr_42
+        org:
+          type: string
+          description: The organization whose cost profile applies.
+        agent:
+          type: string
+        session:
+          type: string
+        call_id:
+          type: string
+          description: The harness's own id for the call. Assessing the same subject and call_id again returns the first assessment.
+        tool:
+          type: string
+          examples:
+          - bash
+        effect:
+          type: string
+          enum: [none, read, write, external]
+        input:
+          description: The tool's input. Only deterministic feature extractors read it; no language model does.
+        target:
+          $ref: "#/components/schemas/Target"
+        machine:
+          $ref: "#/components/schemas/Machine"
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+        ceiling:
+          $ref: "#/components/schemas/Verdict"
+          description: The most permissive verdict the deterministic layers leave open. Limen's verdict is never more permissive.
+        at:
+          type: string
+          format: date-time
+      required: [subject, org, call_id, tool, effect, machine, ceiling, at]
+      additionalProperties: false
+    Target:
+      type: object
+      properties:
+        kind:
+          type: string
+          examples:
+          - ref
+        id:
+          type: string
+        sensitivity:
+          $ref: "#/components/schemas/Probability"
+          description: From 0, a scratch directory, to 1, production.
+      required: [kind, id]
+      additionalProperties: false
+    Machine:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [host, sandbox]
+        credentialed:
+          type: boolean
+          description: The machine holds a credential that reaches outside it.
+      required: [kind, credentialed]
+      additionalProperties: false
+    Signal:
+      type: object
+      description: Another opinion about the call, treated as evidence and never as a verdict. It carries a verdict, a score, or both.
+      properties:
+        source:
+          type: string
+          examples:
+          - rules/1
+          - judge/claude-auto-mode
+        verdict:
+          type: string
+          enum: [allow, block]
+        score:
+          $ref: "#/components/schemas/Probability"
+      required: [source]
+      anyOf:
+      - required: [verdict]
+      - required: [score]
+      additionalProperties: false
+    Assessment:
+      type: object
+      properties:
+        id:
+          type: string
+          examples:
+          - asm_01J8
+        call_id:
+          type: string
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        approve:
+          $ref: "#/components/schemas/Probability"
+          description: The probability that the subject approves the call.
+        uncertainty:
+          type: number
+          minimum: 0
+          description: The posterior standard deviation of the latent tolerance behind approve.
+        score:
+          $ref: "#/components/schemas/Probability"
+          description: 1 - approve, the probability of a deny.
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+        profile:
+          type: string
+        audit:
+          $ref: "#/components/schemas/Audit"
+        source:
+          type: string
+          examples:
+          - learned/3
+          - learned/unavailable
+        reason:
+          type: string
+      required: [id, call_id, verdict, approve, uncertainty, score, thresholds, profile, source, reason]
+      additionalProperties: false
+    Thresholds:
+      type: object
+      description: A score below ask_at is an allow, a score above block_at is a block, and everything between is an ask.
+      properties:
+        ask_at:
+          $ref: "#/components/schemas/Probability"
+        block_at:
+          $ref: "#/components/schemas/Probability"
+      required: [ask_at, block_at]
+      additionalProperties: false
+    Audit:
+      type: object
+      description: The call's automatic verdict is shown to the person anyway, so their answer is a label with a known probability.
+      properties:
+        of:
+          type: string
+          enum: [allow, block]
+        probability:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+          description: Fixed when the call was assessed. A caller never sets it.
+      required: [of, probability]
+      additionalProperties: false
+    Answer:
+      type: object
+      properties:
+        approve:
+          type: boolean
+        kind:
+          type: string
+          enum: ["", contest]
+          description: Empty for the person's decision; contest for a later dispute, which trains the model and never enters an estimate.
+        at:
+          type: string
+          format: date-time
+      required: [approve, at]
+      additionalProperties: false
+    Record:
+      type: object
+      properties:
+        assessment:
+          $ref: "#/components/schemas/Assessment"
+        action:
+          $ref: "#/components/schemas/Action"
+        answer:
+          $ref: "#/components/schemas/Answer"
+        answered_by:
+          type: string
+          readOnly: true
+          description: The verified subject of the credential that sent the answer. It differs from the action's subject when someone the authorizer allows answers on the person's behalf.
+      required: [assessment, action]
+      additionalProperties: false
+    RecordPage:
+      type: object
+      description: One page of records. next_cursor is present only when a further page exists.
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Record"
+        next_cursor:
+          type: string
+      required: [entries]
+      additionalProperties: false
+    Profile:
+      type: object
+      description: What an organization states about errors and interruptions. The thresholds follow from it.
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Set by the path.
+          examples:
+          - org_7
+          - org_7/agents/agt_ci
+        costs:
+          $ref: "#/components/schemas/Costs"
+        audit_rate:
+          $ref: "#/components/schemas/Probability"
+          description: The share of automatic verdicts sampled for review.
+        certify:
+          $ref: "#/components/schemas/Certify"
+          description: The claim reliability reports test. Omitted, it is a false-allow rate below 1% at 95% confidence (alpha 0.01, delta 0.05), which takes 300 clean audits.
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+          readOnly: true
+      required: [id, costs, audit_rate, thresholds]
+      additionalProperties: false
+    Costs:
+      type: object
+      description: The three prices of the decision, in any one unit. Only their ratios matter.
+      properties:
+        false_allow:
+          type: number
+          exclusiveMinimum: 0
+          description: The cost of running a call the person would deny.
+        false_block:
+          type: number
+          exclusiveMinimum: 0
+          description: The cost of refusing a call the person would approve.
+        ask:
+          type: number
+          exclusiveMinimum: 0
+          description: The cost of one interruption.
+      required: [false_allow, false_block, ask]
+      additionalProperties: false
+    Certify:
+      type: object
+      description: The claim a reliability report tests, a false-allow rate below alpha at confidence 1 - delta.
+      properties:
+        alpha:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        delta:
+          type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1
+      required: [alpha, delta]
+      additionalProperties: false
+    Reliability:
+      type: object
+      properties:
+        subject:
+          type: string
+        of:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        false_allow:
+          $ref: "#/components/schemas/Estimate"
+        false_block:
+          $ref: "#/components/schemas/Estimate"
+        certificate:
+          $ref: "#/components/schemas/Certificate"
+      required: [subject, of, from, to, false_allow, false_block, certificate]
+      additionalProperties: false
+    Estimate:
+      type: object
+      properties:
+        value:
+          type: [number, "null"]
+          minimum: 0
+          description: Null when no answer in the window has a known probability. Null means unknown, not zero.
+        interval:
+          type: array
+          items:
+            type: number
+          minItems: 2
+          maxItems: 2
+          description: A 95% interval, present with value.
+        labels:
+          type: integer
+          minimum: 0
+        audits:
+          type: integer
+          minimum: 0
+        unanswered:
+          type: integer
+          minimum: 0
+          description: Calls in the window sampled for review that nobody has answered. The estimate treats them as missing at random; a count that is large next to audits weakens it.
+      required: [value, labels, audits, unanswered]
+      additionalProperties: false
+    Certificate:
+      type: object
+      properties:
+        alpha:
+          type: number
+        delta:
+          type: number
+        clean:
+          type: integer
+          minimum: 0
+          description: Consecutive audited allows, most recent first, that the person approved.
+        needed:
+          type: integer
+          minimum: 1
+          description: ceil(ln(1/delta)/alpha); 300 for alpha 0.01 and delta 0.05.
+        holds:
+          type: boolean
+      required: [alpha, delta, clean, needed, holds]
+      additionalProperties: false
+    ReplayRecord:
+      type: object
+      description: One recorded call, one per line.
+      properties:
+        action:
+          $ref: "#/components/schemas/Action"
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        audit:
+          $ref: "#/components/schemas/Audit"
+        answer:
+          $ref: "#/components/schemas/Answer"
+      required: [action, verdict]
+      additionalProperties: false
+    ReplayReport:
+      type: object
+      properties:
+        calls:
+          type: integer
+        answered:
+          type: integer
+        would:
+          type: object
+          description: Limen's verdicts on the replayed calls, counted by verdict.
+          propertyNames:
+            $ref: "#/components/schemas/Verdict"
+          additionalProperties:
+            type: integer
+        allowed_denied:
+          type: integer
+        blocked_approved:
+          type: integer
+        false_allow:
+          $ref: "#/components/schemas/Estimate"
+        covered:
+          $ref: "#/components/schemas/Probability"
+          description: The share of Limen's would-be allows that had a positive probability of an answer; false_allow speaks for that share only.
+      required: [calls, answered, would, allowed_denied, blocked_approved, false_allow, covered]
+      additionalProperties: false
+    ForgetRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+      required: [subject]
+      additionalProperties: false
+    Error:
+      type: object
+      description: The one error shape of this API. A caller branches on error.code and shows error.message.
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: The stable identifier of the row of the error table.
+            message:
+              type: string
+              description: The one sentence of that row, fixed and shown to a person.
+            details:
+              type: object
+              description: "What varies: always request_id, the developer sentence in detail, and the field paths at fault in fields."
+              properties:
+                request_id:
+                  type: string
+                detail:
+                  type: string
+                fields:
+                  type: array
+                  items:
+                    type: string
+          required: [code, message]
+      required: [error]
+  responses:
+    invalid_action:
+      description: "400 invalid_action: The action is missing a field or has a value out of range. Fix the fields listed in the details and send it again."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    invalid_answer:
+      description: "400 invalid_answer: The answer is missing a field or has a value out of range. Fix the fields listed in the details and send it again."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    invalid_profile:
+      description: "400 invalid_profile: The cost profile is missing a field or has a value out of range. Fix the fields listed in the details and save it again."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    invalid_query:
+      description: "400 invalid_query: The report request is missing a field or has a value out of range. Fix the fields listed in the details and ask again."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    empty_ask_band:
+      description: "422 empty_ask_band: With these costs, asking is never worth it, so Limen would never ask. Raise the cost of a wrong allow or a wrong block, or lower the cost of asking."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    unknown_assessment:
+      description: "404 unknown_assessment: There is no assessment with this id. Assess the call first, then send the answer for the id it returned."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    unknown_profile:
+      description: "404 unknown_profile: There is no cost profile with this id. Create it first, or use the organization's default profile."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    already_answered:
+      description: "409 already_answered: This call already has an answer. Each call takes one answer; a later dispute is sent as a contest."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    unauthenticated:
+      description: "401 unauthenticated: The request carries no valid credential. Sign in again and retry."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    forbidden:
+      description: "403 forbidden: You do not have permission for this. Ask an administrator of the organization for access."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    rate_limited:
+      description: "429 rate_limited: Too many requests. Wait a moment and try again."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    internal:
+      description: "500 internal: Something failed on Limen's side. Try again; if it keeps failing, report it with the request id."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    authorizer_unavailable:
+      description: "503 authorizer_unavailable: The permission service is unavailable. Try again shortly."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    unavailable:
+      description: "503 unavailable: Limen is unavailable right now. Hold the call for a person and try again shortly."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
