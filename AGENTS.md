@@ -1,0 +1,15 @@
+- Respond short, precise, and concise.
+- If you didn't add a test, you didn't fix a bug. Every bug fix must include a reproducible test that fails without the fix and passes with it.
+- Specs live in specs/. When implementing a big feature, create specs first then implement. Each spec is tightly scoped. When a spec is completed, record the outcome and archive it.
+- The tree is contract-only for now: the module root, authorizer/, api/openapi.yaml, and specs. Anything else starts from its spec (engine 004, adapters 005, conformance 006).
+- The root package imports the standard library only; a new dependency goes in engine/ or another subpackage, with a depcheck decision in .lateregate.yaml.
+- The invariants of specs/001-architecture.md are not negotiable in a change: a verdict never exceeds its ceiling, a failure is an ask, an audit's probability is fixed at assessment and never caller-supplied, a contest never estimates, no model reads Action.Input.
+- A JSON field name never changes; a new field is optional; api/openapi.yaml changes in the same commit as the Go type it describes.
+- Commit frequently, one small scope diff at a time. Push to main once a full batch of work is complete and verified.
+- Leftovers are cleaned up in follow-up commits.
+- Target a high quality outcome, >90% coverage, each feature verified via an e2e test.
+- Write in audience language: documents aim at user value and usage, the API surface aims at builder precision, code comments aim at technical precision. American English, no em dashes.
+- This repository will be public. No Latere hostname, token, or internal reference anywhere but as a default or an example. A hosted platform that builds on it lives elsewhere and is one consumer among any.
+- The research behind the design is arXiv:2605.19151, with its reference code and Lean proofs at github.com/changkun/trustcalib; cite the proposition a change to the arithmetic follows.
+- Relevant latere projects and shared components (latere.ai/x/pkg/*) are in ../
+- Every sentence is written for one reader (user, contributor, developer) and the register follows the reader; an error has one code, one fixed user sentence in `message`, and one developer detail in a separate field. The rule and the review checklist: https://github.com/latere-ai/pkg/blob/main/docs/writing/registers.md
