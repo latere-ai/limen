@@ -10,6 +10,9 @@ committed: the commit log already holds that.
 
 ## Unreleased
 
+- `latere.ai/x/pkg` v0.90.2, the release past GO-2026-6615 and GO-2026-6505.
+  No OpenTelemetry module is in this module's build.
+
 - The contract, before any implementation: the Go types a harness codes
   against (`Action`, `Assessment`, `Answer`, `Profile`, `Reliability`), the
   `Gate`, `Reviews` and `Admin` interfaces, the error codes with their
@@ -22,3 +25,4 @@ committed: the commit log already holds that.
 - Documentation for harness authors and operators, and the design specs
   for the engine, the server, the adapters, the conformance suite and the
   rollout.
+
