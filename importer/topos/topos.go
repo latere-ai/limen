@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package topos reads the sessions a Topos harness kept in a data
-// directory and turns every recorded tool call into a limen.ReplayRecord,
-// so Limen can replay a person's real history of decisions (spec 007, the
+// directory and turns every recorded tool call into a cribrum.ReplayRecord,
+// so Cribrum can replay a person's real history of decisions (spec 007, the
 // replay gate).
 //
 // The sessions are read through Topos's own session store,
@@ -44,7 +44,7 @@ import (
 	"latere.ai/x/topos/session"
 	"latere.ai/x/topos/session/dir"
 
-	"latere.ai/x/limen"
+	"latere.ai/x/cribrum"
 )
 
 // DefaultOrg is the organization of the records when neither the options
@@ -81,16 +81,16 @@ type Skip struct {
 const (
 	ReasonRedacted       = "the call was redacted"
 	ReasonNoVerdict      = "the log predates recorded verdicts"
-	ReasonUnknownVerdict = "the recorded verdict is not one Limen knows"
+	ReasonUnknownVerdict = "the recorded verdict is not one Cribrum knows"
 	ReasonUndecodable    = "the call's event could not be read"
 	ReasonInvalid        = "the call does not make a valid record"
 )
 
 // effects are the declared effects of Topos's built-in tools.
-var effects = func() map[string]limen.Effect {
-	out := map[string]limen.Effect{}
+var effects = func() map[string]cribrum.Effect {
+	out := map[string]cribrum.Effect{}
 	for _, t := range tools.Builtins() {
-		out[t.Definition().Name] = limen.Effect(t.Properties().Effect)
+		out[t.Definition().Name] = cribrum.Effect(t.Properties().Effect)
 	}
 	return out
 }()
@@ -98,30 +98,30 @@ var effects = func() map[string]limen.Effect {
 // EffectOf is the effect of a Topos tool: the declared effect of a
 // built-in, and "write" for any other tool, whose effect a log does not
 // record.
-func EffectOf(name string) limen.Effect {
+func EffectOf(name string) cribrum.Effect {
 	if e, ok := effects[name]; ok && e.Valid() {
 		return e
 	}
-	return limen.EffectWrite
+	return cribrum.EffectWrite
 }
 
 // Records yields a record for every decided tool call of every session in
 // the data directory, session by session in the store's order. It never
 // creates the directory: a directory with no sessions yields
 // [ErrNoSessions].
-func Records(dataDir string, o Options) iter.Seq2[limen.ReplayRecord, error] {
-	return func(yield func(limen.ReplayRecord, error) bool) {
+func Records(dataDir string, o Options) iter.Seq2[cribrum.ReplayRecord, error] {
+	return func(yield func(cribrum.ReplayRecord, error) bool) {
 		root := filepath.Join(dataDir, "sessions")
 		if _, err := os.Stat(root); errors.Is(err, fs.ErrNotExist) {
-			yield(limen.ReplayRecord{}, fmt.Errorf("%w in %s", ErrNoSessions, dataDir))
+			yield(cribrum.ReplayRecord{}, fmt.Errorf("%w in %s", ErrNoSessions, dataDir))
 			return
 		} else if err != nil {
-			yield(limen.ReplayRecord{}, err)
+			yield(cribrum.ReplayRecord{}, err)
 			return
 		}
 		st, err := dir.Open(dataDir)
 		if err != nil {
-			yield(limen.ReplayRecord{}, err)
+			yield(cribrum.ReplayRecord{}, err)
 			return
 		}
 		ctx := context.Background()
@@ -129,13 +129,13 @@ func Records(dataDir string, o Options) iter.Seq2[limen.ReplayRecord, error] {
 		for {
 			page, next, err := st.List(ctx, session.ListOptions{Cursor: cursor})
 			if err != nil {
-				yield(limen.ReplayRecord{}, err)
+				yield(cribrum.ReplayRecord{}, err)
 				return
 			}
 			for _, sess := range page {
 				events, err := st.Events(ctx, sess.ID, 0, 0)
 				if err != nil {
-					yield(limen.ReplayRecord{}, err)
+					yield(cribrum.ReplayRecord{}, err)
 					return
 				}
 				for _, r := range sessionRecords(sess, events, o) {
@@ -153,7 +153,7 @@ func Records(dataDir string, o Options) iter.Seq2[limen.ReplayRecord, error] {
 }
 
 // sessionRecords maps one session's events to records.
-func sessionRecords(sess session.Session, events []session.Event, o Options) []limen.ReplayRecord {
+func sessionRecords(sess session.Session, events []session.Event, o Options) []cribrum.ReplayRecord {
 	skip := func(toolUseID, reason string) {
 		if o.Skipped != nil {
 			o.Skipped(Skip{SessionID: sess.ID, ToolUseID: toolUseID, Reason: reason})
@@ -178,7 +178,7 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			answers[c.ToolUseID] = false
 		}
 	}
-	key := limen.Key{Org: o.Org, Subject: o.Subject}
+	key := cribrum.Key{Org: o.Org, Subject: o.Subject}
 	if key.Org == "" {
 		key.Org = sess.Metadata["org"]
 	}
@@ -191,16 +191,16 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 	if key.Subject == "" {
 		key.Subject = DefaultSubject
 	}
-	env := &limen.Environment{Kind: "host", Credentialed: true}
+	env := &cribrum.Environment{Kind: "host", Credentialed: true}
 	if sess.Machine.Kind == session.MachineCella {
-		env = &limen.Environment{Kind: "sandbox"}
+		env = &cribrum.Environment{Kind: "sandbox"}
 	}
-	actor := &limen.Actor{Kind: "agent", ID: sess.Agent.ID, Session: sess.ID}
+	actor := &cribrum.Actor{Kind: "agent", ID: sess.Agent.ID, Session: sess.ID}
 	if actor.ID == "" {
 		actor.ID = sess.Agent.Name
 	}
 
-	var out []limen.ReplayRecord
+	var out []cribrum.ReplayRecord
 	for _, e := range events {
 		if e.Type != session.TypeAgentToolUse {
 			continue
@@ -218,23 +218,23 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			skip(u.ToolUseID, ReasonNoVerdict)
 			continue
 		}
-		v := limen.Verdict(u.Verdict)
+		v := cribrum.Verdict(u.Verdict)
 		if !v.Valid() {
 			skip(u.ToolUseID, ReasonUnknownVerdict)
 			continue
 		}
 		k := key
 		k.ActionID = sess.ID + "/" + u.ToolUseID
-		a := limen.Action{Key: k, Actor: actor, Kind: "tool", Name: u.Name, Effect: EffectOf(u.Name), Input: u.Input, Environment: env}
+		a := cribrum.Action{Key: k, Actor: actor, Kind: "tool", Name: u.Name, Effect: EffectOf(u.Name), Input: u.Input, Environment: env}
 		if u.Risk != nil && u.Risk.Source != "" && u.Risk.Score >= 0 && u.Risk.Score <= 1 {
 			score := u.Risk.Score
-			a.Signals = []limen.Signal{{Source: u.Risk.Source, Score: &score}}
+			a.Signals = []cribrum.Signal{{Source: u.Risk.Source, Score: &score}}
 		}
 		source := "topos"
 		if u.Mode != "" {
 			source += "/" + u.Mode
 		}
-		r := limen.ReplayRecord{At: e.Time, Action: a, Verdict: v, Source: source}
+		r := cribrum.ReplayRecord{At: e.Time, Action: a, Verdict: v, Source: source}
 		if v.Shown() {
 			r.ReviewProbability = 1
 		}

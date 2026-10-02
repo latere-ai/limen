@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package engine is Limen's service: the predictor, the ledger and the
-// administration of the contract in latere.ai/x/limen, over a [store.Store].
+// Package engine is Cribrum's service: the predictor, the ledger and the
+// administration of the contract in latere.ai/x/cribrum, over a [store.Store].
 //
 // A prediction featurizes the action (engine/featurize), reads the
 // subject's fitted model, and suggests the verdict the effective cost
@@ -36,12 +36,12 @@ import (
 	"sync"
 	"time"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/engine/featurize"
-	"latere.ai/x/limen/engine/gp"
-	"latere.ai/x/limen/engine/kernel"
-	"latere.ai/x/limen/engine/store"
-	"latere.ai/x/limen/estimate"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/engine/featurize"
+	"latere.ai/x/cribrum/engine/gp"
+	"latere.ai/x/cribrum/engine/kernel"
+	"latere.ai/x/cribrum/engine/store"
+	"latere.ai/x/cribrum/estimate"
 )
 
 // Version names the model version this engine serves: features/1, the
@@ -83,7 +83,7 @@ type Options struct {
 
 type subjectKey struct{ org, subject string }
 
-// Engine implements [limen.Service].
+// Engine implements [cribrum.Service].
 type Engine struct {
 	st      store.Store
 	clock   func() time.Time
@@ -103,7 +103,7 @@ type Engine struct {
 	closeMu sync.Once
 }
 
-var _ limen.Service = (*Engine)(nil)
+var _ cribrum.Service = (*Engine)(nil)
 
 // New returns an engine. Call [Engine.Close] to stop its fitters.
 func New(o Options) *Engine {
@@ -166,7 +166,7 @@ func (e *Engine) lock(org, subject string) func() {
 // digest names an action by every field but its input: the input is read
 // at prediction time and never kept, so it cannot tell two actions apart
 // later.
-func digest(a limen.Action) (string, error) {
+func digest(a cribrum.Action) (string, error) {
 	a.Input = nil
 	b, err := json.Marshal(a)
 	if err != nil {
@@ -176,14 +176,14 @@ func digest(a limen.Action) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func conflict(k limen.Key) error {
-	return &limen.Error{Code: limen.CodeActionConflict, Fields: []string{"action_id"},
+func conflict(k cribrum.Key) error {
+	return &cribrum.Error{Code: cribrum.CodeActionConflict, Fields: []string{"action_id"},
 		Detail: fmt.Sprintf("action %s for %s in %s was first recorded as a different action", k.ActionID, k.Subject, k.Org)}
 }
 
 // newCase assigns the case its ordinal and receive time and featurizes the
 // action, the one moment its input is read.
-func (e *Engine) newCase(ctx context.Context, a limen.Action, dg string, at time.Time) (store.Case, error) {
+func (e *Engine) newCase(ctx context.Context, a cribrum.Action, dg string, at time.Time) (store.Case, error) {
 	t, err := e.st.NextT(ctx, a.Org, a.Subject)
 	if err != nil {
 		return store.Case{}, err
@@ -193,48 +193,48 @@ func (e *Engine) newCase(ctx context.Context, a limen.Action, dg string, at time
 	return store.Case{T: t, ReceivedAt: at, Digest: dg, Action: a, Featurizer: featurize.Version, A: f.A, C: f.C}, nil
 }
 
-// Predict implements [limen.Predictor].
-func (e *Engine) Predict(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+// Predict implements [cribrum.Predictor].
+func (e *Engine) Predict(ctx context.Context, a cribrum.Action) (cribrum.Prediction, error) {
 	return e.predictAt(ctx, a, e.clock())
 }
 
-func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (limen.Prediction, error) {
+func (e *Engine) predictAt(ctx context.Context, a cribrum.Action, at time.Time) (cribrum.Prediction, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	if err := a.Validate(); err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	dg, err := digest(a)
 	if err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	defer e.lock(a.Org, a.Subject)()
 	c, ok, err := e.st.Case(ctx, a.Key)
 	if err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	switch {
 	case ok && c.Digest != dg:
-		return limen.Prediction{}, conflict(a.Key)
+		return cribrum.Prediction{}, conflict(a.Key)
 	case ok && c.Prediction != nil:
 		return *c.Prediction, nil
 	case !ok:
 		if c, err = e.newCase(ctx, a, dg, at); err != nil {
-			return limen.Prediction{}, err
+			return cribrum.Prediction{}, err
 		}
 	}
-	prof, err := e.profile(ctx, limen.ScopeOf(a))
+	prof, err := e.profile(ctx, cribrum.ScopeOf(a))
 	if err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	m, err := e.model(ctx, subjectKey{a.Org, a.Subject})
 	if err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	post := m.post.Load()
 	pr := post.Predict(kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
-	p := limen.Prediction{
+	p := cribrum.Prediction{
 		Key:         a.Key,
 		Verdict:     prof.Thresholds.Verdict(pr.Approve),
 		Approve:     pr.Approve,
@@ -247,25 +247,25 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 	}
 	c.Prediction = &p
 	if err := e.st.Put(ctx, c); err != nil {
-		return limen.Prediction{}, err
+		return cribrum.Prediction{}, err
 	}
 	return p, nil
 }
 
-func reason(approve float64, t limen.Thresholds, answers int) string {
+func reason(approve float64, t cribrum.Thresholds, answers int) string {
 	if answers == 0 {
-		return "Limen has no answers from this person yet, so it asks."
+		return "Cribrum has no answers from this person yet, so it asks."
 	}
-	return fmt.Sprintf("The chance this person approves is %.2f. Limen suggests allowing above %.2f and blocking below %.2f, and asks in between.",
+	return fmt.Sprintf("The chance this person approves is %.2f. Cribrum suggests allowing above %.2f and blocking below %.2f, and asks in between.",
 		approve, t.AllowAbove, t.BlockBelow)
 }
 
-// Record implements [limen.Ledger].
-func (e *Engine) Record(ctx context.Context, d limen.Decision) error {
+// Record implements [cribrum.Ledger].
+func (e *Engine) Record(ctx context.Context, d cribrum.Decision) error {
 	return e.recordAt(ctx, d, e.clock())
 }
 
-func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) error {
+func (e *Engine) recordAt(ctx context.Context, d cribrum.Decision, at time.Time) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -279,10 +279,10 @@ func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) e
 	}
 	switch {
 	case ok && c.Decision != nil:
-		return &limen.Error{Code: limen.CodeAlreadyDecided, Fields: []string{"action_id"},
+		return &cribrum.Error{Code: cribrum.CodeAlreadyDecided, Fields: []string{"action_id"},
 			Detail: fmt.Sprintf("action %s for %s in %s is already decided %s", d.ActionID, d.Subject, d.Org, c.Decision.Verdict)}
 	case !ok && d.Action == nil:
-		return &limen.Error{Code: limen.CodeInvalidDecision, Fields: []string{"action"},
+		return &cribrum.Error{Code: cribrum.CodeInvalidDecision, Fields: []string{"action"},
 			Detail: fmt.Sprintf("action %s for %s in %s has no prediction, so the decision must carry the action", d.ActionID, d.Subject, d.Org)}
 	case !ok:
 		dg, err := digest(*d.Action)
@@ -307,13 +307,13 @@ func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) e
 	return e.st.Put(ctx, c)
 }
 
-// Answer implements [limen.Ledger]. The first answer to an action its
+// Answer implements [cribrum.Ledger]. The first answer to an action its
 // decision showed a person is the review; every other answer trains only.
-func (e *Engine) Answer(ctx context.Context, a limen.Answer) error {
+func (e *Engine) Answer(ctx context.Context, a cribrum.Answer) error {
 	return e.answerAt(ctx, a, e.clock())
 }
 
-func (e *Engine) answerAt(ctx context.Context, a limen.Answer, at time.Time) error {
+func (e *Engine) answerAt(ctx context.Context, a cribrum.Answer, at time.Time) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -324,13 +324,13 @@ func (e *Engine) answerAt(ctx context.Context, a limen.Answer, at time.Time) err
 	unlock := e.lock(a.Org, a.Subject)
 	c, ok, err := e.st.Case(ctx, a.Key)
 	if err == nil && (!ok || c.Decision == nil) {
-		err = &limen.Error{Code: limen.CodeNoDecision, Fields: []string{"action_id"},
+		err = &cribrum.Error{Code: cribrum.CodeNoDecision, Fields: []string{"action_id"},
 			Detail: fmt.Sprintf("action %s for %s in %s has no recorded decision", a.ActionID, a.Subject, a.Org)}
 	}
 	var m *model
 	if err == nil {
-		review := estimate.Pending(c.Limen())
-		c.Answers = append(c.Answers, limen.RecordedAnswer{Approve: a.Approve, By: cmp.Or(a.By, a.Subject), At: at, Review: review})
+		review := estimate.Pending(c.Contract())
+		c.Answers = append(c.Answers, cribrum.RecordedAnswer{Approve: a.Approve, By: cmp.Or(a.By, a.Subject), At: at, Review: review})
 		err = e.st.Put(ctx, c)
 	}
 	if err == nil {
@@ -351,35 +351,35 @@ func (e *Engine) answerAt(ctx context.Context, a limen.Answer, at time.Time) err
 	return nil
 }
 
-// Cases implements [limen.Ledger]. The cursor is the ordinal of the last
+// Cases implements [cribrum.Ledger]. The cursor is the ordinal of the last
 // case of the previous page.
-func (e *Engine) Cases(ctx context.Context, q limen.CaseQuery) (limen.Page, error) {
+func (e *Engine) Cases(ctx context.Context, q cribrum.CaseQuery) (cribrum.Page, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Page{}, err
+		return cribrum.Page{}, err
 	}
 	if err := q.Validate(); err != nil {
-		return limen.Page{}, err
+		return cribrum.Page{}, err
 	}
 	after := int64(-1)
 	if q.Cursor != "" {
 		n, err := strconv.ParseInt(q.Cursor, 10, 64)
 		if err != nil || n < 0 {
-			return limen.Page{}, &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"cursor"},
+			return cribrum.Page{}, &cribrum.Error{Code: cribrum.CodeInvalidQuery, Fields: []string{"cursor"},
 				Detail: fmt.Sprintf("cursor %q is not a cursor this engine returned", q.Cursor)}
 		}
 		after = n
 	}
-	limit := cmp.Or(q.Limit, limen.DefaultPageLimit)
+	limit := cmp.Or(q.Limit, cribrum.DefaultPageLimit)
 	cases, err := e.st.Cases(ctx, q.Org, q.Subject)
 	if err != nil {
-		return limen.Page{}, err
+		return cribrum.Page{}, err
 	}
-	page := limen.Page{Entries: []limen.Case{}}
+	page := cribrum.Page{Entries: []cribrum.Case{}}
 	for _, c := range cases {
 		if c.T <= after || (q.ActionID != "" && c.Action.ActionID != q.ActionID) {
 			continue
 		}
-		lc := c.Limen()
+		lc := c.Contract()
 		if q.Pending && !estimate.Pending(lc) {
 			continue
 		}
@@ -393,33 +393,33 @@ func (e *Engine) Cases(ctx context.Context, q limen.CaseQuery) (limen.Page, erro
 	return page, nil
 }
 
-// Reliability implements [limen.Ledger] with latere.ai/x/limen/estimate. The
+// Reliability implements [cribrum.Ledger] with latere.ai/x/cribrum/estimate. The
 // window holds the cases first received in [From, To).
-func (e *Engine) Reliability(ctx context.Context, q limen.ReliabilityQuery) (limen.Reliability, error) {
+func (e *Engine) Reliability(ctx context.Context, q cribrum.ReliabilityQuery) (cribrum.Reliability, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Reliability{}, err
+		return cribrum.Reliability{}, err
 	}
 	if err := q.Validate(); err != nil {
-		return limen.Reliability{}, err
+		return cribrum.Reliability{}, err
 	}
 	cases, err := e.st.Cases(ctx, q.Org, q.Subject)
 	if err != nil {
-		return limen.Reliability{}, err
+		return cribrum.Reliability{}, err
 	}
 	var rows []estimate.Row
 	for _, c := range cases {
 		if c.ReceivedAt.Before(q.From) || !c.ReceivedAt.Before(q.To) {
 			continue
 		}
-		if r, ok := estimate.RowOf(c.Limen(), q.Of); ok {
+		if r, ok := estimate.RowOf(c.Contract(), q.Of); ok {
 			rows = append(rows, r)
 		}
 	}
-	prof, err := e.profile(ctx, limen.Scope{Org: q.Org})
+	prof, err := e.profile(ctx, cribrum.Scope{Org: q.Org})
 	if err != nil {
-		return limen.Reliability{}, err
+		return cribrum.Reliability{}, err
 	}
-	return limen.Reliability{
+	return cribrum.Reliability{
 		ReliabilityQuery: q,
 		FalseAllow:       estimate.Rate(rows, estimate.FalseAllow),
 		FalseBlock:       estimate.Rate(rows, estimate.FalseBlock),
@@ -429,53 +429,53 @@ func (e *Engine) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 
 // profile is the effective profile for a scope: the most specific saved
 // one, or the default.
-func (e *Engine) profile(ctx context.Context, s limen.Scope) (limen.Profile, error) {
+func (e *Engine) profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile, error) {
 	for _, c := range s.Candidates() {
 		p, ok, err := e.st.Profile(ctx, c)
 		if err != nil {
-			return limen.Profile{}, err
+			return cribrum.Profile{}, err
 		}
 		if ok {
 			return p, nil
 		}
 	}
-	return limen.DefaultProfile(limen.Scope{Org: s.Org}), nil
+	return cribrum.DefaultProfile(cribrum.Scope{Org: s.Org}), nil
 }
 
-// Profile implements [limen.Admin].
-func (e *Engine) Profile(ctx context.Context, s limen.Scope) (limen.Profile, error) {
+// Profile implements [cribrum.Admin].
+func (e *Engine) Profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Profile{}, err
+		return cribrum.Profile{}, err
 	}
 	if s.Org == "" {
-		return limen.Profile{}, &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
+		return cribrum.Profile{}, &cribrum.Error{Code: cribrum.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
 	}
 	return e.profile(ctx, s)
 }
 
-// PutProfile implements [limen.Admin].
-func (e *Engine) PutProfile(ctx context.Context, p limen.Profile) (limen.Profile, error) {
+// PutProfile implements [cribrum.Admin].
+func (e *Engine) PutProfile(ctx context.Context, p cribrum.Profile) (cribrum.Profile, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Profile{}, err
+		return cribrum.Profile{}, err
 	}
 	if err := p.Validate(); err != nil {
-		return limen.Profile{}, err
+		return cribrum.Profile{}, err
 	}
 	t, err := p.Costs.Thresholds()
 	if err != nil {
-		return limen.Profile{}, err
+		return cribrum.Profile{}, err
 	}
 	p.Thresholds, p.Default = t, false
-	if p.Certify == (limen.Certify{}) {
-		p.Certify = limen.DefaultCertify
+	if p.Certify == (cribrum.Certify{}) {
+		p.Certify = cribrum.DefaultCertify
 	}
 	if err := e.st.PutProfile(ctx, p); err != nil {
-		return limen.Profile{}, err
+		return cribrum.Profile{}, err
 	}
 	return p, nil
 }
 
-// Forget implements [limen.Admin].
+// Forget implements [cribrum.Admin].
 func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -488,44 +488,44 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 		p = append(p, "subject")
 	}
 	if len(p) > 0 {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: p, Detail: "forget needs an org and a subject"}
+		return &cribrum.Error{Code: cribrum.CodeInvalidQuery, Fields: p, Detail: "forget needs an org and a subject"}
 	}
 	defer e.lock(org, subject)()
 	e.models.drop(subjectKey{org, subject})
 	return e.st.Forget(ctx, org, subject)
 }
 
-// Replay implements [limen.Admin]. Records are predicted in the order of
+// Replay implements [cribrum.Admin]. Records are predicted in the order of
 // their times, each before its own answer is learned, by a scratch engine
 // over a memory store that copies this engine's profiles and refits inline
 // every eight answers. With Keep, the records' decisions and answers are
 // then recorded in this engine, as if they had arrived live, and its models
 // are fitted on them.
-func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
-	var recs []limen.ReplayRecord
+func (e *Engine) Replay(ctx context.Context, records iter.Seq2[cribrum.ReplayRecord, error], o cribrum.ReplayOptions) (cribrum.ReplayReport, error) {
+	var recs []cribrum.ReplayRecord
 	for r, err := range records {
 		if err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
-		if len(recs) == limen.MaxReplayRecords {
-			return limen.ReplayReport{}, &limen.Error{Code: limen.CodeBodyTooLarge,
-				Detail: fmt.Sprintf("more than %d records", limen.MaxReplayRecords)}
+		if len(recs) == cribrum.MaxReplayRecords {
+			return cribrum.ReplayReport{}, &cribrum.Error{Code: cribrum.CodeBodyTooLarge,
+				Detail: fmt.Sprintf("more than %d records", cribrum.MaxReplayRecords)}
 		}
 		if err := r.Validate(); err != nil {
-			var le *limen.Error
+			var le *cribrum.Error
 			if !errors.As(err, &le) {
-				return limen.ReplayReport{}, err
+				return cribrum.ReplayReport{}, err
 			}
 			prefix := "records[" + strconv.Itoa(len(recs)) + "]."
 			fields := make([]string, len(le.Fields))
 			for i, f := range le.Fields {
 				fields[i] = prefix + f
 			}
-			return limen.ReplayReport{}, &limen.Error{Code: limen.CodeInvalidReplay, Fields: fields, Detail: prefix + " " + le.Detail}
+			return cribrum.ReplayReport{}, &cribrum.Error{Code: cribrum.CodeInvalidReplay, Fields: fields, Detail: prefix + " " + le.Detail}
 		}
 		recs = append(recs, r)
 	}
-	slices.SortStableFunc(recs, func(a, b limen.ReplayRecord) int { return a.At.Compare(b.At) })
+	slices.SortStableFunc(recs, func(a, b cribrum.ReplayRecord) int { return a.At.Compare(b.At) })
 
 	// The report comes from a scratch engine, so a replay's suggestions are
 	// never mistaken for live ones; keep then adds the history itself to
@@ -536,38 +536,38 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		if !orgs[r.Action.Org] {
 			orgs[r.Action.Org] = true
 			if err := copyProfiles(ctx, e, mem, r.Action.Org, recs); err != nil {
-				return limen.ReplayReport{}, err
+				return cribrum.ReplayReport{}, err
 			}
 		}
 	}
 	// Inline, so the scratch engine runs no fitter and needs no Close.
 	scratch := build(Options{Store: mem, Inline: 8, MaxLabels: e.opts.MaxLabels})
 
-	report := limen.ReplayReport{Records: len(recs), Would: map[limen.Verdict]int{}, Kept: o.Keep}
+	report := cribrum.ReplayReport{Records: len(recs), Would: map[cribrum.Verdict]int{}, Kept: o.Keep}
 	var rows []estimate.Row
 	for _, r := range recs {
 		if err := ctx.Err(); err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
 		p, err := scratch.predictAt(ctx, r.Action, r.At)
 		if err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
 		report.Would[p.Verdict]++
 		if err := scratch.recordAt(ctx, decisionOf(r, false), r.At); err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
 		row := estimate.Row{Verdict: p.Verdict, Review: r.ReviewProbability, Shown: r.Verdict.Shown()}
 		if r.Approve != nil {
 			report.Answered++
-			if err := scratch.answerAt(ctx, limen.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
-				return limen.ReplayReport{}, err
+			if err := scratch.answerAt(ctx, cribrum.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
+				return cribrum.ReplayReport{}, err
 			}
 			row.Reviewed, row.Approve = row.Shown, *r.Approve
 			switch {
-			case p.Verdict == limen.Allow && !*r.Approve:
+			case p.Verdict == cribrum.Allow && !*r.Approve:
 				report.AllowedDenied++
-			case p.Verdict == limen.Block && *r.Approve:
+			case p.Verdict == cribrum.Block && *r.Approve:
 				report.BlockedApproved++
 			}
 		}
@@ -580,11 +580,11 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	touched := map[subjectKey]bool{}
 	for _, r := range recs {
 		if err := e.recordAt(ctx, decisionOf(r, true), r.At); err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
 		if r.Approve != nil {
-			if err := e.answerAt(ctx, limen.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
-				return limen.ReplayReport{}, err
+			if err := e.answerAt(ctx, cribrum.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
+				return cribrum.ReplayReport{}, err
 			}
 		}
 		touched[subjectKey{r.Action.Org, r.Action.Subject}] = true
@@ -593,7 +593,7 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	// every subject it touched, cached or not.
 	for k := range touched {
 		if err := e.fitSubject(ctx, k); err != nil {
-			return limen.ReplayReport{}, err
+			return cribrum.ReplayReport{}, err
 		}
 	}
 	return report, nil
@@ -601,8 +601,8 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 
 // decisionOf is a replayed record's decision, carrying its action when the
 // target holds no prediction for it.
-func decisionOf(r limen.ReplayRecord, withAction bool) limen.Decision {
-	d := limen.Decision{Key: r.Action.Key, Verdict: r.Verdict, ReviewProbability: r.ReviewProbability, Source: r.Source}
+func decisionOf(r cribrum.ReplayRecord, withAction bool) cribrum.Decision {
+	d := cribrum.Decision{Key: r.Action.Key, Verdict: r.Verdict, ReviewProbability: r.ReviewProbability, Source: r.Source}
 	if withAction {
 		a := r.Action
 		d.Action = &a
@@ -612,13 +612,13 @@ func decisionOf(r limen.ReplayRecord, withAction bool) limen.Decision {
 
 // copyProfiles copies into dst every profile of the org that a record of
 // the replay can resolve to.
-func copyProfiles(ctx context.Context, e *Engine, dst store.Store, org string, recs []limen.ReplayRecord) error {
-	seen := map[limen.Scope]bool{}
+func copyProfiles(ctx context.Context, e *Engine, dst store.Store, org string, recs []cribrum.ReplayRecord) error {
+	seen := map[cribrum.Scope]bool{}
 	for _, r := range recs {
 		if r.Action.Org != org {
 			continue
 		}
-		for _, c := range limen.ScopeOf(r.Action).Candidates() {
+		for _, c := range cribrum.ScopeOf(r.Action).Candidates() {
 			if seen[c] {
 				continue
 			}

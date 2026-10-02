@@ -31,7 +31,7 @@ four constants `Allow`, `Flag`, `Ask` and `Block` re-exported. The order,
 `verdict.Least` (an unknown verdict counts as `Block`),
 `verdict.OnFailure` and `verdict.Decide` live in the shared package so
 that every decision point in the family composes verdicts the same way,
-whether or not it uses Limen.
+whether or not it uses Cribrum.
 
 ### Types
 
@@ -40,15 +40,15 @@ whether or not it uses Limen.
 | `Key` | names one action in every record: `org`, `subject`, `action_id` | all three non-empty; the decision point keeps `action_id` unique within the org and subject |
 | `Action` | one proposed action, as the decision point observes it | `Validate` reports every field at fault in one `*Error` with `invalid_action`: the key; `kind` and `name` non-empty; `effect` one of none, read, write, external; `input` valid JSON when present; `actor.kind`, `target.kind` and `environment.kind` non-empty when the struct is present; `target.sensitivity` in [0, 1]; at most 64 `attributes`, keys non-empty, values strings, booleans or finite numbers; each signal with a source and a valid verdict, a score in [0, 1], or both |
 | `Actor`, `Target`, `Environment`, `Signal` | parts of an action | as above |
-| `Prediction` | Limen's opinion: `verdict` (allow, ask or block), `approve`, `uncertainty`, `thresholds`, `profile` (the scope that applied), `audit_rate`, `source`, `reason` | `verdict` equals `thresholds.Verdict(approve)`; `source` is `learned/<version>`, or `learned/unavailable` for the `FailClosed` fallback, whose numbers are zero and mean nothing |
+| `Prediction` | Cribrum's opinion: `verdict` (allow, ask or block), `approve`, `uncertainty`, `thresholds`, `profile` (the scope that applied), `audit_rate`, `source`, `reason` | `verdict` equals `thresholds.Verdict(approve)`; `source` is `learned/<version>`, or `learned/unavailable` for the `FailClosed` fallback, whose numbers are zero and mean nothing |
 | `Thresholds` | `allow_above` and `block_below` in approval probability | derived by `Costs.Thresholds`; `Verdict(p)` is allow above `allow_above`, block below `block_below`, ask between with both ends included, and ask for a probability outside [0, 1] or NaN |
-| `Decision` | what the decision point applied: `verdict`, `review_probability`, `source`, and `action` when Limen holds no prediction | `Validate`: the key; a valid verdict; the probability in [0, 1], positive for `flag` and `ask`, below one for `allow` and `block`; a non-empty source; an action, when present, valid and under the same key |
-| `Answer` | a person's decision about an action: `approve`, and `by` when relayed | `Validate`: the key. No time and no kind: Limen stamps the time and derives the role |
-| `Case`, `RecordedAnswer` | everything Limen holds about one action, without its input | `RecordedAnswer.review` marks the one answer that enters estimates |
+| `Decision` | what the decision point applied: `verdict`, `review_probability`, `source`, and `action` when Cribrum holds no prediction | `Validate`: the key; a valid verdict; the probability in [0, 1], positive for `flag` and `ask`, below one for `allow` and `block`; a non-empty source; an action, when present, valid and under the same key |
+| `Answer` | a person's decision about an action: `approve`, and `by` when relayed | `Validate`: the key. No time and no kind: Cribrum stamps the time and derives the role |
+| `Case`, `RecordedAnswer` | everything Cribrum holds about one action, without its input | `RecordedAnswer.review` marks the one answer that enters estimates |
 | `CaseQuery`, `Page` | one page of a subject's cases, all or only the review queue | `Validate`: org and subject non-empty, `limit` in [0, 500] with 0 meaning 100; `next_cursor` empty on the last page |
 | `Scope`, `Profile`, `Costs`, `Certify` | what an organization states | `Profile.Validate`: org non-empty; `audit_rate` in [0, 1]; `certify` zero or with 0 < alpha <= 1 and 0 < delta < 1; then `Costs.Thresholds` |
 | `ReliabilityQuery`, `Reliability`, `Estimate`, `Certificate` | an error-rate report | `ReliabilityQuery.Validate`: org, subject and of non-empty; from and to set, to after from |
-| `ReplayRecord`, `ReplayOptions`, `ReplayReport` | a recorded action and what Limen would have suggested | `ReplayRecord.Validate`: at set; a valid action; verdict and probability held to each other as in `Decision`; a source |
+| `ReplayRecord`, `ReplayOptions`, `ReplayReport` | a recorded action and what Cribrum would have suggested | `ReplayRecord.Validate`: at set; a valid action; verdict and probability held to each other as in `Decision`; a source |
 
 ### The cost arithmetic
 
@@ -63,7 +63,7 @@ allow_above = 1 - ask / false_allow
 block_below = ask / false_block
 ```
 
-Limen also requires the ask band to contain one half, the probability it
+Cribrum also requires the ask band to contain one half, the probability it
 assigns to an action it knows nothing about, so that no action is
 allowed or blocked on no evidence. The band contains one half exactly
 when each error costs more than two interruptions,
@@ -98,17 +98,17 @@ reads; a decision point that never predicts uses the ledger alone.
 
 ### Rules of the ledger
 
-- **Idempotent prediction.** `Predict` on a key Limen has seen with the
+- **Idempotent prediction.** `Predict` on a key Cribrum has seen with the
   same action returns the first prediction unchanged. The same key with a
-  different action fails with `action_conflict` (409). Limen compares
+  different action fails with `action_conflict` (409). Cribrum compares
   digests of the action as sent, input included, so the input itself is
   never kept. A decision point cannot draw a second prediction for an
   action by asking again.
 - **One decision.** `Record` on a key that has a decision fails with
-  `already_decided` (409). A decision for a key Limen holds no prediction
+  `already_decided` (409). A decision for a key Cribrum holds no prediction
   for must carry the action; one without it fails with
   `invalid_decision` naming `action`. A decision that carries an action
-  for a key Limen has a prediction for must carry the same action, by
+  for a key Cribrum has a prediction for must carry the same action, by
   digest, or it fails with `action_conflict`.
 - **Answers need a decision.** `Answer` on a key with no recorded
   decision fails with `no_decision` (409).
@@ -131,7 +131,7 @@ errors or does not return within `timeout`, the wrapper returns, with a
 nil error, a prediction for the action's key whose verdict is `ask` and
 whose source is `learned/unavailable`, and hands the error to `report`.
 The wrapper waits on a goroutine, so a predictor that ignores its
-context cannot hold the decision point past the timeout. Because Limen
+context cannot hold the decision point past the timeout. Because Cribrum
 may hold no record of the action, the decision point sends the action
 with its `Decision`, and the answer still teaches the model.
 

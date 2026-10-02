@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package limen
+package cribrum
 
 import (
 	"math"
@@ -66,7 +66,7 @@ type Profile struct {
 	// Thresholds is derived from Costs when the profile is saved; a value
 	// a caller sends is ignored.
 	Thresholds Thresholds `json:"thresholds"`
-	// Default is true for the built-in profile Limen applies to a scope
+	// Default is true for the built-in profile Cribrum applies to a scope
 	// with no saved profile. A caller cannot set it.
 	Default bool `json:"default,omitempty"`
 }
@@ -90,7 +90,7 @@ type Certify struct {
 }
 
 // The built-in profile: a wrong allow costs ten interruptions and a wrong
-// block four, so Limen suggests an allow only above a 90% chance of
+// block four, so Cribrum suggests an allow only above a 90% chance of
 // approval and a block only below 25%; a twentieth of automatic verdicts
 // is reviewed; and the claim tested is a false-allow rate below 1% at 95%
 // confidence, which takes 300 clean reviews.
@@ -100,7 +100,7 @@ var (
 	DefaultCertify   = Certify{Alpha: 0.01, Delta: 0.05}
 )
 
-// DefaultProfile is the profile Limen applies to a scope with no saved
+// DefaultProfile is the profile Cribrum applies to a scope with no saved
 // profile.
 func DefaultProfile(s Scope) Profile {
 	t, _ := DefaultCosts.Thresholds()
@@ -116,7 +116,7 @@ func DefaultProfile(s Scope) Profile {
 //	AllowAbove = 1 - Ask/FalseAllow
 //	BlockBelow = Ask/FalseBlock
 //
-// Limen also requires the ask band to contain one half, the probability it
+// Cribrum also requires the ask band to contain one half, the probability it
 // assigns to an action it knows nothing about, so that no action is
 // allowed or blocked on no evidence. That holds exactly when each error
 // costs more than two interruptions: FalseAllow > 2 Ask and
@@ -149,7 +149,7 @@ func (c Costs) Thresholds() (Thresholds, error) {
 }
 
 // Validate reports every field of p that breaks the contract, or nil.
-// Costs that would let Limen decide on no evidence fail with
+// Costs that would let Cribrum decide on no evidence fail with
 // [CodeAskTooCostly]; every other problem is [CodeInvalidProfile].
 func (p Profile) Validate() error {
 	var q problems

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package limen
+package cribrum
 
 import "time"
 
@@ -47,19 +47,19 @@ type ReplayOptions struct {
 	Keep bool `json:"keep,omitempty"`
 }
 
-// ReplayReport is what Limen would have suggested on a recorded history:
+// ReplayReport is what Cribrum would have suggested on a recorded history:
 // each record is predicted in time order before its own answer is learned.
 type ReplayReport struct {
 	Records  int `json:"records"`
 	Answered int `json:"answered"`
-	// Would counts Limen's suggestions on the records.
+	// Would counts Cribrum's suggestions on the records.
 	Would map[Verdict]int `json:"would"`
-	// AllowedDenied counts answered records Limen would have allowed and the
+	// AllowedDenied counts answered records Cribrum would have allowed and the
 	// person denied; BlockedApproved those it would have blocked and the
 	// person approved.
 	AllowedDenied   int `json:"allowed_denied"`
 	BlockedApproved int `json:"blocked_approved"`
-	// FalseAllow estimates the false-allow rate of Limen's would-be allows
+	// FalseAllow estimates the false-allow rate of Cribrum's would-be allows
 	// from the records' answers, weighted by their review probabilities.
 	FalseAllow Estimate `json:"false_allow"`
 	// Kept is true when the records were learned into the live models.

@@ -1,6 +1,6 @@
 # Integrating a decision point
 
-How a decision point asks Limen about an action, decides, records what it
+How a decision point asks Cribrum about an action, decides, records what it
 did, and sends back what the person said. A decision point is the code
 that lets an automated action run or not: an agent harness deciding on a
 tool call, a proxy on a network request, a service on a push or a payment.
@@ -15,7 +15,7 @@ tool call, a proxy on a network request, a service on a push or a payment.
 
 A Go decision point can embed the engine and call it in its own process,
 with no network in the path; any other, or one that runs in many places,
-calls the server over HTTP. Both are a `limen.Service`, so the choice is
+calls the server over HTTP. Both are a `cribrum.Service`, so the choice is
 made at start-up and the rest of the code does not change. The engine and
 the server are specified but not built yet; until they are, the stub in
 `stub/` serves the same interfaces for tests.
@@ -25,14 +25,14 @@ latency budget, such as 200 milliseconds in process or 2 seconds over
 HTTP:
 
 ```go
-predictor := limen.FailClosed(svc, 200*time.Millisecond, func(err error) {
-	log.Printf("limen: %v", err) // the action waits for a person
+predictor := cribrum.FailClosed(svc, 200*time.Millisecond, func(err error) {
+	log.Printf("cribrum: %v", err) // the action waits for a person
 })
 ```
 
-When Limen errors or runs past the timeout, `FailClosed` returns a
+When Cribrum errors or runs past the timeout, `FailClosed` returns a
 suggestion of `ask` with the source `learned/unavailable` and no error.
-Limen holds no record of that action, so put the action in your decision
+Cribrum holds no record of that action, so put the action in your decision
 (`Decision.Action`) and the person's answer still teaches the model.
 
 ## Building an action
@@ -44,13 +44,13 @@ Every field is in the [API guide](api.md) and the
 | Field | What to put there |
 |---|---|
 | `org` | the organization whose cost profile applies |
-| `subject` | the person on whose behalf the action runs, as the token's issuer and `sub` joined by a pipe: `https://issuer.example\|usr_42`. Limen learns one model per subject. For an agent acting for a person, the person, not the agent. |
+| `subject` | the person on whose behalf the action runs, as the token's issuer and `sub` joined by a pipe: `https://issuer.example\|usr_42`. Cribrum learns one model per subject. For an agent acting for a person, the person, not the agent. |
 | `action_id` | your own id for the action, unique within the organization and subject, such as a session id and a tool call id |
 | `actor` | who proposed it: `kind` (`agent`, `service`, or `person`), `id`, `session` |
 | `kind`, `name` | the domain and the operation: `tool` and `bash`, `egress` and `https`, `repo` and `ref.update`, `spend` and `charge`. A cost profile can be scoped to a kind. |
 | `effect` | `none`, `read`, `write` (inside the boundary of the system that runs it), or `external` (anything that leaves it: the network, a message sent, money moved). When unsure, `external`. |
 | `reversible` | whether the action can be undone, when you know |
-| `input` | the action's input as JSON, such as a tool call's arguments. Only deterministic feature extractors read it, and Limen never stores it. |
+| `input` | the action's input as JSON, such as a tool call's arguments. Only deterministic feature extractors read it, and Cribrum never stores it. |
 | `target` | what it acts on: `kind` (`path`, `ref`, `host`, `account`), `id`, and optionally `sensitivity` from 0 (scratch) to 1 (production) |
 | `environment` | where it runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`, whether a credential there reaches outside it |
 | `attributes` | further facts your domain has, as strings, numbers, or booleans: an amount, whether a branch is protected, a file count. At most 64. |
@@ -115,7 +115,7 @@ A payment:
 
 ## Deciding
 
-Limen suggests; your decision point decides. Compose the suggestion with
+Cribrum suggests; your decision point decides. Compose the suggestion with
 your own rules and the random review in one call to the shared verdict
 package:
 
@@ -156,8 +156,8 @@ person sees the action. An automatic allow picked for review becomes
 Record every decision, before the action runs or anyone sees it:
 
 ```go
-d := limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
-if p.Source == limen.SourceUnavailable {
+d := cribrum.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
+if p.Source == cribrum.SourceUnavailable {
 	d.Action = &a
 }
 err := svc.Record(ctx, d)
@@ -186,12 +186,12 @@ Send the person's answer whenever they give it:
   because a reviewer rejected its result, send `"approve": false`. It
   teaches the model and never enters an error estimate.
 
-Limen works out which answer is a review from the recorded decision, so an
+Cribrum works out which answer is a review from the recorded decision, so an
 answer needs a recorded decision first (`no_decision` otherwise).
 
 The answer is attributed to the caller. A harness that relays a person's
 answer, such as a confirmation the person gave in its interface, names
-them in `by`; Limen honors it only when your authorization endpoint allows
+them in `by`; Cribrum honors it only when your authorization endpoint allows
 the harness to answer for that subject.
 
 `GET /v1/cases?org=...&subject=...&pending=true` lists the actions shown to
@@ -202,10 +202,10 @@ the person that still need an answer, oldest first: the review queue.
 The ledger needs no predictor. A decision point that decides by rules can
 measure its rules and its judge:
 
-1. For each action, compose your rules' verdict instead of Limen's:
+1. For each action, compose your rules' verdict instead of Cribrum's:
    `verdict.Decide(rulesVerdict, ceiling, rate, rand.Float64())`.
 2. Record the decision with `source` naming your rules, put the action in
-   it (Limen has no prediction to take it from), and pass your judge's
+   it (Cribrum has no prediction to take it from), and pass your judge's
    verdict as a signal on the action.
 3. Send the answers.
 
@@ -226,7 +226,7 @@ A profile states three costs, in any unit, since only their ratios matter:
 
 The thresholds follow: `allow_above = 1 - ask / false_allow` and
 `block_below = ask / false_block`. Each kind of error must cost more than
-two interruptions, so that an action about someone Limen knows nothing
+two interruptions, so that an action about someone Cribrum knows nothing
 about (a 50% chance of approval) is always an ask; otherwise saving fails
 with `ask_too_costly`.
 
@@ -267,14 +267,14 @@ Content-Type: application/json
 
 `GET /v1/reliability?org=...&subject=...&of=...&from=...&to=...` reports
 one source's error rates for one person over one window: `learned` for
-Limen's suggestions, `applied` for the verdicts you applied, a policy's
+Cribrum's suggestions, `applied` for the verdicts you applied, a policy's
 `source`, or a signal's. [The ledger](ledger.md#reading-a-report) explains
 every field; in short, read the `interval` before the `value`, read
 `covered` to know what the value speaks for, and keep `unanswered` small.
 
 ## Rolling out
 
-Limen's usefulness has to be shown on your own history before it decides
+Cribrum's usefulness has to be shown on your own history before it decides
 anything. Four steps, each needing the previous step's evidence:
 
 1. **Replay.** Send your recorded history to `POST /v1/replays` as
@@ -283,21 +283,21 @@ anything. Four steps, each needing the previous step's evidence:
    `review_probability` and `source`, and `approve` when the person
    answered. Without an explicit review policy, an ask, and a flag your
    rules forced, were answered with probability one, and an allow or a
-   block with probability zero. Limen predicts the records in time order,
+   block with probability zero. Cribrum predicts the records in time order,
    each before learning its own answer, and reports what it would have
    suggested (`would`), how often it would have allowed what the person
    denied (`allowed_denied`) or blocked what they approved
    (`blocked_approved`), and a false-allow estimate whose `covered` share
    says how much of that your history can speak to. With `keep=true` the
    records also seed the live models and the ledger.
-2. **Shadow.** Your rules keep deciding. For every action, ask Limen for a
-   prediction, compose your rules' verdict (not Limen's) with
+2. **Shadow.** Your rules keep deciding. For every action, ask Cribrum for a
+   prediction, compose your rules' verdict (not Cribrum's) with
    `verdict.Decide` and a review rate above zero, and record the decision
-   with your rules' source. Limen learns from the answers, and its
+   with your rules' source. Cribrum learns from the answers, and its
    reliability report (`of=learned`) measures its suggestions on the
    actions your decisions made reviewable; `covered` says how many of
-   Limen's would-be allows your reviews reach.
-3. **Learn inside the ceiling.** Compose Limen's suggestion instead, still
+   Cribrum's would-be allows your reviews reach.
+3. **Learn inside the ceiling.** Compose Cribrum's suggestion instead, still
    under your rules' ceiling, first where an automatic allow can do the
    least harm, such as inside a sandbox.
 4. **Judge signals.** Pass your judge's verdicts in as signals, and watch
@@ -314,34 +314,34 @@ are all you need:
 
 - **Manual mode** (`topos run --mode manual`, Topos's `confirm`). Every
   call that is not read-only asks you, as it always did, and every answer
-  teaches Limen. Each prediction is recorded beside the call, so you can
-  see what Limen would have done.
-- **Auto mode** (`topos run --mode auto`, Topos's `progressive`). Limen's
+  teaches Cribrum. Each prediction is recorded beside the call, so you can
+  see what Cribrum would have done.
+- **Auto mode** (`topos run --mode auto`, Topos's `progressive`). Cribrum's
   suggestion decides inside Topos's rules: a familiar safe call runs, a
-  call you would deny is blocked, and anything Limen is unsure about asks
+  call you would deny is blocked, and anything Cribrum is unsure about asks
   you. A share of automatic verdicts is still shown to you for review, so
   the ledger keeps measuring how often auto mode is wrong.
 
-Start Limen, then point Topos at it:
+Start Cribrum, then point Topos at it:
 
 ```sh
-export LIMEN_TOKEN=$(openssl rand -hex 16)
-limen serve &                                   # http://127.0.0.1:7720
+export CRIBRUM_TOKEN=$(openssl rand -hex 16)
+cribrum serve &                                   # http://127.0.0.1:7720
 
 export TOPOS_DECISIONS_URL=http://127.0.0.1:7720
-export TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
-topos run --mode manual "Fix the failing test."  # for a while: Limen learns
-topos run --mode auto   "Fix the failing test."  # then: Limen decides inside the rules
+export TOPOS_DECISIONS_TOKEN=$CRIBRUM_TOKEN
+topos run --mode manual "Fix the failing test."  # for a while: Cribrum learns
+topos run --mode auto   "Fix the failing test."  # then: Cribrum decides inside the rules
 ```
 
-To see what Limen would have done on sessions you already ran, without
+To see what Cribrum would have done on sessions you already ran, without
 serving anything, replay Topos's data directory:
 
 ```sh
-limen replay topos
+cribrum replay topos
 ```
 
-A person who knows nothing yet gets asks: Limen suggests allow or block
+A person who knows nothing yet gets asks: Cribrum suggests allow or block
 only once their answers say so. A few dozen answers per kind of call is
 typical before auto mode stops asking about it.
 

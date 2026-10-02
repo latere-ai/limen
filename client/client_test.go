@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/client"
-	"latere.ai/x/limen/conformance"
-	"latere.ai/x/limen/engine"
-	"latere.ai/x/limen/server"
-	"latere.ai/x/limen/stub"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/client"
+	"latere.ai/x/cribrum/conformance"
+	"latere.ai/x/cribrum/engine"
+	"latere.ai/x/cribrum/server"
+	"latere.ai/x/cribrum/stub"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 )
 
 // serve puts svc behind a local server and returns a client of it.
-func serve(t *testing.T, svc limen.Service) *client.Client {
+func serve(t *testing.T, svc cribrum.Service) *client.Client {
 	t.Helper()
 	ts := httptest.NewServer(server.New(svc, server.Local(token, caller)))
 	t.Cleanup(ts.Close)
@@ -40,7 +40,7 @@ func serve(t *testing.T, svc limen.Service) *client.Client {
 // The client, the server and the engine together hold the contract.
 func TestConformanceEngine(t *testing.T) {
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) limen.Service {
+		New: func(t *testing.T) cribrum.Service {
 			e := engine.New(engine.Options{Inline: 1})
 			t.Cleanup(func() { e.Close() })
 			return serve(t, e)
@@ -51,8 +51,8 @@ func TestConformanceEngine(t *testing.T) {
 // The same against the stub, with its steered predictions.
 func TestConformanceStub(t *testing.T) {
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) limen.Service { return serve(t, stub.New(stub.Options{})) },
-		Steered: func(t *testing.T, predict func(limen.Action) (float64, float64)) limen.Service {
+		New: func(t *testing.T) cribrum.Service { return serve(t, stub.New(stub.Options{})) },
+		Steered: func(t *testing.T, predict func(cribrum.Action) (float64, float64)) cribrum.Service {
 			return serve(t, stub.New(stub.Options{Predict: predict}))
 		},
 	})
@@ -76,13 +76,13 @@ func TestResponsesWithoutEnvelope(t *testing.T) {
 	cases := []struct {
 		status int
 		body   string
-		code   limen.Code
+		code   cribrum.Code
 	}{
-		{http.StatusServiceUnavailable, "upstream down", limen.CodeUnavailable},
-		{http.StatusBadGateway, "", limen.CodeUnavailable},
-		{http.StatusGatewayTimeout, strings.Repeat("x", 500), limen.CodeUnavailable},
-		{http.StatusNotFound, "404 page not found", limen.CodeInternal},
-		{http.StatusTeapot, `{"error":{}}`, limen.CodeInternal},
+		{http.StatusServiceUnavailable, "upstream down", cribrum.CodeUnavailable},
+		{http.StatusBadGateway, "", cribrum.CodeUnavailable},
+		{http.StatusGatewayTimeout, strings.Repeat("x", 500), cribrum.CodeUnavailable},
+		{http.StatusNotFound, "404 page not found", cribrum.CodeInternal},
+		{http.StatusTeapot, `{"error":{}}`, cribrum.CodeInternal},
 	}
 	for _, c := range cases {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,15 +93,15 @@ func TestResponsesWithoutEnvelope(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = cl.Predict(ctx, limen.Action{})
-		if got := limen.CodeOf(err); got != c.code {
+		_, err = cl.Predict(ctx, cribrum.Action{})
+		if got := cribrum.CodeOf(err); got != c.code {
 			t.Errorf("%d %q: code %q (%v), want %q", c.status, c.body, got, err, c.code)
 		}
 		ts.Close()
 	}
 }
 
-// The envelope's code, fields and detail come back as a *limen.Error, with
+// The envelope's code, fields and detail come back as a *cribrum.Error, with
 // the request id in the detail.
 func TestEnvelopeError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -111,9 +111,9 @@ func TestEnvelopeError(t *testing.T) {
 	}))
 	defer ts.Close()
 	cl, _ := client.New(ts.URL, client.Options{HTTP: ts.Client()})
-	_, err := cl.Predict(ctx, limen.Action{})
-	var e *limen.Error
-	if !errors.As(err, &e) || e.Code != limen.CodeInvalidAction || len(e.Fields) != 1 || e.Fields[0] != "kind" || !strings.Contains(e.Detail, "r1") {
+	_, err := cl.Predict(ctx, cribrum.Action{})
+	var e *cribrum.Error
+	if !errors.As(err, &e) || e.Code != cribrum.CodeInvalidAction || len(e.Fields) != 1 || e.Fields[0] != "kind" || !strings.Contains(e.Detail, "r1") {
 		t.Errorf("%#v", err)
 	}
 }
@@ -125,28 +125,28 @@ func TestTransportErrors(t *testing.T) {
 		_, _ = w.Write([]byte("not json"))
 	}))
 	cl, _ := client.New(ts.URL, client.Options{HTTP: ts.Client()})
-	if _, err := cl.Predict(ctx, limen.Action{}); err == nil || limen.CodeOf(err) != limen.CodeInternal {
+	if _, err := cl.Predict(ctx, cribrum.Action{}); err == nil || cribrum.CodeOf(err) != cribrum.CodeInternal {
 		t.Errorf("a garbled body: %v", err)
 	}
 	ts.Close()
-	if _, err := cl.Profile(ctx, limen.Scope{Org: "o"}); err == nil {
+	if _, err := cl.Profile(ctx, cribrum.Scope{Org: "o"}); err == nil {
 		t.Error("a closed server answered")
 	}
 	cl2, _ := client.New("http://127.0.0.1:1", client.Options{HTTP: &http.Client{Timeout: time.Second}})
-	p, err := limen.FailClosed(cl2, time.Second, nil).Predict(ctx, limen.Action{Org: "o", Subject: "s", ActionID: "a"})
-	if err != nil || p.Verdict != limen.Ask || p.Source != limen.SourceUnavailable {
+	p, err := cribrum.FailClosed(cl2, time.Second, nil).Predict(ctx, cribrum.Action{Org: "o", Subject: "s", ActionID: "a"})
+	if err != nil || p.Verdict != cribrum.Ask || p.Source != cribrum.SourceUnavailable {
 		t.Errorf("FailClosed around an unreachable server: %+v, %v", p, err)
 	}
-	if _, err := cl.Predict(ctx, limen.Action{Attributes: map[string]any{"x": func() {}}}); err == nil {
+	if _, err := cl.Predict(ctx, cribrum.Action{Attributes: map[string]any{"x": func() {}}}); err == nil {
 		t.Error("an action that cannot be encoded was sent")
 	}
-	if err := cl.Record(context.Background(), limen.Decision{}); err == nil {
+	if err := cl.Record(context.Background(), cribrum.Decision{}); err == nil {
 		t.Error("a closed server recorded")
 	}
 	bad, _ := client.New("http://127.0.0.1:1", client.Options{HTTP: http.DefaultClient})
 	c, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := bad.Answer(c, limen.Answer{}); !errors.Is(err, context.Canceled) {
+	if err := bad.Answer(c, cribrum.Answer{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("a canceled call: %v", err)
 	}
 }
@@ -162,11 +162,11 @@ func TestQueries(t *testing.T) {
 	defer ts.Close()
 	cl, _ := client.New(ts.URL, client.Options{HTTP: ts.Client()})
 	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	_, _ = cl.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", ActionID: "a", Pending: true, Cursor: "c", Limit: 5})
-	_, _ = cl.Reliability(ctx, limen.ReliabilityQuery{Org: "o", Subject: "s", Of: "learned", From: from, To: from.Add(time.Hour)})
-	_, _ = cl.Reliability(ctx, limen.ReliabilityQuery{Org: "o", Subject: "s", Of: "learned"})
-	_, _ = cl.Profile(ctx, limen.Scope{Org: "o", Kind: "tool", Agent: "x"})
-	_, _ = cl.Replay(ctx, func(yield func(limen.ReplayRecord, error) bool) {}, limen.ReplayOptions{Keep: true})
+	_, _ = cl.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s", ActionID: "a", Pending: true, Cursor: "c", Limit: 5})
+	_, _ = cl.Reliability(ctx, cribrum.ReliabilityQuery{Org: "o", Subject: "s", Of: "learned", From: from, To: from.Add(time.Hour)})
+	_, _ = cl.Reliability(ctx, cribrum.ReliabilityQuery{Org: "o", Subject: "s", Of: "learned"})
+	_, _ = cl.Profile(ctx, cribrum.Scope{Org: "o", Kind: "tool", Agent: "x"})
+	_, _ = cl.Replay(ctx, func(yield func(cribrum.ReplayRecord, error) bool) {}, cribrum.ReplayOptions{Keep: true})
 	want := []string{
 		"GET /v1/cases?action_id=a&cursor=c&limit=5&org=o&pending=true&subject=s",
 		"GET /v1/reliability?from=2026-10-01T00%3A00%3A00Z&of=learned&org=o&subject=s&to=2026-10-01T01%3A00%3A00Z",
@@ -192,20 +192,20 @@ func TestReplayEarlyAnswer(t *testing.T) {
 	}))
 	defer ts.Close()
 	cl, _ := client.New(ts.URL, client.Options{HTTP: ts.Client()})
-	many := func(yield func(limen.ReplayRecord, error) bool) {
+	many := func(yield func(cribrum.ReplayRecord, error) bool) {
 		for range 100000 {
-			if !yield(limen.ReplayRecord{Source: strings.Repeat("s", 100)}, nil) {
+			if !yield(cribrum.ReplayRecord{Source: strings.Repeat("s", 100)}, nil) {
 				return
 			}
 		}
 	}
-	if _, err := cl.Replay(ctx, many, limen.ReplayOptions{}); limen.CodeOf(err) != limen.CodeBodyTooLarge {
+	if _, err := cl.Replay(ctx, many, cribrum.ReplayOptions{}); cribrum.CodeOf(err) != cribrum.CodeBodyTooLarge {
 		t.Errorf("an early answer: %v", err)
 	}
-	unencodable := func(yield func(limen.ReplayRecord, error) bool) {
-		yield(limen.ReplayRecord{Action: limen.Action{Attributes: map[string]any{"f": func() {}}}}, nil)
+	unencodable := func(yield func(cribrum.ReplayRecord, error) bool) {
+		yield(cribrum.ReplayRecord{Action: cribrum.Action{Attributes: map[string]any{"f": func() {}}}}, nil)
 	}
-	if _, err := cl.Replay(ctx, unencodable, limen.ReplayOptions{}); err == nil {
+	if _, err := cl.Replay(ctx, unencodable, cribrum.ReplayOptions{}); err == nil {
 		t.Error("an unencodable record was sent")
 	}
 }

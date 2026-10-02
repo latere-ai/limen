@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/client"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/client"
 )
 
 // syncBuffer is a buffer two goroutines may write and read.
@@ -37,7 +37,7 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// startServe runs `limen serve` until stop is called, and returns the
+// startServe runs `cribrum serve` until stop is called, and returns the
 // address it listens on.
 func startServe(t *testing.T, ledger string) (addr string, stop func() (int, string)) {
 	t.Helper()
@@ -58,7 +58,7 @@ func startServe(t *testing.T, ledger string) (addr string, stop func() (int, str
 	var out, errOut syncBuffer
 	code := make(chan int, 1)
 	go func() {
-		code <- run([]string{"serve", "--store", ledger, "--subject", "me"}, strings.NewReader(""), &out, &errOut, env(map[string]string{"LIMEN_TOKEN": "s3cret"}))
+		code <- run([]string{"serve", "--store", ledger, "--subject", "me"}, strings.NewReader(""), &out, &errOut, env(map[string]string{"CRIBRUM_TOKEN": "s3cret"}))
 	}()
 	select {
 	case a := <-got:
@@ -85,28 +85,28 @@ func TestServe(t *testing.T) {
 	}
 	ctx := context.Background()
 	in, _ := json.Marshal(map[string]string{"command": "go test ./..."})
-	a := limen.Action{Org: "local", Subject: "me", ActionID: "s1/t1", Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: in}
+	a := cribrum.Action{Org: "local", Subject: "me", ActionID: "s1/t1", Kind: "tool", Name: "bash", Effect: cribrum.EffectWrite, Input: in}
 	p, err := c.Predict(ctx, a)
-	if err != nil || p.Verdict != limen.Ask {
+	if err != nil || p.Verdict != cribrum.Ask {
 		t.Fatalf("predict: %+v, %v", p, err)
 	}
-	if err := c.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm"}); err != nil {
+	if err := c.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "topos/confirm"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
+	if err := c.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: true}); err != nil {
 		t.Fatal(err)
 	}
 	bad, _ := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "wrong"})
-	if _, err := bad.Predict(ctx, a); limen.CodeOf(err) != limen.CodeUnauthenticated {
+	if _, err := bad.Predict(ctx, a); cribrum.CodeOf(err) != cribrum.CodeUnauthenticated {
 		t.Errorf("a wrong token: %v", err)
 	}
-	if code, log := stop(); code != exitOK || !strings.Contains(log, "Limen stopped.") {
+	if code, log := stop(); code != exitOK || !strings.Contains(log, "Cribrum stopped.") {
 		t.Fatalf("stop: exit %d: %s", code, log)
 	}
 
 	addr, stop = startServe(t, ledger)
 	c, _ = client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
-	page, err := c.Cases(ctx, limen.CaseQuery{Org: "local", Subject: "me"})
+	page, err := c.Cases(ctx, cribrum.CaseQuery{Org: "local", Subject: "me"})
 	if err != nil || len(page.Entries) != 1 || len(page.Entries[0].Answers) != 1 {
 		t.Errorf("after a restart: %+v, %v", page, err)
 	}
@@ -122,13 +122,13 @@ func TestServeUsage(t *testing.T) {
 		code int
 		want string
 	}{
-		{[]string{"serve"}, nil, exitUsage, "set LIMEN_TOKEN"},
-		{[]string{"serve", "extra"}, map[string]string{"LIMEN_TOKEN": "x"}, exitUsage, `unexpected argument "extra"`},
+		{[]string{"serve"}, nil, exitUsage, "set CRIBRUM_TOKEN"},
+		{[]string{"serve", "extra"}, map[string]string{"CRIBRUM_TOKEN": "x"}, exitUsage, `unexpected argument "extra"`},
 		{[]string{"serve", "--bogus"}, nil, exitUsage, "flag provided but not defined"},
-		{[]string{"serve", "-h"}, nil, exitOK, "Usage: limen serve"},
-		{[]string{"serve"}, map[string]string{"LIMEN_TOKEN": "x", "HOME": ""}, exitUsage, "no directory for the ledger"},
-		{[]string{"serve", "--store", "/dev/null/x"}, map[string]string{"LIMEN_TOKEN": "x"}, exitFail, "could not open the ledger"},
-		{[]string{"serve", "--store", "STORE", "--addr", "256.0.0.1:1"}, map[string]string{"LIMEN_TOKEN": "x"}, exitFail, "could not listen"},
+		{[]string{"serve", "-h"}, nil, exitOK, "Usage: cribrum serve"},
+		{[]string{"serve"}, map[string]string{"CRIBRUM_TOKEN": "x", "HOME": ""}, exitUsage, "no directory for the ledger"},
+		{[]string{"serve", "--store", "/dev/null/x"}, map[string]string{"CRIBRUM_TOKEN": "x"}, exitFail, "could not open the ledger"},
+		{[]string{"serve", "--store", "STORE", "--addr", "256.0.0.1:1"}, map[string]string{"CRIBRUM_TOKEN": "x"}, exitFail, "could not listen"},
 	}
 	for _, c := range cases {
 		args := append([]string(nil), c.args...)
@@ -149,9 +149,9 @@ func TestDataDir(t *testing.T) {
 		env  map[string]string
 		want string
 	}{
-		{map[string]string{"LIMEN_DATA_DIR": "/a"}, "/a"},
-		{map[string]string{"XDG_STATE_HOME": "/s"}, filepath.Join("/s", "limen")},
-		{map[string]string{"HOME": "/h"}, filepath.Join("/h", ".local", "state", "limen")},
+		{map[string]string{"CRIBRUM_DATA_DIR": "/a"}, "/a"},
+		{map[string]string{"XDG_STATE_HOME": "/s"}, filepath.Join("/s", "cribrum")},
+		{map[string]string{"HOME": "/h"}, filepath.Join("/h", ".local", "state", "cribrum")},
 		{map[string]string{}, ""},
 	}
 	for _, c := range cases {

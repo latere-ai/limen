@@ -6,18 +6,18 @@ issue for one. You will hear back within three business days, and a fix
 for a high severity issue ships within thirty days. Credit in the release
 notes on request.
 
-Limen has no release yet. The contract in the module root is pre-release
+Cribrum has no release yet. The contract in the module root is pre-release
 and may change; once a release is cut, fixes go to the two most recent
 minor release series.
 
-Limen informs whether an automated action runs and measures how often
+Cribrum informs whether an automated action runs and measures how often
 that decision is wrong, so the design commits to these properties, and a
 way to break any of them is a vulnerability whatever its other impact:
 
 - **A deterministic deny is final, and a failure never allows.**
   `verdict.Decide` returns `block` under a `block` ceiling, and
   `FailClosed` turns an error or a timeout into `ask`. A path on which a
-  failure, or anything Limen returns, makes a decision point allow what
+  failure, or anything Cribrum returns, makes a decision point allow what
   its ceiling forbids is in scope.
 - **The review probability is the decision point's.** Error estimates
   weight each review by one over the probability, recorded with the

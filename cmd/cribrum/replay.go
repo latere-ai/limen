@@ -18,10 +18,10 @@ import (
 
 	"latere.ai/x/pkg/errwriter"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/engine"
-	"latere.ai/x/limen/engine/store"
-	"latere.ai/x/limen/importer/topos"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/engine"
+	"latere.ai/x/cribrum/engine/store"
+	"latere.ai/x/cribrum/importer/topos"
 )
 
 // options are the flags every replay takes.
@@ -33,20 +33,20 @@ type options struct {
 
 func (o *options) register(fs *flag.FlagSet) {
 	fs.BoolVar(&o.keep, "keep", false, "learn the history into the models kept in --store")
-	fs.StringVar(&o.store, "store", "", "the directory where Limen keeps its ledger and models")
+	fs.StringVar(&o.store, "store", "", "the directory where Cribrum keeps its ledger and models")
 	fs.BoolVar(&o.json, "json", false, "print the report as JSON")
 }
 
 // source is where a replay reads its records, and what it found on the way.
 type source struct {
-	records  iter.Seq2[limen.ReplayRecord, error]
+	records  iter.Seq2[cribrum.ReplayRecord, error]
 	skipped  map[string]int
 	describe string
 }
 
 func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, getenv func(string) string) int {
 	if len(args) == 0 {
-		errOut.Print("limen replay: name what to replay: topos or file.\n\n" + usage)
+		errOut.Print("cribrum replay: name what to replay: topos or file.\n\n" + usage)
 		return exitUsage
 	}
 	var (
@@ -55,7 +55,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 	)
 	switch args[0] {
 	case "topos":
-		fs := flag.NewFlagSet("limen replay topos", flag.ContinueOnError)
+		fs := flag.NewFlagSet("cribrum replay topos", flag.ContinueOnError)
 		fs.SetOutput(errOut)
 		data := fs.String("data", "", "the Topos data directory; default TOPOS_DATA_DIR, then $XDG_STATE_HOME/topos, then ~/.local/state/topos")
 		org := fs.String("org", "", "the organization of the replayed actions; default the session's, then local")
@@ -65,7 +65,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			return code
 		}
 		if fs.NArg() > 0 {
-			errOut.Printf("limen replay topos: unexpected argument %q.\n", fs.Arg(0))
+			errOut.Printf("cribrum replay topos: unexpected argument %q.\n", fs.Arg(0))
 			return exitUsage
 		}
 		dir := *data
@@ -73,7 +73,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			dir = toposDataDir(getenv)
 		}
 		if dir == "" {
-			errOut.Println("limen replay topos: no Topos data directory. Pass --data, or set TOPOS_DATA_DIR or HOME.")
+			errOut.Println("cribrum replay topos: no Topos data directory. Pass --data, or set TOPOS_DATA_DIR or HOME.")
 			return exitUsage
 		}
 		skipped := map[string]int{}
@@ -82,14 +82,14 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			skipped: skipped, describe: dir,
 		}
 	case "file":
-		fs := flag.NewFlagSet("limen replay file", flag.ContinueOnError)
+		fs := flag.NewFlagSet("cribrum replay file", flag.ContinueOnError)
 		fs.SetOutput(errOut)
 		o.register(fs)
 		if code, done := parse(fs, args[1:]); done {
 			return code
 		}
 		if fs.NArg() != 1 {
-			errOut.Println("limen replay file: name one file of records, or - for standard input.")
+			errOut.Println("cribrum replay file: name one file of records, or - for standard input.")
 			return exitUsage
 		}
 		path := fs.Arg(0)
@@ -97,7 +97,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		if path != "-" {
 			f, err := os.Open(path)
 			if err != nil {
-				errOut.Printf("limen replay file: cannot open %s: %v\n", path, err)
+				errOut.Printf("cribrum replay file: cannot open %s: %v\n", path, err)
 				return exitFail
 			}
 			defer func() { _ = f.Close() }() // a read-only file: closing it loses nothing
@@ -105,11 +105,11 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		}
 		src = &source{records: ndjson(r), skipped: map[string]int{}, describe: path}
 	default:
-		errOut.Printf("limen replay: unknown source %q; use topos or file.\n", args[0])
+		errOut.Printf("cribrum replay: unknown source %q; use topos or file.\n", args[0])
 		return exitUsage
 	}
 	if o.keep && o.store == "" {
-		errOut.Println("limen replay: --keep needs --store, the directory where the learned models are kept.")
+		errOut.Println("cribrum replay: --keep needs --store, the directory where the learned models are kept.")
 		return exitUsage
 	}
 
@@ -117,7 +117,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 	if o.store != "" {
 		var err error
 		if st, err = openStore(o.store); err != nil {
-			errOut.Printf("limen replay: %v\n", err)
+			errOut.Printf("cribrum replay: %v\n", err)
 			return exitFail
 		}
 	}
@@ -127,11 +127,11 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		// wrote, which the person must hear about if it fails.
 		_ = e.Close()
 		if err := st.Close(); err != nil {
-			errOut.Printf("limen replay: closing the ledger: %v\n", err)
+			errOut.Printf("cribrum replay: closing the ledger: %v\n", err)
 		}
 	}()
 
-	rep, err := e.Replay(context.Background(), src.records, limen.ReplayOptions{Keep: o.keep})
+	rep, err := e.Replay(context.Background(), src.records, cribrum.ReplayOptions{Keep: o.keep})
 	if err != nil {
 		printError(errOut, src, err)
 		return exitFail
@@ -140,10 +140,10 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(struct {
-			Report  limen.ReplayReport `json:"report"`
-			Skipped map[string]int     `json:"skipped"`
+			Report  cribrum.ReplayReport `json:"report"`
+			Skipped map[string]int       `json:"skipped"`
 		}{rep, src.skipped}); err != nil {
-			errOut.Printf("limen replay: %v\n", err)
+			errOut.Printf("cribrum replay: %v\n", err)
 			return exitFail
 		}
 		return exitOK
@@ -186,8 +186,8 @@ func toposDataDir(getenv func(string) string) string {
 }
 
 // ndjson reads one record per line; blank lines are skipped.
-func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
-	return func(yield func(limen.ReplayRecord, error) bool) {
+func ndjson(r io.Reader) iter.Seq2[cribrum.ReplayRecord, error] {
+	return func(yield func(cribrum.ReplayRecord, error) bool) {
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 		line := 0
@@ -197,9 +197,9 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 			if text == "" {
 				continue
 			}
-			var rec limen.ReplayRecord
+			var rec cribrum.ReplayRecord
 			if err := json.Unmarshal([]byte(text), &rec); err != nil {
-				yield(limen.ReplayRecord{}, fmt.Errorf("line %d is not a record: %w", line, err))
+				yield(cribrum.ReplayRecord{}, fmt.Errorf("line %d is not a record: %w", line, err))
 				return
 			}
 			if !yield(rec, nil) {
@@ -207,7 +207,7 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 			}
 		}
 		if err := sc.Err(); err != nil {
-			yield(limen.ReplayRecord{}, err)
+			yield(cribrum.ReplayRecord{}, err)
 		}
 	}
 }
@@ -215,13 +215,13 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 // printError explains a failed replay to the person who ran it.
 func printError(w *errwriter.Writer, src *source, err error) {
 	if errors.Is(err, topos.ErrNoSessions) {
-		w.Printf("limen replay: there are no Topos sessions in %s. Use Topos for a while, or pass --data.\n", src.describe)
+		w.Printf("cribrum replay: there are no Topos sessions in %s. Use Topos for a while, or pass --data.\n", src.describe)
 		return
 	}
-	var le *limen.Error
+	var le *cribrum.Error
 	if errors.As(err, &le) {
-		w.Printf("limen replay: %s\n  %s\n", le.Code.Message(), le.Error())
+		w.Printf("cribrum replay: %s\n  %s\n", le.Code.Message(), le.Error())
 		return
 	}
-	w.Printf("limen replay: %v\n", err)
+	w.Printf("cribrum replay: %v\n", err)
 }

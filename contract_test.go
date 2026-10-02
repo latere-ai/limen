@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package limen
+package cribrum
 
 import (
 	"encoding/json"
@@ -43,7 +43,7 @@ func TestCostsThresholds(t *testing.T) {
 			t.Errorf("%s: %+v, want allow above %v, block below %v", c.name, th, c.allowAbove, c.block)
 		}
 		if th.Verdict(0.5) != Ask {
-			t.Errorf("%s: an action Limen knows nothing about is not an ask", c.name)
+			t.Errorf("%s: an action Cribrum knows nothing about is not an ask", c.name)
 		}
 	}
 	if d := DefaultProfile(Scope{Org: "o"}); !d.Default || !near(d.Thresholds.AllowAbove, 0.9) || d.Certify != DefaultCertify {

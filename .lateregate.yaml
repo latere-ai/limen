@@ -2,9 +2,9 @@
 # latere.ai/x/ci-gate, pinned in go.mod; only decisions this repository
 # makes are written here, each with its reason.
 
-# Limen ships a contract and, for now, nothing that serves it. The role
-# becomes `core`, with Limen's audience and API group, in the change that
-# adds limend (specs/001-architecture.md).
+# Cribrum ships a contract and, for now, nothing that serves it. The role
+# becomes `core`, with Cribrum's audience and API group, in the change that
+# adds cribrumd (specs/001-architecture.md).
 identity:
   role: none
 
@@ -52,26 +52,26 @@ spec:
 # authorizer contract.
 depcheck:
   packages:
-    latere.ai/x/limen:
+    latere.ai/x/cribrum:
       decision: >-
         the contract is imported into every decision point's hot path, so
         it reaches the standard library and the shared decision vocabulary
         alone; an engine dependency lives in engine/, never here
       allow:
         latere.ai/x/pkg: latere.ai/x/pkg/verdict alone, the decision vocabulary every decision point shares, itself standard library only
-    latere.ai/x/limen/authorizer:
+    latere.ai/x/cribrum/authorizer:
       decision: >-
         the vocabulary is data for the shared authorizer contract and
         reaches that contract and the standard library
       allow:
         latere.ai/x/pkg: the shared authorizer contract, latere.ai/x/pkg/authz
         github.com/google/uuid: reached through latere.ai/x/pkg/authz and its httpjson, which parses UUID path parameters with it
-    latere.ai/x/limen/engine/kernel:
+    latere.ai/x/cribrum/engine/kernel:
       decision: >-
         the covariance functions are arithmetic over feature vectors and
         reach the standard library alone (specs/004-engine.md)
       allow: {}
-    latere.ai/x/limen/engine/gp:
+    latere.ai/x/cribrum/engine/gp:
       decision: >-
         the Laplace posterior needs a dense Cholesky factorization and
         matrix-vector products at n of a few hundred; gonum is the library
@@ -80,7 +80,7 @@ depcheck:
         (specs/004-engine.md)
       allow:
         gonum.org/v1/gonum: dense Cholesky factorization, symmetric matrices, and the BLAS and LAPACK routines under them
-    latere.ai/x/limen/engine:
+    latere.ai/x/cribrum/engine:
       decision: >-
         the service over the model: the featurizer, the posterior, the
         store interface and the estimators, so it reaches gonum through gp
@@ -89,14 +89,14 @@ depcheck:
       allow:
         gonum.org/v1/gonum: through engine/gp, the dense linear algebra of the posterior
         latere.ai/x/pkg: latere.ai/x/pkg/verdict, through the contract
-    latere.ai/x/limen/engine/store/file:
+    latere.ai/x/cribrum/engine/store/file:
       decision: >-
         a store in a directory writes snapshots and profiles whole and
         atomically, which latere.ai/x/pkg/atomicfile already does with the
         directory fsync it needs (specs/004-engine.md)
       allow:
         latere.ai/x/pkg: atomicfile, and verdict through the contract
-    latere.ai/x/limen/importer/topos:
+    latere.ai/x/cribrum/importer/topos:
       decision: >-
         reads Topos session logs through Topos's own session store, not a
         copy of its log format, and the declared effects of Topos's built-in
@@ -104,7 +104,7 @@ depcheck:
       allow:
         latere.ai/x/topos: session, session/dir, harness/tools and what they import (machine, models, prompts)
         latere.ai/x/pkg: verdict, and llmdialect through Topos's session package
-    latere.ai/x/limen/cmd/limen:
+    latere.ai/x/cribrum/cmd/cribrum:
       decision: >-
         the command line over the engine, its file store and the Topos
         importer, and nothing they do not already reach

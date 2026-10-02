@@ -1,6 +1,6 @@
 # Specs
 
-Design specs for Limen, the oversight layer for automated actions: a
+Design specs for Cribrum, the oversight layer for automated actions: a
 shared verdict vocabulary, a ledger that measures how often any source
 of decisions is wrong, and a predictor that learns when a person needs
 to see an action. One spec covers one module. Each spec states the
@@ -10,7 +10,7 @@ every other spec assumes; read it first. Spec 002 is the Go contract a
 decision point codes against and spec 003 the same contract over HTTP;
 spec 008 is the ledger's estimation arithmetic, and spec 006 the suite
 that proves an implementation serves all three. Spec 004 is the engine
-that predicts, spec 005 the adapters that put Limen behind a harness's
+that predicts, spec 005 the adapters that put Cribrum behind a harness's
 decision point, and spec 007 the evidence each step of a rollout must
 produce before the next one starts.
 
@@ -66,7 +66,7 @@ validated spec is dispatched when every spec in its `depends_on` is at
 | [003](003-http-api.md) | HTTP API: routes, bodies, statuses, the authorizer action and resource fields per route, subject binding, limits | drafted |
 | [004](004-engine.md) | Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store | drafted |
 | [005](005-adapters.md) | Adapters: decision points for Claude Code and Codex hooks, Topos, and any harness over HTTP | drafted |
-| [006](006-conformance.md) | Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests | drafted |
+| [006](006-conformance.md) | Conformance suite and stub: the invariants every cribrum.Service holds, and an in-memory service for decision points' tests | drafted |
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | drafted |
 

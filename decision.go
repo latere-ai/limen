@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package limen
+package cribrum
 
 import "math"
 
@@ -23,9 +23,9 @@ type Decision struct {
 	ReviewProbability float64 `json:"review_probability"`
 	// Source names the policy that decided: "topos/progressive",
 	// "rules/1", or a prediction's source when the decision point applied
-	// Limen's suggestion unchanged. Reliability can be reported per source.
+	// Cribrum's suggestion unchanged. Reliability can be reported per source.
 	Source string `json:"source"`
-	// Action is required when Limen holds no prediction for the action,
+	// Action is required when Cribrum holds no prediction for the action,
 	// for example after [FailClosed] stood in for an unreachable predictor,
 	// so the record and the person's answer still teach the model. When a
 	// prediction exists, an action sent here must be the same one.

@@ -1,6 +1,6 @@
 # engine
 
-The learning engine behind Limen's predictor. Two packages exist today, the
+The learning engine behind Cribrum's predictor. Two packages exist today, the
 numerical core the rest of the engine is built on (specs/004-engine.md):
 
 | Package | What it holds |

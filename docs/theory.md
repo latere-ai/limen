@@ -1,6 +1,6 @@
 # Theory in brief
 
-What Limen computes and why, for an engineer who wants to know what the
+What Cribrum computes and why, for an engineer who wants to know what the
 numbers in a prediction and a reliability report mean. The full argument,
 the proofs, and the simulations are in the paper, Changkun Ou, *Learning
 When to Ask: Trust Calibration for Agentic Tool Use, from Known Tools to
@@ -13,12 +13,12 @@ This page describes the model the engine implements and the estimators
 the ledger computes. Where the paper speaks of tool calls, everything holds
 for any action a decision point observes.
 
-## What Limen predicts
+## What Cribrum predicts
 
 A proposed action $x$ is what the decision point observes before it runs:
 its kind and name, its input, its target, where it runs, other opinions
 about it. The person on whose behalf it runs either approves it ($y = 1$) or
-denies it ($y = 0$). Limen models their answer through a latent tolerance
+denies it ($y = 0$). Cribrum models their answer through a latent tolerance
 $f$:
 
 $$
@@ -34,14 +34,14 @@ different actions. The split matters: the risk of an action is a property
 of the action, and the tolerance is a property of the person that changes
 over time.
 
-Time $t$ counts decisions: it is the number of actions Limen has seen for
-this person in this organization, assigned by Limen in the order they
-arrive. Tolerance drifts with use, not with the clock, and a count Limen
+Time $t$ counts decisions: it is the number of actions Cribrum has seen for
+this person in this organization, assigned by Cribrum in the order they
+arrive. Tolerance drifts with use, not with the clock, and a count Cribrum
 keeps itself cannot be skewed by a caller's clock.
 
 ## Why approve and deny, not preferences
 
-Limen learns from answers to "may this run?", not from comparisons such as
+Cribrum learns from answers to "may this run?", not from comparisons such as
 "which of these two actions is safer?".
 
 **Proposition 1.** Approval probabilities identify $f$ exactly, and so the
@@ -53,12 +53,12 @@ of the boundary. Comparisons rank actions; they cannot say where to stop.
 (Lean: `unary_identifies`, `unary_identifies_boundary`,
 `pairwise_shift_invariant`, `pairwise_cannot_identify_threshold`.)
 
-This is why Limen is Gaussian-process classification with a reject option,
+This is why Cribrum is Gaussian-process classification with a reject option,
 related to preferential Bayesian optimization but not an instance of it.
 
 ## The model
 
-Limen places a Gaussian-process prior on $f$. With kernels $k_x$ over
+Cribrum places a Gaussian-process prior on $f$. With kernels $k_x$ over
 actions and their context and $k_{\text{time}}(t, t') = e^{-|t - t'|/\lambda}$
 over time, it uses the additive kernel
 
@@ -121,7 +121,7 @@ A prediction reports the thresholds in approval units:
 Above `allow_above` the suggestion is allow, below `block_below` block, and
 everything between, both ends included, ask.
 
-Limen asks one thing more of a profile than a non-empty band: the band must
+Cribrum asks one thing more of a profile than a non-empty band: the band must
 contain one half, the probability it assigns to an action about a person it
 knows nothing about. Then no action is ever allowed or blocked on no
 evidence. Since $\tau_{\text{low}} < 1/2 \iff c_{\text{FB}} > 2c_{\text{ask}}$
@@ -136,7 +136,7 @@ always non-empty.
 | Safety-weighted (the default) | 10 | 4 | 1 | 0.90 | 0.25 |
 
 Only the ratios matter. The safety-weighted profile says a wrong allow
-costs ten interruptions and a wrong block four, so Limen suggests an allow
+costs ten interruptions and a wrong block four, so Cribrum suggests an allow
 only above a 90% chance of approval.
 
 The rule values an answer only for the action at hand. An answer also
@@ -181,7 +181,7 @@ settled at its static part, 0.76.
 ## Generalization cuts both ways
 
 The kernel is what lets an answer about one action inform similar actions,
-and it is why Limen needs far fewer answers than a table with one entry per
+and it is why Cribrum needs far fewer answers than a table with one entry per
 kind of action and target. It also means approval spreads toward dangerous
 neighbors: an action that resembles approved ones inherits their approval.
 In the simulation, on a force-push to production infrastructure that was
@@ -226,7 +226,7 @@ Answers at an ask ($\pi = 1$) and review answers ($\pi = \varepsilon$) then
 count together. (Lean: `ht_unbiased`.)
 
 The ledger applies this to every source of verdicts at once. A source $s$
-is Limen's suggestions, the verdicts decision points applied, one decision
+is Cribrum's suggestions, the verdicts decision points applied, one decision
 policy, or one signal such as a judge. Its allows $A_s$ are the actions on
 which it said allow. Of those, the covered ones $C_s = \{i \in A_s : \pi_i > 0\}$
 are the ones a person could have seen, and the estimate of the source's
@@ -294,7 +294,7 @@ answers with known probabilities (Proposition 8). In designs where a person
 sees an action only after the judge blocks it, no judge-allowed action is
 ever answered, every such probability is zero, and $\mathrm{FA}_J$ is not
 estimable at all: the report's `covered` is zero and its value `null`. How
-likely one verdict is to be right is Limen's calibrated $\hat p$ for that
+likely one verdict is to be right is Cribrum's calibrated $\hat p$ for that
 action with the verdict as an input, which is limited by what the other
 inputs can tell apart.
 

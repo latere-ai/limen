@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Command limen is Limen's command line. It replays recorded decisions
-// through Limen, from a Topos data directory or from a file of records,
-// and reports what Limen would have suggested and how often it would have
-// been wrong; and it serves Limen's HTTP API for one person, over a ledger
+// Command cribrum is Cribrum's command line. It replays recorded decisions
+// through Cribrum, from a Topos data directory or from a file of records,
+// and reports what Cribrum would have suggested and how often it would have
+// been wrong; and it serves Cribrum's HTTP API for one person, over a ledger
 // on disk:
 //
-//	limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-//	limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
-//	limen serve [--addr ADDR] [--store DIR] [--subject SUBJECT]
-//	limen version
+//	cribrum replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
+//	cribrum replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+//	cribrum serve [--addr ADDR] [--store DIR] [--subject SUBJECT]
+//	cribrum version
 //
 // It exits 0 on success, 1 when the replay fails, and 2 on a usage error.
 package main
@@ -34,15 +34,15 @@ const (
 	exitUsage = 2
 )
 
-const usage = `Limen learns when an automated action needs a person.
+const usage = `Cribrum learns when an automated action needs a person.
 
 Usage:
-  limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-  limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
-  limen serve [--addr ADDR] [--store DIR] [--subject SUBJECT]
-  limen version
+  cribrum replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
+  cribrum replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+  cribrum serve [--addr ADDR] [--store DIR] [--subject SUBJECT]
+  cribrum version
 
-Run "limen replay topos -h" for the options of a command.
+Run "cribrum replay topos -h" for the options of a command.
 `
 
 // run is the command line, with its environment passed in so a test can
@@ -68,13 +68,13 @@ func dispatch(args []string, stdin io.Reader, out, errOut *errwriter.Writer, get
 	case "serve":
 		return serve(args[1:], out, errOut, getenv)
 	case "version":
-		out.Println("limen", version())
+		out.Println("cribrum", version())
 		return exitOK
 	case "help", "-h", "--help":
 		out.Print(usage)
 		return exitOK
 	}
-	errOut.Printf("limen: unknown command %q.\n\n%s", args[0], usage)
+	errOut.Printf("cribrum: unknown command %q.\n\n%s", args[0], usage)
 	return exitUsage
 }
 

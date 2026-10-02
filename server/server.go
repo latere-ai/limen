@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package server serves a [limen.Service] over the HTTP API of spec 003 and
+// Package server serves a [cribrum.Service] over the HTTP API of spec 003 and
 // api/openapi.yaml: the routes under /v1, the error envelope, the body
 // limits, and the authorization model.
 //
@@ -10,7 +10,7 @@
 // against the contract, so a malformed request is answered with the route's
 // invalid_* code before anyone is asked about it. Then the route asks the
 // installation's authorizer, a latere.ai/x/pkg/authz Authorizer, exactly one
-// action of latere.ai/x/limen/authorizer about a resource of the kind and
+// action of latere.ai/x/cribrum/authorizer about a resource of the kind and
 // fields spec 003 fixes for that action, and acts only on an allow. A deny
 // is forbidden and an authorizer that gives no decision is
 // authorizer_unavailable; neither reaches the service.
@@ -27,7 +27,7 @@
 // profiles and replays included. [Local] is the single-person setup, a
 // static token whose subject is that policy's admin.
 //
-// An error the service returns that is not a contract error means Limen
+// An error the service returns that is not a contract error means Cribrum
 // could not answer, a store down or a deadline passed, and is served as
 // unavailable (503), the answer on which a decision point holds the action
 // for a person. A panic is internal (500).
@@ -52,8 +52,8 @@ import (
 
 	"latere.ai/x/pkg/authz"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/authorizer"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/authorizer"
 )
 
 // The default body bounds: spec 003's 1 MiB for a JSON body, and a bound on
@@ -83,7 +83,7 @@ type Options struct {
 	// DefaultMaxBodyBytes.
 	MaxBodyBytes int64
 	// MaxReplayBytes bounds a whole replay upload; zero is
-	// DefaultMaxReplayBytes. limen.MaxReplayRecords bounds its records.
+	// DefaultMaxReplayBytes. cribrum.MaxReplayRecords bounds its records.
 	MaxReplayBytes int64
 }
 
@@ -97,7 +97,7 @@ func Local(token, subject string) Options {
 
 // handler is the served API.
 type handler struct {
-	svc       limen.Service
+	svc       cribrum.Service
 	authn     Authenticator
 	authz     authz.Authorizer
 	log       *slog.Logger
@@ -125,7 +125,7 @@ var routes = []route{
 }
 
 // New returns the handler that serves svc.
-func New(svc limen.Service, o Options) http.Handler {
+func New(svc cribrum.Service, o Options) http.Handler {
 	h := &handler{
 		svc:       svc,
 		authn:     o.Authenticator,
@@ -162,7 +162,7 @@ func (h *handler) serve(rt route) http.Handler {
 		w.Header().Set(RequestIDHeader, c.id)
 		defer func() {
 			if p := recover(); p != nil {
-				h.fail(c, &limen.Error{Code: limen.CodeInternal, Detail: fmt.Sprintf("%s %s: panic: %v", r.Method, r.URL.Path, p)})
+				h.fail(c, &cribrum.Error{Code: cribrum.CodeInternal, Detail: fmt.Sprintf("%s %s: panic: %v", r.Method, r.URL.Path, p)})
 			}
 		}()
 		if err := h.authenticate(c); err != nil {
@@ -196,14 +196,14 @@ func printable(s string) bool {
 
 func (h *handler) authenticate(c *call) error {
 	if h.authn == nil {
-		return &limen.Error{Code: limen.CodeUnauthenticated, Detail: "the server has no authenticator configured"}
+		return &cribrum.Error{Code: cribrum.CodeUnauthenticated, Detail: "the server has no authenticator configured"}
 	}
 	caller, err := h.authn.Authenticate(c.r)
 	if err != nil {
-		return &limen.Error{Code: limen.CodeUnauthenticated, Detail: err.Error()}
+		return &cribrum.Error{Code: cribrum.CodeUnauthenticated, Detail: err.Error()}
 	}
 	if caller.Subject == "" {
-		return &limen.Error{Code: limen.CodeUnauthenticated, Detail: "the authenticator named no subject"}
+		return &cribrum.Error{Code: cribrum.CodeUnauthenticated, Detail: "the authenticator named no subject"}
 	}
 	c.caller = caller
 	return nil
@@ -223,10 +223,10 @@ func (h *handler) authorize(c *call, res authz.Resource) error {
 	}
 	d, err := h.authz.Authorize(c.r.Context(), req)
 	if err != nil {
-		return &limen.Error{Code: limen.CodeAuthorizerUnavailable, Detail: fmt.Sprintf("authorize %s on %s %s: %v", c.action, res.Kind, res.ID, err)}
+		return &cribrum.Error{Code: cribrum.CodeAuthorizerUnavailable, Detail: fmt.Sprintf("authorize %s on %s %s: %v", c.action, res.Kind, res.ID, err)}
 	}
 	if !d.Allow {
-		return &limen.Error{Code: limen.CodeForbidden, Detail: fmt.Sprintf("authorizer denied %s on %s %s to %s: %s", c.action, res.Kind, res.ID, c.caller.Subject, d.Reason)}
+		return &cribrum.Error{Code: cribrum.CodeForbidden, Detail: fmt.Sprintf("authorizer denied %s on %s %s to %s: %s", c.action, res.Kind, res.ID, c.caller.Subject, d.Reason)}
 	}
 	return nil
 }
@@ -245,7 +245,7 @@ func reliabilityResource(org, subject string) authz.Resource {
 	return authz.NewResource(authorizer.KindReliability, subject, map[string]any{"org": org, "subject": subject})
 }
 
-func profileResource(s limen.Scope) authz.Resource {
+func profileResource(s cribrum.Scope) authz.Resource {
 	return authz.NewResource(authorizer.KindProfile, s.Org+"/"+s.Kind+"/"+s.Agent,
 		map[string]any{"org": s.Org, "action_kind": s.Kind, "agent": s.Agent})
 }
@@ -264,7 +264,7 @@ type envelope struct {
 }
 
 type envelopeError struct {
-	Code    limen.Code     `json:"code"`
+	Code    cribrum.Code   `json:"code"`
 	Message string         `json:"message"`
 	Details envelopeDetail `json:"details"`
 }
@@ -279,13 +279,13 @@ type envelopeDetail struct {
 // canceled request is answered as unavailable without a log line, since the
 // caller left; any other error means the service could not answer.
 func (h *handler) fail(c *call, err error) {
-	var le *limen.Error
+	var le *cribrum.Error
 	if !errors.As(err, &le) {
-		le = &limen.Error{Code: limen.CodeUnavailable, Detail: err.Error()}
+		le = &cribrum.Error{Code: cribrum.CodeUnavailable, Detail: err.Error()}
 	}
 	status := le.Code.Status()
 	if status >= 500 && !errors.Is(err, context.Canceled) {
-		h.log.Error("limen request failed", "request_id", c.id, "method", c.r.Method, "path", c.r.URL.Path,
+		h.log.Error("cribrum request failed", "request_id", c.id, "method", c.r.Method, "path", c.r.URL.Path,
 			"code", string(le.Code), "detail", le.Detail)
 	}
 	body := envelope{Error: envelopeError{Code: le.Code, Message: le.Code.Message(),
@@ -310,7 +310,7 @@ func noContent(w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) }
 // client works against an older server. A body that is not JSON of the
 // right shape is the route's invalid code, naming the field a type error
 // points at; a body past the bound is body_too_large.
-func (h *handler) decode(c *call, v any, invalid limen.Code) error {
+func (h *handler) decode(c *call, v any, invalid cribrum.Code) error {
 	body := http.MaxBytesReader(c.w, c.r.Body, h.maxBody)
 	if err := json.NewDecoder(body).Decode(v); err != nil {
 		return bodyError(err, invalid, "body")
@@ -318,11 +318,11 @@ func (h *handler) decode(c *call, v any, invalid limen.Code) error {
 	return nil
 }
 
-func bodyError(err error, invalid limen.Code, where string) error {
+func bodyError(err error, invalid cribrum.Code, where string) error {
 	if mbe, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		return &limen.Error{Code: limen.CodeBodyTooLarge, Detail: fmt.Sprintf("%s exceeds %d bytes", where, mbe.Limit)}
+		return &cribrum.Error{Code: cribrum.CodeBodyTooLarge, Detail: fmt.Sprintf("%s exceeds %d bytes", where, mbe.Limit)}
 	}
-	e := &limen.Error{Code: invalid, Detail: where + ": " + err.Error()}
+	e := &cribrum.Error{Code: invalid, Detail: where + ": " + err.Error()}
 	if ute, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && ute.Field != "" {
 		e.Fields = []string{ute.Field}
 	}
@@ -330,8 +330,8 @@ func bodyError(err error, invalid limen.Code, where string) error {
 }
 
 func (h *handler) predict(c *call) error {
-	var a limen.Action
-	if err := h.decode(c, &a, limen.CodeInvalidAction); err != nil {
+	var a cribrum.Action
+	if err := h.decode(c, &a, cribrum.CodeInvalidAction); err != nil {
 		return err
 	}
 	if err := a.Validate(); err != nil {
@@ -349,8 +349,8 @@ func (h *handler) predict(c *call) error {
 }
 
 func (h *handler) decide(c *call) error {
-	var d limen.Decision
-	if err := h.decode(c, &d, limen.CodeInvalidDecision); err != nil {
+	var d cribrum.Decision
+	if err := h.decode(c, &d, cribrum.CodeInvalidDecision); err != nil {
 		return err
 	}
 	if err := d.Validate(); err != nil {
@@ -367,8 +367,8 @@ func (h *handler) decide(c *call) error {
 }
 
 func (h *handler) answer(c *call) error {
-	var a limen.Answer
-	if err := h.decode(c, &a, limen.CodeInvalidAnswer); err != nil {
+	var a cribrum.Answer
+	if err := h.decode(c, &a, cribrum.CodeInvalidAnswer); err != nil {
 		return err
 	}
 	if err := a.Validate(); err != nil {
@@ -392,7 +392,7 @@ func (h *handler) answer(c *call) error {
 
 func (h *handler) cases(c *call) error {
 	q := c.r.URL.Query()
-	cq := limen.CaseQuery{Org: q.Get("org"), Subject: q.Get("subject"), ActionID: q.Get("action_id"), Cursor: q.Get("cursor")}
+	cq := cribrum.CaseQuery{Org: q.Get("org"), Subject: q.Get("subject"), ActionID: q.Get("action_id"), Cursor: q.Get("cursor")}
 	var fields []string
 	if s := q.Get("pending"); s != "" {
 		b, err := strconv.ParseBool(s)
@@ -403,7 +403,7 @@ func (h *handler) cases(c *call) error {
 	}
 	if s := q.Get("limit"); s != "" {
 		n, err := strconv.Atoi(s)
-		if err != nil || n < 1 || n > limen.MaxPageLimit {
+		if err != nil || n < 1 || n > cribrum.MaxPageLimit {
 			fields = append(fields, "limit")
 		}
 		cq.Limit = n
@@ -419,7 +419,7 @@ func (h *handler) cases(c *call) error {
 		return err
 	}
 	if page.Entries == nil {
-		page.Entries = []limen.Case{}
+		page.Entries = []cribrum.Case{}
 	}
 	writeJSON(c.w, http.StatusOK, page)
 	return nil
@@ -428,8 +428,8 @@ func (h *handler) cases(c *call) error {
 // queryError merges the fields a query's parsing found at fault with the
 // contract's validation of what did parse, into one invalid_query.
 func queryError(err error, fields []string) error {
-	e := &limen.Error{Code: limen.CodeInvalidQuery}
-	if le, ok := errors.AsType[*limen.Error](err); ok {
+	e := &cribrum.Error{Code: cribrum.CodeInvalidQuery}
+	if le, ok := errors.AsType[*cribrum.Error](err); ok {
 		e.Fields, e.Detail = le.Fields, le.Detail
 	}
 	for _, f := range fields {
@@ -445,7 +445,7 @@ func queryError(err error, fields []string) error {
 
 func (h *handler) reliability(c *call) error {
 	q := c.r.URL.Query()
-	rq := limen.ReliabilityQuery{Org: q.Get("org"), Subject: q.Get("subject"), Of: q.Get("of")}
+	rq := cribrum.ReliabilityQuery{Org: q.Get("org"), Subject: q.Get("subject"), Of: q.Get("of")}
 	var fields []string
 	for _, p := range []struct {
 		name string
@@ -475,9 +475,9 @@ func (h *handler) reliability(c *call) error {
 
 func (h *handler) profile(c *call) error {
 	q := c.r.URL.Query()
-	s := limen.Scope{Org: q.Get("org"), Kind: q.Get("kind"), Agent: q.Get("agent")}
+	s := cribrum.Scope{Org: q.Get("org"), Kind: q.Get("kind"), Agent: q.Get("agent")}
 	if s.Org == "" {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
+		return &cribrum.Error{Code: cribrum.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
 	}
 	if err := h.authorize(c, profileResource(s)); err != nil {
 		return err
@@ -491,8 +491,8 @@ func (h *handler) profile(c *call) error {
 }
 
 func (h *handler) putProfile(c *call) error {
-	var p limen.Profile
-	if err := h.decode(c, &p, limen.CodeInvalidProfile); err != nil {
+	var p cribrum.Profile
+	if err := h.decode(c, &p, cribrum.CodeInvalidProfile); err != nil {
 		return err
 	}
 	if err := p.Validate(); err != nil {
@@ -517,7 +517,7 @@ type forgetRequest struct {
 
 func (h *handler) forget(c *call) error {
 	var f forgetRequest
-	if err := h.decode(c, &f, limen.CodeInvalidQuery); err != nil {
+	if err := h.decode(c, &f, cribrum.CodeInvalidQuery); err != nil {
 		return err
 	}
 	var fields []string
@@ -528,7 +528,7 @@ func (h *handler) forget(c *call) error {
 		fields = append(fields, "subject")
 	}
 	if len(fields) > 0 {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: fields, Detail: "forget needs an org and a subject"}
+		return &cribrum.Error{Code: cribrum.CodeInvalidQuery, Fields: fields, Detail: "forget needs an org and a subject"}
 	}
 	if err := h.authorize(c, subjectResource(f.Org, f.Subject)); err != nil {
 		return err
@@ -541,16 +541,16 @@ func (h *handler) forget(c *call) error {
 }
 
 // replay reads every record before it asks or learns anything: a replay
-// past limen.MaxReplayRecords is body_too_large with nothing learned, a
+// past cribrum.MaxReplayRecords is body_too_large with nothing learned, a
 // record that does not parse or validate is invalid_replay naming its
 // line, and the authorizer is asked replay.create once for every
 // organization the records name.
 func (h *handler) replay(c *call) error {
-	var opts limen.ReplayOptions
+	var opts cribrum.ReplayOptions
 	if s := c.r.URL.Query().Get("keep"); s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
-			return &limen.Error{Code: limen.CodeInvalidReplay, Fields: []string{"keep"}, Detail: fmt.Sprintf("keep %q is not a boolean", s)}
+			return &cribrum.Error{Code: cribrum.CodeInvalidReplay, Fields: []string{"keep"}, Detail: fmt.Sprintf("keep %q is not a boolean", s)}
 		}
 		opts.Keep = b
 	}
@@ -570,7 +570,7 @@ func (h *handler) replay(c *call) error {
 			return err
 		}
 	}
-	report, err := h.svc.Replay(c.r.Context(), func(yield func(limen.ReplayRecord, error) bool) {
+	report, err := h.svc.Replay(c.r.Context(), func(yield func(cribrum.ReplayRecord, error) bool) {
 		for _, r := range recs {
 			if !yield(r, nil) {
 				return
@@ -581,19 +581,19 @@ func (h *handler) replay(c *call) error {
 		return err
 	}
 	if report.Would == nil {
-		report.Would = map[limen.Verdict]int{}
+		report.Would = map[cribrum.Verdict]int{}
 	}
 	writeJSON(c.w, http.StatusOK, report)
 	return nil
 }
 
-func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
+func (h *handler) readReplay(c *call) ([]cribrum.ReplayRecord, error) {
 	body := &readErr{r: http.MaxBytesReader(c.w, c.r.Body, h.maxReplay)}
 	sc := bufio.NewScanner(body)
 	// The scanner bounds a line by the larger of its buffer's capacity and
 	// the maximum, so the buffer starts no larger than the bound.
 	sc.Buffer(make([]byte, 0, min(64<<10, int(h.maxBody))), int(h.maxBody))
-	var recs []limen.ReplayRecord
+	var recs []cribrum.ReplayRecord
 	line := 0
 	for sc.Scan() {
 		line++
@@ -601,21 +601,21 @@ func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 		if len(trimSpace(b)) == 0 {
 			continue
 		}
-		if len(recs) == limen.MaxReplayRecords {
-			return nil, &limen.Error{Code: limen.CodeBodyTooLarge, Detail: fmt.Sprintf("more than %d records", limen.MaxReplayRecords)}
+		if len(recs) == cribrum.MaxReplayRecords {
+			return nil, &cribrum.Error{Code: cribrum.CodeBodyTooLarge, Detail: fmt.Sprintf("more than %d records", cribrum.MaxReplayRecords)}
 		}
 		at := "records[" + strconv.Itoa(len(recs)) + "]"
-		var r limen.ReplayRecord
+		var r cribrum.ReplayRecord
 		if err := json.Unmarshal(b, &r); err != nil {
 			// A line cut short by a failed read is the read's error.
 			if body.err != nil {
-				return nil, bodyError(body.err, limen.CodeInvalidReplay, "body")
+				return nil, bodyError(body.err, cribrum.CodeInvalidReplay, "body")
 			}
-			return nil, &limen.Error{Code: limen.CodeInvalidReplay, Fields: []string{at},
+			return nil, &cribrum.Error{Code: cribrum.CodeInvalidReplay, Fields: []string{at},
 				Detail: fmt.Sprintf("line %d: %v", line, err)}
 		}
 		if err := r.Validate(); err != nil {
-			le, ok := errors.AsType[*limen.Error](err)
+			le, ok := errors.AsType[*cribrum.Error](err)
 			if !ok {
 				return nil, err
 			}
@@ -623,15 +623,15 @@ func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 			for i, f := range le.Fields {
 				fields[i] = at + "." + f
 			}
-			return nil, &limen.Error{Code: limen.CodeInvalidReplay, Fields: fields, Detail: fmt.Sprintf("line %d: %s", line, le.Detail)}
+			return nil, &cribrum.Error{Code: cribrum.CodeInvalidReplay, Fields: fields, Detail: fmt.Sprintf("line %d: %s", line, le.Detail)}
 		}
 		recs = append(recs, r)
 	}
 	if err := sc.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			return nil, &limen.Error{Code: limen.CodeBodyTooLarge, Detail: fmt.Sprintf("line %d exceeds %d bytes", line+1, h.maxBody)}
+			return nil, &cribrum.Error{Code: cribrum.CodeBodyTooLarge, Detail: fmt.Sprintf("line %d exceeds %d bytes", line+1, h.maxBody)}
 		}
-		return nil, bodyError(err, limen.CodeInvalidReplay, "body")
+		return nil, bodyError(err, cribrum.CodeInvalidReplay, "body")
 	}
 	return recs, nil
 }

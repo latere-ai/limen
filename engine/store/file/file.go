@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package file is a [store.Store] in a directory, for a self-hosted Limen
+// Package file is a [store.Store] in a directory, for a self-hosted Cribrum
 // that runs as one process (spec 004).
 //
 // The layout:
@@ -59,8 +59,8 @@ import (
 
 	"latere.ai/x/pkg/atomicfile"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/engine/store"
 )
 
 // ErrLocked is returned by Open when another owner holds the directory.
@@ -90,7 +90,7 @@ type Store struct {
 	mu       sync.Mutex
 	closed   bool
 	subjects map[subjectKey]*subject
-	profiles map[string]map[limen.Scope]limen.Profile
+	profiles map[string]map[cribrum.Scope]cribrum.Profile
 }
 
 var _ store.Store = (*Store)(nil)
@@ -127,7 +127,7 @@ func OpenWith(dir string, o Options) (*Store, error) {
 		sync:     !o.NoSync,
 		lock:     l,
 		subjects: map[subjectKey]*subject{},
-		profiles: map[string]map[limen.Scope]limen.Profile{},
+		profiles: map[string]map[cribrum.Scope]cribrum.Profile{},
 	}, nil
 }
 
@@ -260,7 +260,7 @@ func (s *Store) write(path string, data []byte) error {
 }
 
 // Case implements [store.Store].
-func (s *Store) Case(ctx context.Context, k limen.Key) (store.Case, bool, error) {
+func (s *Store) Case(ctx context.Context, k cribrum.Key) (store.Case, bool, error) {
 	sub, err := s.subjectFor(ctx, k.Org, k.Subject)
 	if err != nil {
 		return store.Case{}, false, err
@@ -389,11 +389,11 @@ func (s *Store) Cases(ctx context.Context, org, name string) ([]store.Case, erro
 
 // orgProfiles returns the organization's profiles, loading its file once.
 // The caller holds s.mu.
-func (s *Store) orgProfiles(org string) (map[limen.Scope]limen.Profile, error) {
+func (s *Store) orgProfiles(org string) (map[cribrum.Scope]cribrum.Profile, error) {
 	if ps, ok := s.profiles[org]; ok {
 		return ps, nil
 	}
-	ps := map[limen.Scope]limen.Profile{}
+	ps := map[cribrum.Scope]cribrum.Profile{}
 	path := filepath.Join(s.dir, "profiles", encode(org)+".json")
 	data, err := os.ReadFile(path)
 	switch {
@@ -401,7 +401,7 @@ func (s *Store) orgProfiles(org string) (map[limen.Scope]limen.Profile, error) {
 	case err != nil:
 		return nil, fmt.Errorf("file store: read %s: %w", path, err)
 	default:
-		var list []limen.Profile
+		var list []cribrum.Profile
 		if err := json.Unmarshal(data, &list); err != nil {
 			return nil, fmt.Errorf("file store: %s does not parse: %w", path, err)
 		}
@@ -414,18 +414,18 @@ func (s *Store) orgProfiles(org string) (map[limen.Scope]limen.Profile, error) {
 }
 
 // Profile implements [store.Store].
-func (s *Store) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, bool, error) {
+func (s *Store) Profile(ctx context.Context, sc cribrum.Scope) (cribrum.Profile, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return limen.Profile{}, false, err
+		return cribrum.Profile{}, false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return limen.Profile{}, false, ErrClosed
+		return cribrum.Profile{}, false, ErrClosed
 	}
 	ps, err := s.orgProfiles(sc.Org)
 	if err != nil {
-		return limen.Profile{}, false, err
+		return cribrum.Profile{}, false, err
 	}
 	p, ok := ps[sc]
 	return p, ok, nil
@@ -433,7 +433,7 @@ func (s *Store) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, boo
 
 // PutProfile implements [store.Store]: the organization's file is written
 // whole, sorted by scope, so it reads the same however it was built.
-func (s *Store) PutProfile(ctx context.Context, p limen.Profile) error {
+func (s *Store) PutProfile(ctx context.Context, p cribrum.Profile) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -446,14 +446,14 @@ func (s *Store) PutProfile(ctx context.Context, p limen.Profile) error {
 	if err != nil {
 		return err
 	}
-	next := make(map[limen.Scope]limen.Profile, len(ps)+1)
+	next := make(map[cribrum.Scope]cribrum.Profile, len(ps)+1)
 	maps.Copy(next, ps)
 	next[p.Scope] = p
-	list := make([]limen.Profile, 0, len(next))
+	list := make([]cribrum.Profile, 0, len(next))
 	for _, v := range next {
 		list = append(list, v)
 	}
-	slices.SortFunc(list, func(a, b limen.Profile) int {
+	slices.SortFunc(list, func(a, b cribrum.Profile) int {
 		return strings.Compare(a.Kind+"\x00"+a.Agent, b.Kind+"\x00"+b.Agent)
 	})
 	data, err := json.MarshalIndent(list, "", "  ")

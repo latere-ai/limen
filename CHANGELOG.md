@@ -10,7 +10,13 @@ committed: the commit log already holds that.
 
 ## Unreleased
 
-Limen is the oversight layer for automated actions, in three parts: the
+- **Renamed from Limen to Cribrum** (Latin for sieve: it lets the safe
+  through and holds back the rest) before the first release, because the
+  name Limen was already taken by several open-source agent projects. The
+  module is `latere.ai/x/cribrum`, the command `cribrum`, and the
+  environment variables `CRIBRUM_TOKEN` and `CRIBRUM_DATA_DIR`.
+
+Cribrum is the oversight layer for automated actions, in three parts: the
 shared verdict vocabulary (`latere.ai/x/pkg/verdict`), a ledger that
 measures any decision source against a person's answers, and a predictor
 that learns each person's tolerance from the ledger.
@@ -25,7 +31,7 @@ that learns each person's tolerance from the ledger.
   any source; replays; the error codes with their sentences; and
   `FailClosed`.
 - A cost profile is accepted only when each kind of error costs more than
-  two interruptions, so an action about someone Limen knows nothing about
+  two interruptions, so an action about someone Cribrum knows nothing about
   is always an ask.
 - The HTTP API as an OpenAPI 3.1 document, held to the Go types by a test.
 - `estimate`, the Horvitz-Thompson estimators every ledger shares;
@@ -49,7 +55,7 @@ that learns each person's tolerance from the ledger.
   contract suite every store passes.
 - The HTTP server and client, with bearer-token and JWT authentication and
   the shared authorizer, both passing the conformance suite end to end.
-- The `limen` command: `limen serve` serves the API for one person over a
-  ledger on disk; `limen replay topos` replays a Topos data directory and
-  `limen replay file` a file of records, and reports what Limen would have
+- The `cribrum` command: `cribrum serve` serves the API for one person over a
+  ledger on disk; `cribrum replay topos` replays a Topos data directory and
+  `cribrum replay file` a file of records, and reports what Cribrum would have
   suggested.

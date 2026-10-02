@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package kernel holds the covariance functions of Limen's Gaussian-process
+// Package kernel holds the covariance functions of Cribrum's Gaussian-process
 // model of a person's tolerance, over feature points (tool block, context
 // block, time). It is a port of the kernels of the research implementation,
 // github.com/changkun/trustcalib (go/kernel, Apache-2.0), reworked to
@@ -33,7 +33,7 @@
 // against.
 //
 // Time is measured in decisions: T is the count of the person's decisions
-// when the action arrived, which Limen assigns, and Lambda = 90 is the
+// when the action arrived, which Cribrum assigns, and Lambda = 90 is the
 // research's setting in those units. Every block has unit self-similarity,
 // and sums and Schur products of positive semidefinite kernels are
 // positive semidefinite, so both kernels are covariance functions whose

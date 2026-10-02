@@ -14,9 +14,9 @@ author: changkun
 
 ## Overview
 
-The engine is the in-process `limen.Service`: it predicts, keeps the
+The engine is the in-process `cribrum.Service`: it predicts, keeps the
 ledger, and fits each subject's model. It is what a local decision point
-embeds and what `limend` serves. Its model is the one the research
+embeds and what `cribrumd` serves. Its model is the one the research
 validated in simulation: a Gaussian-process prior over a subject's
 latent tolerance, observed through a probit likelihood on approve and
 deny answers, with an additive kernel that forgets the subject's
@@ -36,10 +36,10 @@ corrupting a model, and a store that never holds an action's input.
 
 The kernel's time axis counts cases, not seconds: the research's
 forgetting scale, lambda = 90, is ninety decisions of that subject.
-Limen assigns `t`, the ordinal of a case in its subject's history, when
+Cribrum assigns `t`, the ordinal of a case in its subject's history, when
 it first sees the case's key (a prediction, or a decision that carries
 the action), from a counter per (org, subject) incremented in one store
-transaction. Two cases of one subject never share a `t`. Limen also
+transaction. Two cases of one subject never share a `t`. Cribrum also
 stamps the wall-clock receive time; it serves report windows and the
 order of the review queue and never enters the model. A caller supplies
 no time, except `ReplayRecord.at`, by which a replay orders history.
@@ -154,7 +154,7 @@ approve = Phi(mu / sqrt(1 + s2)),   uncertainty = sqrt(s2)
 ```
 
 A subject with no answers has `mu = 0`, so `approve` is one half and,
-under every profile Limen accepts, the suggestion is `ask`.
+under every profile Cribrum accepts, the suggestion is `ask`.
 
 The training set of a model is, for each answered case of the subject,
 the case's features, its `t`, and its latest answer, keeping the 512
@@ -180,7 +180,7 @@ costs one kernel row, `O(n d)`, a dot product for the mean, and one
 triangular solve for the variance, `O(n^2)`: about a quarter of a
 million multiply-adds at `n` = 512. The budget is a 99th percentile of
 5 milliseconds in process for a subject whose snapshot is in memory,
-excluding store latency, and 50 milliseconds through `limend` with
+excluding store latency, and 50 milliseconds through `cribrumd` with
 Postgres.
 
 ### Fitting off the hot path
@@ -255,7 +255,7 @@ From `github.com/changkun/trustcalib/go`:
   `kernel_additive`, `laplace_fit`, `laplace_fit_additive`, `predict`,
   `predict_additive` and `logcdf`, into `engine/kernel` and `engine/gp`
   with their testdata.
-- **Rewritten:** the gateway (it decides, and in Limen the decision
+- **Rewritten:** the gateway (it decides, and in Cribrum the decision
   point decides), the featurizers (the research's taxonomy refuses any
   tool outside eighteen synthetic ones), persistence (one subject's JSON
   state), and the audit counters (replaced by the ledger and

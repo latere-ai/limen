@@ -6,40 +6,40 @@ package estimate
 import (
 	"testing"
 
-	"latere.ai/x/limen"
+	"latere.ai/x/cribrum"
 )
 
 func TestRowOf(t *testing.T) {
-	key := limen.Key{Org: "o", Subject: "s", ActionID: "a"}
-	act := limen.Action{Key: key, Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
-		Signals: []limen.Signal{
-			{Source: "classifier/x", Verdict: limen.Flag},
+	key := cribrum.Key{Org: "o", Subject: "s", ActionID: "a"}
+	act := cribrum.Action{Key: key, Kind: "tool", Name: "bash", Effect: cribrum.EffectWrite,
+		Signals: []cribrum.Signal{
+			{Source: "classifier/x", Verdict: cribrum.Flag},
 			{Source: "rules/1", Score: new(float64)},
-			{Source: "judge/y", Verdict: limen.Block},
+			{Source: "judge/y", Verdict: cribrum.Block},
 		}}
-	pred := &limen.Prediction{Key: key, Verdict: limen.Ask, Source: "learned/1"}
-	dec := &limen.Decision{Key: key, Verdict: limen.Flag, ReviewProbability: 0.05, Source: "topos/auto"}
-	reviewed := limen.Case{Action: act, Prediction: pred, Decision: dec,
-		Answers: []limen.RecordedAnswer{{Approve: false, Review: true}, {Approve: true}}}
+	pred := &cribrum.Prediction{Key: key, Verdict: cribrum.Ask, Source: "learned/1"}
+	dec := &cribrum.Decision{Key: key, Verdict: cribrum.Flag, ReviewProbability: 0.05, Source: "topos/auto"}
+	reviewed := cribrum.Case{Action: act, Prediction: pred, Decision: dec,
+		Answers: []cribrum.RecordedAnswer{{Approve: false, Review: true}, {Approve: true}}}
 
 	cases := []struct {
 		name string
-		c    limen.Case
+		c    cribrum.Case
 		of   string
 		ok   bool
 		want Row
 	}{
-		{"learned", reviewed, limen.OfLearned, true, Row{Verdict: limen.Ask, Review: 0.05, Shown: true, Reviewed: true, Approve: false}},
-		{"applied: a sampled flag is an allow", reviewed, limen.OfApplied, true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
-		{"by decision source", reviewed, "topos/auto", true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
-		{"a flagged signal is an allow", reviewed, "classifier/x", true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
-		{"a blocking signal", reviewed, "judge/y", true, Row{Verdict: limen.Block, Review: 0.05, Shown: true, Reviewed: true}},
+		{"learned", reviewed, cribrum.OfLearned, true, Row{Verdict: cribrum.Ask, Review: 0.05, Shown: true, Reviewed: true, Approve: false}},
+		{"applied: a sampled flag is an allow", reviewed, cribrum.OfApplied, true, Row{Verdict: cribrum.Allow, Review: 0.05, Shown: true, Reviewed: true}},
+		{"by decision source", reviewed, "topos/auto", true, Row{Verdict: cribrum.Allow, Review: 0.05, Shown: true, Reviewed: true}},
+		{"a flagged signal is an allow", reviewed, "classifier/x", true, Row{Verdict: cribrum.Allow, Review: 0.05, Shown: true, Reviewed: true}},
+		{"a blocking signal", reviewed, "judge/y", true, Row{Verdict: cribrum.Block, Review: 0.05, Shown: true, Reviewed: true}},
 		{"a score-only signal gives no row", reviewed, "rules/1", false, Row{}},
 		{"an unknown source gives no row", reviewed, "nobody", false, Row{}},
-		{"no prediction", limen.Case{Action: act, Decision: dec}, limen.OfLearned, false, Row{}},
-		{"a fallback prediction is no suggestion", limen.Case{Action: act, Prediction: &limen.Prediction{Verdict: limen.Ask, Source: limen.SourceUnavailable}}, limen.OfLearned, false, Row{}},
-		{"no decision for applied", limen.Case{Action: act, Prediction: pred}, limen.OfApplied, false, Row{}},
-		{"undecided learned row", limen.Case{Action: act, Prediction: pred}, limen.OfLearned, true, Row{Verdict: limen.Ask}},
+		{"no prediction", cribrum.Case{Action: act, Decision: dec}, cribrum.OfLearned, false, Row{}},
+		{"a fallback prediction is no suggestion", cribrum.Case{Action: act, Prediction: &cribrum.Prediction{Verdict: cribrum.Ask, Source: cribrum.SourceUnavailable}}, cribrum.OfLearned, false, Row{}},
+		{"no decision for applied", cribrum.Case{Action: act, Prediction: pred}, cribrum.OfApplied, false, Row{}},
+		{"undecided learned row", cribrum.Case{Action: act, Prediction: pred}, cribrum.OfLearned, true, Row{Verdict: cribrum.Ask}},
 	}
 	for _, c := range cases {
 		got, ok := RowOf(c.c, c.of)
@@ -50,19 +50,19 @@ func TestRowOf(t *testing.T) {
 }
 
 func TestReviewAndPending(t *testing.T) {
-	shown := &limen.Decision{Verdict: limen.Ask, ReviewProbability: 1}
-	hidden := &limen.Decision{Verdict: limen.Allow, ReviewProbability: 0.05}
+	shown := &cribrum.Decision{Verdict: cribrum.Ask, ReviewProbability: 1}
+	hidden := &cribrum.Decision{Verdict: cribrum.Allow, ReviewProbability: 0.05}
 	cases := []struct {
 		name    string
-		c       limen.Case
+		c       cribrum.Case
 		review  bool
 		pending bool
 	}{
-		{"undecided", limen.Case{}, false, false},
-		{"shown and waiting", limen.Case{Decision: shown}, false, true},
-		{"shown and reviewed", limen.Case{Decision: shown, Answers: []limen.RecordedAnswer{{Review: true}}}, true, false},
-		{"not shown", limen.Case{Decision: hidden}, false, false},
-		{"not shown, a later answer", limen.Case{Decision: hidden, Answers: []limen.RecordedAnswer{{Review: false}}}, false, false},
+		{"undecided", cribrum.Case{}, false, false},
+		{"shown and waiting", cribrum.Case{Decision: shown}, false, true},
+		{"shown and reviewed", cribrum.Case{Decision: shown, Answers: []cribrum.RecordedAnswer{{Review: true}}}, true, false},
+		{"not shown", cribrum.Case{Decision: hidden}, false, false},
+		{"not shown, a later answer", cribrum.Case{Decision: hidden, Answers: []cribrum.RecordedAnswer{{Review: false}}}, false, false},
 	}
 	for _, c := range cases {
 		if got := ReviewOf(c.c) != nil; got != c.review {

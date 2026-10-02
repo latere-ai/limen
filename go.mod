@@ -1,4 +1,4 @@
-module latere.ai/x/limen
+module latere.ai/x/cribrum
 
 go 1.27.0
 

@@ -23,7 +23,7 @@ the action ran, that a person sees it, and every answer. From those it
 reports, for any source of decisions and any person and window, how
 often the source allows what the person would deny, how much of the
 source's behavior the estimate covers, and whether a stated claim holds.
-The same arithmetic serves Limen's own predictions, the verdicts a
+The same arithmetic serves Cribrum's own predictions, the verdicts a
 decision point applied, a rule, and an LLM judge. `estimate/` holds it,
 shared by the engine and the stub so that both report the same numbers.
 
@@ -122,8 +122,8 @@ actions nobody was asked about.
 
 A replay applies the same arithmetic to recorded history. It orders the
 records by `at`, predicts each before learning its answer, counts
-Limen's would-be verdicts, and estimates the false-allow rate of
-Limen's would-be allows from the recorded review probabilities, with
+Cribrum's would-be verdicts, and estimates the false-allow rate of
+Cribrum's would-be allows from the recorded review probabilities, with
 `covered` saying how much of that the history can speak for. With
 `keep`, the records enter the ledger and the models as if they had
 arrived live, each recorded answer becoming its case's review when its

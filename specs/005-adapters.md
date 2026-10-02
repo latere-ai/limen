@@ -3,7 +3,7 @@ title: "Adapters: decision points for Claude Code and Codex hooks, Topos, and an
 status: drafted
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 003-http-api.md]
-affects: [cmd/limen-hook/, client/]
+affects: [cmd/cribrum-hook/, client/]
 effort: medium
 created: 2026-09-28
 updated: 2026-10-02
@@ -14,22 +14,22 @@ author: changkun
 
 ## Overview
 
-Limen is useful only where a decision point asks it. An adapter is a
+Cribrum is useful only where a decision point asks it. An adapter is a
 decision point, or the part of one, that builds an `Action` from what a
 harness knows about a proposed action, takes the harness's deterministic
 rules as the ceiling, composes the prediction with `verdict.Decide`,
 applies the verdict, records the decision, and sends the person's answer
-back. This spec defines the shared mapping, `limen-hook` for harnesses
+back. This spec defines the shared mapping, `cribrum-hook` for harnesses
 that call a command at their permission point (Claude Code and Codex),
 and the sequence any other harness follows over HTTP. The integration
 of [Topos](https://github.com/latere-ai/topos) is built: Topos's spec 037,
 decision services, puts a `Decider` at its decision point and speaks this
 API to any decision service over HTTP; this spec states only what it
-relies on from Limen.
+relies on from Cribrum.
 
-Every adapter holds the three rules that make Limen safe in front of a
+Every adapter holds the three rules that make Cribrum safe in front of a
 harness: the ceiling comes from the harness's deterministic rules and not
-from Limen; a failure to reach Limen is an ask (`FailClosed`); and the
+from Cribrum; a failure to reach Cribrum is an ask (`FailClosed`); and the
 review draw happens once per action, in the adapter, with the probability
 recorded.
 
@@ -49,7 +49,7 @@ recorded.
 | the machine | `environment`: `host` or `sandbox`, and `credentialed` |
 | the agent and its session | `actor` |
 | a rule score or a judge's verdict the harness already has | `signals` |
-| the harness's deny list, always-confirm list, plan mode | the ceiling, never sent to Limen |
+| the harness's deny list, always-confirm list, plan mode | the ceiling, never sent to Cribrum |
 
 | Verdict | Harness action |
 |---|---|
@@ -58,12 +58,12 @@ recorded.
 | `ask` | hold it for the person, and send their answer |
 | `block` | refuse it, with the harness's own refusal text; a prediction's `reason` is for the person reading the record and is never shown to the agent |
 
-### `limen-hook` for Claude Code
+### `cribrum-hook` for Claude Code
 
 Claude Code runs a command for a `PreToolUse` event with the event as
 JSON on standard input and reads a permission decision from standard
-output: `allow`, `ask` or `deny`, with a reason. `limen-hook claude-code`
-reads the event, builds the action, calls `limend` through `client/`
+output: `allow`, `ask` or `deny`, with a reason. `cribrum-hook claude-code`
+reads the event, builds the action, calls `cribrumd` through `client/`
 wrapped in `FailClosed` with a two second timeout, composes with
 `verdict.Decide` using its configured ceiling and the prediction's audit
 rate, records the decision, and writes `allow` for `allow` and `flag`
@@ -93,7 +93,7 @@ when this spec is validated, and recorded in its Outcome.
 release provides one, is the `action_id`'s second half; otherwise a
 digest of the tool name, the input and a per-session counter.
 
-### `limen-hook` for Codex
+### `cribrum-hook` for Codex
 
 Codex decides through its sandbox and approval policy, and its auto
 review can stand in for the person. Its `PreToolUse` hook answers allow
@@ -110,10 +110,10 @@ when this spec is validated against the Codex release it targets.
 The Topos harness decides each tool call through its own `Decider`
 interface (Topos spec 037), and reaches a decision service over HTTP,
 configured by `TOPOS_DECISIONS_URL` and `TOPOS_DECISIONS_TOKEN`; a local
-person runs `limen serve`. In manual mode (Topos's `confirm`) its rules
+person runs `cribrum serve`. In manual mode (Topos's `confirm`) its rules
 decide and every call's prediction, decision and answer are recorded, so
-Limen learns; in auto mode (`progressive`) Limen's suggestion decides
-inside the rules' ceiling. It relies on Limen for: `Predict`, failing
+Cribrum learns; in auto mode (`progressive`) Cribrum's suggestion decides
+inside the rules' ceiling. It relies on Cribrum for: `Predict`, failing
 closed to an ask after two seconds; `verdict.Decide` from
 `latere.ai/x/pkg/verdict`, with one draw per call kept in the session log
 so a resumed session never draws again; `Record` with its own source
@@ -121,7 +121,7 @@ names (`topos/confirm`, `topos/progressive`), carrying the action when no
 prediction succeeded; `Answer` from its confirmation events, forwarded
 when a session resumes; and later `Cases` with `pending` for its review
 list, which is not built. Hosted runners are not wired yet. Its shadow and
-confirm modes record their own verdicts while Limen predicts, which the
+confirm modes record their own verdicts while Cribrum predicts, which the
 ledger weights correctly because the probability comes from the
 recorded decision ([[007-evidence-gates]]).
 
@@ -147,9 +147,9 @@ drawn.
 
 | # | Criterion | Proved by |
 |---|---|---|
-| 1 | For each suggestion and ceiling, `limen-hook claude-code` writes the decision the tables name, and `ask` when `limend` is unreachable, slow, or answers an error | tests feeding recorded hook events to the command against a stub `limend` |
-| 2 | The decision `limen-hook` records matches the verdict it writes and the probability `verdict.Decide` returned | the same tests, reading the stub's ledger |
+| 1 | For each suggestion and ceiling, `cribrum-hook claude-code` writes the decision the tables name, and `ask` when `cribrumd` is unreachable, slow, or answers an error | tests feeding recorded hook events to the command against a stub `cribrumd` |
+| 2 | The decision `cribrum-hook` records matches the verdict it writes and the probability `verdict.Decide` returned | the same tests, reading the stub's ledger |
 | 3 | A deny or ask pattern in Claude Code's settings is the hook's ceiling | a test with a settings fixture |
 | 4 | The hook sends an answer only when both an approval and a denial are observable for the release it targets | review at validation, recorded in the Outcome |
-| 5 | A `flag` appears in the subject's pending cases after the hook allows the action | an e2e test against `limend` |
+| 5 | A `flag` appears in the subject's pending cases after the hook allows the action | an e2e test against `cribrumd` |
 | 6 | A harness that implements `verdict.Decide` in another language agrees with the Go function on a shared table of cases | a published table in `docs/` and the `verdict` package's tests |

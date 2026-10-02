@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package limen
+package cribrum
 
 import "time"
 
 // Answer is a person's decision about an action whose decision is
-// recorded. Limen stamps the time it arrives.
+// recorded. Cribrum stamps the time it arrives.
 //
 // What an answer counts for follows from the decision, not from the
 // caller: the first answer to an action the decision showed a person (a
@@ -35,7 +35,7 @@ func (a Answer) Validate() error {
 	return p.err(CodeInvalidAnswer)
 }
 
-// Case is everything Limen holds about one action: the action without its
+// Case is everything Cribrum holds about one action: the action without its
 // input, the prediction if one was made, the decision, and the answers.
 type Case struct {
 	Action     Action           `json:"action"`
@@ -44,7 +44,7 @@ type Case struct {
 	Answers    []RecordedAnswer `json:"answers,omitempty"`
 }
 
-// RecordedAnswer is an answer as Limen keeps it.
+// RecordedAnswer is an answer as Cribrum keeps it.
 type RecordedAnswer struct {
 	Approve bool      `json:"approve"`
 	By      string    `json:"by"`

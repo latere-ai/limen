@@ -1,5 +1,5 @@
 ---
-title: "Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests"
+title: "Conformance suite and stub: the invariants every cribrum.Service holds, and an in-memory service for decision points' tests"
 status: drafted
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
@@ -14,8 +14,8 @@ author: changkun
 
 ## Overview
 
-Three implementations serve `limen.Service`: the engine, the HTTP
-client against `limend`, and the stub. A decision point must be able to
+Three implementations serve `cribrum.Service`: the engine, the HTTP
+client against `cribrumd`, and the stub. A decision point must be able to
 swap one for another without its behavior changing in any way the
 contract promises. `conformance/` is an importable Go test package that
 holds every implementation to those promises; `stub/` is an in-memory
@@ -29,8 +29,8 @@ without the engine.
 
 ```go
 type Target struct {
-	New     func(t *testing.T) limen.Service
-	Steered func(t *testing.T, predict func(limen.Action) (approve, uncertainty float64)) limen.Service
+	New     func(t *testing.T) cribrum.Service
+	Steered func(t *testing.T, predict func(cribrum.Action) (approve, uncertainty float64)) cribrum.Service
 }
 
 func Run(t *testing.T, target Target)
@@ -84,10 +84,10 @@ func New(o stub.Options) *stub.Service
 
 `stub.Service` holds the ledger in memory with the same rules as the
 engine, computes reports with `estimate/`, and predicts with
-`Options.Predict func(limen.Action) (approve, uncertainty float64)`, by
+`Options.Predict func(cribrum.Action) (approve, uncertainty float64)`, by
 default one half with uncertainty one for every action, which every
-profile Limen accepts turns into an ask. It stamps time with `Options.Clock`, by default
-the wall clock. It satisfies `limen.Service` and passes `Run`. A decision
+profile Cribrum accepts turns into an ask. It stamps time with `Options.Clock`, by default
+the wall clock. It satisfies `cribrum.Service` and passes `Run`. A decision
 point's tests use it to script approvals and read back the decisions and
 answers it recorded.
 
@@ -97,6 +97,6 @@ answers it recorded.
 |---|---|---|
 | 1 | `conformance.Run` holds every case above, and each case fails against a service seeded with the matching defect | `conformance/`'s own tests, with a deliberately broken service per case |
 | 2 | `stub.Service` passes `conformance.Run` | `stub/`'s tests |
-| 3 | `engine.Engine` passes `conformance.Run` with each store, and `client/` against `limend` | [[004-engine]], [[003-http-api]] |
+| 3 | `engine.Engine` passes `conformance.Run` with each store, and `client/` against `cribrumd` | [[004-engine]], [[003-http-api]] |
 | 4 | The stub and the engine report identical estimates for an identical ledger | [[008-ledger-and-estimation]] |
 | 5 | `conformance/` and `stub/` each have coverage at or above 90% | the `suite` gate |

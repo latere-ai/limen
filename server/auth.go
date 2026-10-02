@@ -127,7 +127,7 @@ func payload(raw string) (map[string]any, error) {
 }
 
 // OwnerPolicy is the authorizer of a server with no endpoint configured,
-// latere.ai/x/pkg/authz's shared owner policy read over Limen's resources:
+// latere.ai/x/pkg/authz's shared owner policy read over Cribrum's resources:
 // a caller acts on the cases, reports and data of its own subject, the
 // subject a Case, Reliability or Subject resource names; the Admins act on
 // everything, profiles and replays included, which no subject owns; the

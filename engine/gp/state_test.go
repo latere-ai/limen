@@ -9,7 +9,7 @@ import (
 	"math"
 	"testing"
 
-	"latere.ai/x/limen/engine/kernel"
+	"latere.ai/x/cribrum/engine/kernel"
 )
 
 func fitted(t *testing.T) *Posterior {

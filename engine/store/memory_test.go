@@ -8,9 +8,9 @@ import (
 	"math"
 	"testing"
 
-	"latere.ai/x/limen"
-	"latere.ai/x/limen/engine/store"
-	"latere.ai/x/limen/engine/store/storetest"
+	"latere.ai/x/cribrum"
+	"latere.ai/x/cribrum/engine/store"
+	"latere.ai/x/cribrum/engine/store/storetest"
 )
 
 func TestMemory(t *testing.T) {
@@ -33,24 +33,24 @@ func TestMemoryRefusesUnencodable(t *testing.T) {
 	}
 }
 
-// Limen shows the case as the contract does: no input, no action on the
+// Cribrum shows the case as the contract does: no input, no action on the
 // decision, and copies of the answers.
-func TestCaseLimen(t *testing.T) {
+func TestCaseContract(t *testing.T) {
 	c := storetest.Case("o", "s", "a", 0)
 	c.Action.Input = []byte(`{"command":"ls"}`)
 	act := c.Action
 	c.Decision.Action = &act
-	lc := c.Limen()
+	lc := c.Contract()
 	if lc.Action.Input != nil || lc.Decision.Action != nil {
-		t.Errorf("Limen kept the input or the decision's action: %+v", lc)
+		t.Errorf("Cribrum kept the input or the decision's action: %+v", lc)
 	}
 	lc.Answers[0].Approve = false
 	lc.Prediction.Approve = 0.9
-	lc.Decision.Verdict = limen.Block
-	if !c.Answers[0].Approve || c.Prediction.Approve != 0.5 || c.Decision.Verdict != limen.Ask {
+	lc.Decision.Verdict = cribrum.Block
+	if !c.Answers[0].Approve || c.Prediction.Approve != 0.5 || c.Decision.Verdict != cribrum.Ask {
 		t.Error("a write to the contract's case reached the store's case")
 	}
-	empty := store.Case{}.Limen()
+	empty := store.Case{}.Contract()
 	if empty.Prediction != nil || empty.Decision != nil {
 		t.Errorf("an empty case shows %+v", empty)
 	}
