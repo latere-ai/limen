@@ -213,13 +213,20 @@ have suggested. From a Topos data directory:
 go run ./cmd/limen replay topos
 ```
 
-Serve the API for yourself, with the ledger on disk, and point a decision
-point at it:
+Serve the API for yourself, with the ledger on disk, and point Topos at
+it. Manual mode teaches Limen from your answers; auto mode lets its
+suggestions decide inside Topos's rules:
 
 ```sh
 export LIMEN_TOKEN=$(openssl rand -hex 16)
-go run ./cmd/limen serve            # http://127.0.0.1:7720
+go run ./cmd/limen serve &          # http://127.0.0.1:7720
+
+export TOPOS_DECISIONS_URL=http://127.0.0.1:7720 TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
+topos run --mode manual "..."       # every call asks; each answer teaches Limen
+topos run --mode auto   "..."       # Limen decides inside the rules, and asks when unsure
 ```
+
+[Integrating](docs/integrating.md#notes-by-harness) has the details.
 
 ## Documentation
 

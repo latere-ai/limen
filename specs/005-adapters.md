@@ -22,9 +22,10 @@ applies the verdict, records the decision, and sends the person's answer
 back. This spec defines the shared mapping, `limen-hook` for harnesses
 that call a command at their permission point (Claude Code and Codex),
 and the sequence any other harness follows over HTTP. The integration
-of [Topos](https://github.com/latere-ai/topos), whose harness embeds the
-engine as a `Decider`, is specified in the Topos repository's own specs;
-this spec states only what it relies on from Limen.
+of [Topos](https://github.com/latere-ai/topos) is built: Topos's spec 037,
+decision services, puts a `Decider` at its decision point and speaks this
+API to any decision service over HTTP; this spec states only what it
+relies on from Limen.
 
 Every adapter holds the three rules that make Limen safe in front of a
 harness: the ceiling comes from the harness's deterministic rules and not
@@ -106,13 +107,20 @@ when this spec is validated against the Codex release it targets.
 
 ### Topos
 
-The Topos harness embeds the engine through its own `Decider` interface
-at the point where it scores and decides a tool call, and calls `limend`
-over HTTP from hosted runners. It relies on Limen for: `Predict` and the
-`FailClosed` fallback; `verdict.Decide` from `latere.ai/x/pkg/verdict`;
-`Record` with its own source names (`topos/confirm`,
-`topos/progressive`, `topos/plan`); `Answer` from its confirmation
-events; and `Cases` with `pending` for its review list. Its shadow and
+The Topos harness decides each tool call through its own `Decider`
+interface (Topos spec 037), and reaches a decision service over HTTP,
+configured by `TOPOS_DECISIONS_URL` and `TOPOS_DECISIONS_TOKEN`; a local
+person runs `limen serve`. In manual mode (Topos's `confirm`) its rules
+decide and every call's prediction, decision and answer are recorded, so
+Limen learns; in auto mode (`progressive`) Limen's suggestion decides
+inside the rules' ceiling. It relies on Limen for: `Predict`, failing
+closed to an ask after two seconds; `verdict.Decide` from
+`latere.ai/x/pkg/verdict`, with one draw per call kept in the session log
+so a resumed session never draws again; `Record` with its own source
+names (`topos/confirm`, `topos/progressive`), carrying the action when no
+prediction succeeded; `Answer` from its confirmation events, forwarded
+when a session resumes; and later `Cases` with `pending` for its review
+list, which is not built. Hosted runners are not wired yet. Its shadow and
 confirm modes record their own verdicts while Limen predicts, which the
 ledger weights correctly because the probability comes from the
 recorded decision ([[007-evidence-gates]]).

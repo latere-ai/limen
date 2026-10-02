@@ -305,14 +305,47 @@ anything. Four steps, each needing the previous step's evidence:
 
 ## Notes by harness
 
-The adapters below are planned, not built.
-
 **Topos** ([github.com/latere-ai/topos](https://github.com/latere-ai/topos))
-is the first decision point. Its integration spec, in the Topos
-repository, puts Limen behind the harness's decision on each tool call:
-its rules set the ceiling, `verdict.Decide` composes, the decision is
-recorded with the session's tool call, and a person's confirmations are
-forwarded as answers.
+is the first decision point, and it works today. Topos speaks to any
+decision service with this API: its rules set the ceiling,
+`verdict.Decide` composes, every decision is recorded with the session's
+tool call, and a person's confirmations are forwarded as answers. Two modes
+are all you need:
+
+- **Manual mode** (`topos run --mode manual`, Topos's `confirm`). Every
+  call that is not read-only asks you, as it always did, and every answer
+  teaches Limen. Each prediction is recorded beside the call, so you can
+  see what Limen would have done.
+- **Auto mode** (`topos run --mode auto`, Topos's `progressive`). Limen's
+  suggestion decides inside Topos's rules: a familiar safe call runs, a
+  call you would deny is blocked, and anything Limen is unsure about asks
+  you. A share of automatic verdicts is still shown to you for review, so
+  the ledger keeps measuring how often auto mode is wrong.
+
+Start Limen, then point Topos at it:
+
+```sh
+export LIMEN_TOKEN=$(openssl rand -hex 16)
+limen serve &                                   # http://127.0.0.1:7720
+
+export TOPOS_DECISIONS_URL=http://127.0.0.1:7720
+export TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
+topos run --mode manual "Fix the failing test."  # for a while: Limen learns
+topos run --mode auto   "Fix the failing test."  # then: Limen decides inside the rules
+```
+
+To see what Limen would have done on sessions you already ran, without
+serving anything, replay Topos's data directory:
+
+```sh
+limen replay topos
+```
+
+A person who knows nothing yet gets asks: Limen suggests allow or block
+only once their answers say so. A few dozen answers per kind of call is
+typical before auto mode stops asking about it.
+
+The adapters below are planned, not built.
 
 **Claude Code** calls the server from a command hook. A `PreToolUse` hook
 answers allow, ask, or deny: apply `allow` as allow, `flag` as allow plus
