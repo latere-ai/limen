@@ -2,11 +2,17 @@
 # latere.ai/x/ci-gate, pinned in go.mod; only decisions this repository
 # makes are written here, each with its reason.
 
-# Cribrum ships a contract and, for now, nothing that serves it. The role
-# becomes `core`, with Cribrum's audience and API group, in the change that
-# adds cribrumd (specs/001-architecture.md).
+# The identity shape of the family. Cribrum is a core: cribrumd verifies a
+# caller's token and asks one authorizer, and decides nothing about a
+# person (specs/001-architecture.md). An open core is reached where it is
+# self-hosted, so no client registry carries a row for it.
 identity:
-  role: none
+  role: core
+  audience: cribrum
+  config_prefix: CRIBRUM
+  api_group: cribrum.latere.ai
+  reached_by: self-hosted
+  roles_only: true
 
 # Apache-2.0, like the research implementation the engine is ported from
 # (github.com/changkun/trustcalib) and the harness-side cores it serves.

@@ -189,12 +189,20 @@ that a `cribrum.Service` can show:
 
 ### Identity
 
-`cribrumd` verifies bearer tokens from the issuers its operator lists and
-asks the installation's authorization endpoint, through
-`latere.ai/x/pkg/authz`, for the route's action before it acts, with the
-resource fields [[003-http-api]] names. With no endpoint configured it
-applies the shared owner policy. The repository's identity role becomes
-`core` in the change that adds `cribrumd`.
+The repository's identity role is `core`: `cribrumd` verifies a caller's
+token, asks one authorizer through `latere.ai/x/pkg/authz` for the route's
+action before it acts, with the resource fields [[003-http-api]] names,
+and decides nothing about a person. A token is read by the family's shared
+verifier, `latere.ai/x/pkg/authkit/jwt`, and by nothing of Cribrum's own.
+
+`cribrumd` today serves one person: one bearer, `CRIBRUM_TOKEN`, is that
+person's subject, and the shared owner policy decides. A hosted `cribrumd`
+verifies tokens from the issuers its operator lists and asks the
+installation's authorization endpoint, configured as Topos configures
+them: `CRIBRUM_OIDC_ISSUERS`, `CRIBRUM_OIDC_AUDIENCE` and
+`CRIBRUM_AUTHORIZER_URL`. The server's `JWT` authenticator is that path;
+the daemon reads those variables when a hosted deployment exists to run
+it.
 
 ### Dependencies
 
