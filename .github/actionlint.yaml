@@ -1,0 +1,6 @@
+# The repository is private, so its Go jobs run on the organization's
+# self-hosted runner; the jobs that build images run on GitHub's hosted
+# runners, which carry Docker and buildx.
+self-hosted-runner:
+  labels:
+    - linux-vm
