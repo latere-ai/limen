@@ -20,7 +20,7 @@ license:
   spdx: Apache-2.0
   holder: Latere AI
   extensions: ['.go']
-  names: [Makefile]
+  names: [Makefile, Dockerfile]
 
 spec:
   # The lifecycle of specs/README.md. `superseded` is terminal beside

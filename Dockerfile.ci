@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Latere AI
+# SPDX-License-Identifier: Apache-2.0
+
+# The release image: no build stage. The runtime stage is the developer
+# image's between the two markers, byte for byte, and this file's own
+# instructions are the COPY of the binary the release pipeline built,
+# checksummed, signed and attested, and the entry point. buildx sets
+# TARGETARCH per platform, so
+#
+#	docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.ci .
+#
+# produces one multi-arch index over the two binaries already built.
+
+# >>> shared runtime base <<<
+# cribrumd forks no binary, so the runtime stage is distroless: CA roots for
+# the issuers a hosted cribrumd reads keys from, nothing else. It runs as the
+# image's non-root user, listens on every interface of the container rather
+# than on loopback, and keeps the ledger in a volume that user owns: the
+# directory is the base image's own empty home of that user, copied with its
+# owner, because a directory the image creates is root's and a volume
+# mounted on it starts out as root's. Dockerfile.ci carries this stage byte
+# for byte, so the released image differs from this one in where the binary
+# came from and in nothing else.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=gcr.io/distroless/static-debian12:nonroot --chown=nonroot:nonroot /home/nonroot /var/lib/cribrum
+VOLUME ["/var/lib/cribrum"]
+USER nonroot:nonroot
+ENV CRIBRUM_ADDR=:7720 CRIBRUM_DATA_DIR=/var/lib/cribrum
+EXPOSE 7720
+# <<< shared runtime base >>>
+ARG TARGETARCH
+COPY dist/cribrumd_linux_${TARGETARCH} /usr/local/bin/cribrumd
+ENTRYPOINT ["/usr/local/bin/cribrumd"]
