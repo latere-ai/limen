@@ -13,16 +13,16 @@ probability that a person saw the action, which makes the error rate of
 any decision source measurable: your rules, an LLM judge, Limen itself.
 
 > **Status: pre-release.** Built: the contract (the Go types and
-> interfaces, the HTTP API, the error codes); the shared verdict vocabulary,
-> `latere.ai/x/pkg/verdict`; the reliability estimators (`estimate/`); an
-> in-memory stub of the whole service for tests (`stub/`); the conformance
-> suite every implementation must pass (`conformance/`); and the model's
-> numerics, the kernels and the Laplace Gaussian-process classifier, ported
-> from the research code and tested against its fixtures (`engine/kernel`,
-> `engine/gp`). Not built yet: the engine that assembles them (feature
-> extraction, the store, background fitting), the server `limend`, the HTTP
-> client, and the harness hooks, which [`specs/`](specs/README.md)
-> describes. Nothing here decides a live action today.
+> interfaces, the HTTP API, the error codes); the engine, which predicts
+> with the Gaussian-process model ported from the research code, keeps the
+> ledger in memory or in a directory, and refits off the decision path; the
+> HTTP server and client; the `limen` command, which serves the API for one
+> person (`limen serve`) and replays recorded history (`limen replay`),
+> including a Topos data directory; an in-memory stub and the conformance
+> suite every implementation passes. Not built yet: a Postgres store for a
+> hosted installation, and hooks for Claude Code and Codex, which
+> [`specs/`](specs/README.md) describes. Limen has not yet decided a live
+> action for anyone; start with a replay.
 
 ## The problem
 
@@ -203,6 +203,23 @@ POST /v1/decisions
 When the person answers, `POST /v1/answers` with the same key and
 `"approve": true`. A month later, `GET /v1/reliability?...&of=classifier/claude-auto-mode`
 says how often that judge allowed what this person would have denied.
+
+## Try it
+
+Replay what a decision point already recorded, to see what Limen would
+have suggested. From a Topos data directory:
+
+```sh
+go run ./cmd/limen replay topos
+```
+
+Serve the API for yourself, with the ledger on disk, and point a decision
+point at it:
+
+```sh
+export LIMEN_TOKEN=$(openssl rand -hex 16)
+go run ./cmd/limen serve            # http://127.0.0.1:7720
+```
 
 ## Documentation
 

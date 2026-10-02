@@ -37,3 +37,19 @@ that learns each person's tolerance from the ledger.
 - Documentation for decision-point authors and operators, and the design
   specs for the engine, the server, the adapters, the ledger, the
   conformance suite and the rollout.
+- The engine: the `features/1` featurizer for open tool sets (a shell
+  command's programs, destructive patterns and writes outside the
+  workspace among them), predictions from an immutable posterior that
+  background fitters replace when answers arrive, model time counted in
+  each person's decisions, snapshots kept in the store so a restart loads
+  rather than refits, a memory budget for cached models, and replays in
+  time order through a scratch engine.
+- Stores: in memory, and in a directory (an append-only log per person,
+  atomic snapshots and profiles, one process per directory), with a
+  contract suite every store passes.
+- The HTTP server and client, with bearer-token and JWT authentication and
+  the shared authorizer, both passing the conformance suite end to end.
+- The `limen` command: `limen serve` serves the API for one person over a
+  ledger on disk; `limen replay topos` replays a Topos data directory and
+  `limen replay file` a file of records, and reports what Limen would have
+  suggested.
