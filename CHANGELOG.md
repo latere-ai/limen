@@ -10,19 +10,30 @@ committed: the commit log already holds that.
 
 ## Unreleased
 
-- `latere.ai/x/pkg` v0.90.2, the release past GO-2026-6615 and GO-2026-6505.
-  No OpenTelemetry module is in this module's build.
+Limen is the oversight layer for automated actions, in three parts: the
+shared verdict vocabulary (`latere.ai/x/pkg/verdict`), a ledger that
+measures any decision source against a person's answers, and a predictor
+that learns each person's tolerance from the ledger.
 
-- The contract, before any implementation: the Go types a harness codes
-  against (`Action`, `Assessment`, `Answer`, `Profile`, `Reliability`), the
-  `Gate`, `Reviews` and `Admin` interfaces, the error codes with their
-  sentences, and the arithmetic that defines the contract: thresholds from
-  a cost profile, the verdict a score implies, the verdict order, the
-  number of clean audits a certificate needs, and `FailClosed`.
-- The HTTP API as an OpenAPI 3.1 document, `api/openapi.yaml`, held to the
-  Go types by a test.
-- The authorizer vocabulary: one action per route.
-- Documentation for harness authors and operators, and the design specs
-  for the engine, the server, the adapters, the conformance suite and the
-  rollout.
-
+- The contract: `Predictor`, `Ledger` and `Admin`; a general `Action` (a
+  kind and a name, from tool calls to egress, repository writes, spend and
+  deploys) keyed by organization, subject and the decision point's own
+  action id; `Prediction`, which suggests allow, ask or block from the
+  thresholds a cost profile implies; `Decision`, which the decision point
+  records with the probability that a person sees the action; `Answer`,
+  whose role in an estimate follows from that decision; reliability for
+  any source; replays; the error codes with their sentences; and
+  `FailClosed`.
+- A cost profile is accepted only when each kind of error costs more than
+  two interruptions, so an action about someone Limen knows nothing about
+  is always an ask.
+- The HTTP API as an OpenAPI 3.1 document, held to the Go types by a test.
+- `estimate`, the Horvitz-Thompson estimators every ledger shares;
+  `stub`, an in-memory service for other projects' tests; and
+  `conformance`, the suite every implementation passes.
+- `engine/kernel` and `engine/gp`, the additive and product kernels and
+  the Laplace Gaussian-process classifier, ported from the research code
+  and matching its fixtures.
+- Documentation for decision-point authors and operators, and the design
+  specs for the engine, the server, the adapters, the ledger, the
+  conformance suite and the rollout.

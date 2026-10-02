@@ -5,13 +5,17 @@ Users read the [README](README.md) and [`docs/`](docs/README.md), and the
 design records with the reasoning behind each decision are in
 [`specs/`](specs/README.md).
 
-Limen is contract-only for now: the tree holds the Go types and
-interfaces a harness codes against (the module root), the authorizer
-vocabulary (`authorizer/`), the HTTP surface as an OpenAPI document
-(`api/openapi.yaml`), and the specs for everything else. The engine, the
-HTTP client, the stub, the conformance suite, the service and the hook
-command are specified and not yet built. A change that starts one of
-them starts from its spec.
+Limen is the oversight layer for automated actions: a shared verdict
+vocabulary (`latere.ai/x/pkg/verdict`), a ledger that records what
+decision points decided and how often each source of decisions is
+wrong, and a predictor that learns when a person needs to see an action.
+The tree holds the contract (the module root), the authorizer vocabulary
+(`authorizer/`), the HTTP surface as an OpenAPI document
+(`api/openapi.yaml`), and the specs. The estimators (`estimate/`), the
+in-memory service (`stub/`), the conformance suite (`conformance/`) and
+the engine (`engine/`) are being built from their specs; the HTTP client,
+the server and the hook command follow. A change that starts one of them
+starts from its spec.
 
 ## Getting set up
 
@@ -41,10 +45,12 @@ to the Go types, the error table and the authorizer vocabulary by a test
 ([spec 003](specs/003-http-api.md)), and `specs/README.md`'s index is
 held to the specs' frontmatter by the spec gate.
 
-The root package reaches the standard library and nothing else, because
-every harness imports it into its hot path. `.lateregate.yaml` records
-that as a dependency decision; a new import there is a reviewed change
-to that file, with its reason, not a line in a diff.
+The root package reaches the standard library and the shared verdict
+vocabulary (`latere.ai/x/pkg/verdict`) and nothing else, because every
+decision point imports it into its hot path; `TestRootImports` and
+`.lateregate.yaml` both hold that. The engine's numerical dependency
+lives under `engine/` alone. A new import is a reviewed change to
+`.lateregate.yaml`, with its reason, not a line in a diff.
 
 A bug fix carries a test that fails without it. A change that lowers a
 threshold or adds a waiver records the reason in `.lateregate.yaml`, so
@@ -77,8 +83,17 @@ updates the matching page under `docs/` in the same change. A field's
 JSON name never changes; a new field is optional; a breaking change is
 named in the CHANGELOG.
 
-The arithmetic in the contract (thresholds from costs, the certification
-size, the verdict order) comes from the research in
+Eight invariants of [spec 001](specs/001-architecture.md) are not
+negotiable in a change: a deterministic deny is final; a failure asks;
+the review probability is the decision point's, drawn once and recorded
+with its decision; an action Limen knows nothing about is an ask; an
+action's input is never stored; an answer's role follows from the
+recorded decision; a key names one action; and forgetting a person
+removes everything of theirs in that organization.
+
+The arithmetic in the contract (thresholds from costs, the band that
+contains one half, the certification size, the error estimate) comes
+from the research in
 [arXiv:2605.19151](https://arxiv.org/abs/2605.19151), whose propositions
 are machine-checked in Lean 4 at
 [github.com/changkun/trustcalib](https://github.com/changkun/trustcalib).
@@ -94,7 +109,7 @@ In this repository:
 
 | Reader | Surfaces |
 |---|---|
-| User: a person, or a harness that shows Limen's output to one | `README.md`, `docs/`, the `message` of an API error, an assessment's `reason` |
+| User: a person, or a harness that shows Limen's output to one | `README.md`, `docs/`, the `message` of an API error, a prediction's `reason` |
 | Contributor: someone changing Limen | `specs/`, this file, package documentation, source comments, commit messages |
 | Developer: someone debugging a running installation | an error's `details.detail` and `details.fields`, log lines, `Error.Error()` |
 
