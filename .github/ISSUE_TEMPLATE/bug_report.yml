@@ -1,0 +1,61 @@
+name: Bug report
+description: Something Limen does that it should not, or does not do that it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report a security vulnerability here. See
+        [SECURITY.md](https://github.com/latere-ai/limen/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I recorded a decision and answered it, and the next prediction for the same action ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        The shortest sequence that shows it. The `curl` or `limen replay`
+        command with its output, the action, and the cost profile that
+        applied, is ideal. Redact tokens, and leave out any part of an
+        action's input you would rather not publish.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release tag or image digest, from `limend -version`.
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: How Limen runs
+      options:
+        - limend, over HTTP
+        - The engine, in process
+        - Through a harness such as Topos
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Relevant lines from limend. Redact tokens and hostnames you would
+        rather not publish.
+      render: text

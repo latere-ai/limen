@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/latere-ai/limen/blob/main/SECURITY.md
+    about: Report it privately to security@latere.ai, never as an issue.
+  - name: Running limend and integrating a decision point
+    url: https://github.com/latere-ai/limen/blob/main/docs/README.md
+    about: The principles, the theory, the integration guide and the API.
