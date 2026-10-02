@@ -5,13 +5,10 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 
+	"latere.ai/x/pkg/authkit/jwt"
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/bearer"
 )
@@ -73,8 +70,8 @@ func StaticToken(token, subject string) Authenticator {
 //		return c.Iss, c.Sub, nil
 //	})
 //
-// The adapter lives with the binary that configures the issuers, so this
-// package does not carry the validator's dependencies.
+// The adapter lives with the binary that configures the issuers and
+// audiences, so a test may verify with a stand-in.
 type TokenVerifier interface {
 	Verify(raw string) (issuer, sub string, err error)
 }
@@ -87,7 +84,8 @@ func (f VerifierFunc) Verify(raw string) (string, string, error) { return f(raw)
 
 // JWT authenticates a bearer JWT with v: the caller's subject is the
 // token's issuer and sub rendered by authz.Subject, and its claims are the
-// payload of the token v verified, read verbatim.
+// payload of the token v verified, read verbatim by the shared verifier's
+// decoder.
 func JWT(v TokenVerifier) Authenticator {
 	return AuthenticatorFunc(func(r *http.Request) (Caller, error) {
 		raw, ok := bearer.FromRequest(r)
@@ -101,29 +99,12 @@ func JWT(v TokenVerifier) Authenticator {
 		if sub == "" {
 			return Caller{}, errors.New("the verified token names no subject")
 		}
-		claims, err := payload(raw)
-		if err != nil {
+		var claims map[string]any
+		if err := jwt.DecodePayload(raw, &claims); err != nil {
 			return Caller{}, err
 		}
 		return Caller{Subject: authz.Subject(iss, sub), Issuer: iss, Sub: sub, Claims: claims}, nil
 	})
-}
-
-// payload reads the claims of a compact JWT the verifier has accepted.
-func payload(raw string) (map[string]any, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("the token is not a compact JWT")
-	}
-	b, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("the token payload is not base64url: %w", err)
-	}
-	var claims map[string]any
-	if err := json.Unmarshal(b, &claims); err != nil {
-		return nil, fmt.Errorf("the token payload is not a JSON object: %w", err)
-	}
-	return claims, nil
 }
 
 // OwnerPolicy is the authorizer of a server with no endpoint configured,

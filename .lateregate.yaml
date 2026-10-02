@@ -114,9 +114,25 @@ depcheck:
         gonum.org/v1/gonum: the engine's linear algebra
     latere.ai/x/cribrum/cmd/cribrumd:
       decision: >-
-        the server over the engine and its file store, and nothing they do
-        not already reach
+        the server over the engine and its file store, verifying tokens
+        with the family's shared verifier, latere.ai/x/pkg/authkit/jwt,
+        whose key-set reads go through pkg/otel's instrumented client, so
+        the OpenTelemetry SDK and its OTLP exporters come with it as they
+        do in every core; nothing else does without a row here
       allow:
-        latere.ai/x/pkg: verdict, atomicfile, errwriter, and authz, bearer and httpjson through server
+        latere.ai/x/pkg: verdict, atomicfile, errwriter, and authz, authkit, bearer and httpjson through server
         gonum.org/v1/gonum: the engine's linear algebra
         github.com/google/uuid: reached through latere.ai/x/pkg/authz and httpjson, which parse UUID path parameters with it
+        go.opentelemetry.io: the OpenTelemetry API, SDK and OTLP exporters pkg/otel builds on
+        google.golang.org/protobuf: the wire encoding of the OTLP exporters
+        google.golang.org/grpc: reached by the OTLP trace exporter's shared types
+        google.golang.org/genproto: the status types grpc carries
+        github.com/grpc-ecosystem/grpc-gateway: reached by the OTLP HTTP exporters' error mapping
+        golang.org/x/net: HTTP/2 and trace support of grpc
+        golang.org/x/sys: the platform calls of grpc and the SDK
+        golang.org/x/text: text normalization of golang.org/x/net
+        golang.org/x/time: the rate limiter of pkg/otel's log proxy
+        github.com/cenkalti/backoff: the OTLP exporters' retry backoff
+        github.com/cespare/xxhash: attribute hashing in the metric SDK
+        github.com/felixge/httpsnoop: response capture in otelhttp
+        github.com/go-logr: the SDK's internal logger
