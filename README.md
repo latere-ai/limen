@@ -16,10 +16,10 @@ any decision source measurable: your rules, an LLM judge, Limen itself.
 > interfaces, the HTTP API, the error codes); the engine, which predicts
 > with the Gaussian-process model ported from the research code, keeps the
 > ledger in memory or in a directory, and refits off the decision path; the
-> HTTP server and client; the `limen` command, which serves the API for one
-> person (`limen serve`) and replays recorded history (`limen replay`),
-> including a Topos data directory; an in-memory stub and the conformance
-> suite every implementation passes. Not built yet: a Postgres store for a
+> HTTP server and client; `limend`, which serves the API for one person
+> over a ledger on disk; the `limen` command, which replays recorded
+> history, including a Topos data directory; an in-memory stub and the
+> conformance suite every implementation passes. Not built yet: a Postgres store for a
 > hosted installation, and hooks for Claude Code and Codex, which
 > [`specs/`](specs/README.md) describes. Limen has not yet decided a live
 > action for anyone; start with a replay.
@@ -213,20 +213,21 @@ have suggested. From a Topos data directory:
 go run ./cmd/limen replay topos
 ```
 
-Serve the API for yourself, with the ledger on disk, and point Topos at
-it. Manual mode teaches Limen from your answers; auto mode lets its
-suggestions decide inside Topos's rules:
+Serve the API for yourself, with the ledger on disk, and point Topos
+(v0.11.0 or later) at it. Manual mode teaches Limen from your answers;
+auto mode lets its suggestions decide inside Topos's rules:
 
 ```sh
 export LIMEN_TOKEN=$(openssl rand -hex 16)
-go run ./cmd/limen serve &          # http://127.0.0.1:7720
+go run ./cmd/limend &               # http://127.0.0.1:7720
 
 export TOPOS_DECISIONS_URL=http://127.0.0.1:7720 TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
 topos run --mode manual "..."       # every call asks; each answer teaches Limen
 topos run --mode auto   "..."       # Limen decides inside the rules, and asks when unsure
 ```
 
-[Integrating](docs/integrating.md#notes-by-harness) has the details.
+[Integrating](docs/integrating.md#notes-by-harness) has the details, and
+[Running limend](docs/running.md) the server's configuration.
 
 ## Documentation
 
@@ -235,6 +236,7 @@ topos run --mode auto   "..."       # Limen decides inside the rules, and asks w
 | [Integrating](docs/integrating.md) | for decision-point authors: the three calls, actions from several domains, composing with your rules, recording, answers, rolling out, notes for Topos, Claude Code, and Codex |
 | [The ledger](docs/ledger.md) | what is recorded, what a review probability means, and how the error rate of any source is computed |
 | [API](docs/api.md) | every HTTP route, its request and response, the errors, and the permission each asks |
+| [Running limend](docs/running.md) | the server's configuration, its ledger directory, and running it in a container |
 | [OpenAPI](api/openapi.yaml) | the same surface as an OpenAPI 3.1 document |
 | [Principles](docs/principles.md) | the rules every implementation keeps, and why |
 | [Theory](docs/theory.md) | the model, the decision rule, forgetting, the estimators, and what can be known about a judge |

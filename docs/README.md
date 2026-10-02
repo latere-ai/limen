@@ -29,9 +29,9 @@ Read these in order the first time.
 
 ## Operating it
 
-Installing and running the server, `limend`, will be documented here when
-the server exists. Until then, [`specs/`](../specs/README.md) records how
-it is meant to be built and deployed.
+| Page | |
+|---|---|
+| [Running limend](running.md) | getting the server, its configuration, its ledger directory, stopping it, and running it in a container |
 
 ## Changing it
 

@@ -49,7 +49,10 @@ that learns each person's tolerance from the ledger.
   contract suite every store passes.
 - The HTTP server and client, with bearer-token and JWT authentication and
   the shared authorizer, both passing the conformance suite end to end.
-- The `limen` command: `limen serve` serves the API for one person over a
-  ledger on disk; `limen replay topos` replays a Topos data directory and
-  `limen replay file` a file of records, and reports what Limen would have
-  suggested.
+- `limend`, the server, which serves the API for one person over a
+  ledger on disk, configured by `LIMEN_TOKEN`, `LIMEN_ADDR`,
+  `LIMEN_DATA_DIR` and `LIMEN_SUBJECT`, and its image, which runs it as a
+  non-root user with the ledger in a volume.
+- The `limen` command: `limen replay topos` replays a Topos data directory
+  and `limen replay file` a file of records, and reports what Limen would
+  have suggested.

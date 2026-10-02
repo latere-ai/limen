@@ -110,7 +110,7 @@ when this spec is validated against the Codex release it targets.
 The Topos harness decides each tool call through its own `Decider`
 interface (Topos spec 037), and reaches a decision service over HTTP,
 configured by `TOPOS_DECISIONS_URL` and `TOPOS_DECISIONS_TOKEN`; a local
-person runs `limen serve`. In manual mode (Topos's `confirm`) its rules
+person runs `limend`. In manual mode (Topos's `confirm`) its rules
 decide and every call's prediction, decision and answer are recorded, so
 Limen learns; in auto mode (`progressive`) Limen's suggestion decides
 inside the rules' ceiling. It relies on Limen for: `Predict`, failing

@@ -306,11 +306,11 @@ anything. Four steps, each needing the previous step's evidence:
 ## Notes by harness
 
 **Topos** ([github.com/latere-ai/topos](https://github.com/latere-ai/topos))
-is the first decision point, and it works today. Topos speaks to any
-decision service with this API: its rules set the ceiling,
-`verdict.Decide` composes, every decision is recorded with the session's
-tool call, and a person's confirmations are forwarded as answers. Two modes
-are all you need:
+is the first decision point, and it works today, from Topos v0.11.0 on.
+Topos speaks to any decision service with this API: its rules set the
+ceiling, `verdict.Decide` composes, every decision is recorded with the
+session's tool call, and a person's confirmations are forwarded as
+answers. Two modes are all you need:
 
 - **Manual mode** (`topos run --mode manual`, Topos's `confirm`). Every
   call that is not read-only asks you, as it always did, and every answer
@@ -322,11 +322,11 @@ are all you need:
   you. A share of automatic verdicts is still shown to you for review, so
   the ledger keeps measuring how often auto mode is wrong.
 
-Start Limen, then point Topos at it:
+Start Limen's server, then point Topos at it:
 
 ```sh
 export LIMEN_TOKEN=$(openssl rand -hex 16)
-limen serve &                                   # http://127.0.0.1:7720
+limend &                                        # http://127.0.0.1:7720
 
 export TOPOS_DECISIONS_URL=http://127.0.0.1:7720
 export TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN

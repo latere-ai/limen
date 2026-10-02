@@ -3,8 +3,8 @@
 The HTTP API of Limen's server, `limend`, for a decision point that does
 not embed the engine. The same routes are in the
 [OpenAPI document](../api/openapi.yaml); the Go interfaces a Go decision
-point calls are described in [Integrating](integrating.md). The server is
-not built yet: this page describes the contract it will serve.
+point calls are described in [Integrating](integrating.md), and running
+the server in [Running limend](running.md).
 
 ## Conventions
 
@@ -372,10 +372,14 @@ resource. An endpoint written for Limen answers these and no others:
 | `POST /v1/answers` | `case.answer` | `Case` | `org`, `subject` |
 | `GET /v1/cases` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/reliability` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `kind`, `agent` |
-| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `kind`, `agent` |
+| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent` |
+| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent` |
 | `POST /v1/replays` | `replay.create` | `Replay` | `org` |
 | `POST /v1/subjects/forget` | `subject.forget` | `Subject` | `org`, `subject` |
+
+A profile's kind travels as `action_kind`, because the shared
+authorizer's resource object reserves `kind` for the kind of the resource
+itself.
 
 A caller acting for its own subject is the common case. A decision point
 that predicts, decides, or answers for the person it runs for, such as an
