@@ -17,8 +17,8 @@ coverage.out
 /coverage.html
 
 # `go build ./cmd/<name>` writes a binary named after the package into the
-# working directory rather than out/. `make build` writes out/cribrumd and
-# out/cribrum; a binary at the repository root is always a stray from a
+# working directory rather than out/. `make build` writes out/limend and
+# out/limen; a binary at the repository root is always a stray from a
 # bare `go build`.
-/cribrum
-/cribrumd
+/limen
+/limend

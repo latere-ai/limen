@@ -23,8 +23,8 @@ import (
 
 	"github.com/goccy/go-yaml"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/authorizer"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/authorizer"
 )
 
 type doc = map[string]any
@@ -97,14 +97,14 @@ func jsonFields(typ reflect.Type) map[string]bool {
 
 // schemaTypes pairs each schema with the Go type it describes.
 var schemaTypes = map[string]any{
-	"Action": cribrum.Action{}, "Actor": cribrum.Actor{}, "Target": cribrum.Target{},
-	"Environment": cribrum.Environment{}, "Signal": cribrum.Signal{},
-	"Prediction": cribrum.Prediction{}, "Thresholds": cribrum.Thresholds{}, "Scope": cribrum.Scope{},
-	"Decision": cribrum.Decision{}, "Answer": cribrum.Answer{}, "Case": cribrum.Case{},
-	"RecordedAnswer": cribrum.RecordedAnswer{}, "Page": cribrum.Page{},
-	"Profile": cribrum.Profile{}, "Costs": cribrum.Costs{}, "Certify": cribrum.Certify{},
-	"Reliability": cribrum.Reliability{}, "Estimate": cribrum.Estimate{}, "Certificate": cribrum.Certificate{},
-	"ReplayRecord": cribrum.ReplayRecord{}, "ReplayReport": cribrum.ReplayReport{},
+	"Action": limen.Action{}, "Actor": limen.Actor{}, "Target": limen.Target{},
+	"Environment": limen.Environment{}, "Signal": limen.Signal{},
+	"Prediction": limen.Prediction{}, "Thresholds": limen.Thresholds{}, "Scope": limen.Scope{},
+	"Decision": limen.Decision{}, "Answer": limen.Answer{}, "Case": limen.Case{},
+	"RecordedAnswer": limen.RecordedAnswer{}, "Page": limen.Page{},
+	"Profile": limen.Profile{}, "Costs": limen.Costs{}, "Certify": limen.Certify{},
+	"Reliability": limen.Reliability{}, "Estimate": limen.Estimate{}, "Certificate": limen.Certificate{},
+	"ReplayRecord": limen.ReplayRecord{}, "ReplayReport": limen.ReplayReport{},
 }
 
 func TestSchemasMatchTypes(t *testing.T) {
@@ -170,35 +170,35 @@ func TestEnumsMatchConstants(t *testing.T) {
 		}
 	}
 	check("Verdict", strs(at(t, schemas, "Verdict")["enum"]),
-		string(cribrum.Allow), string(cribrum.Flag), string(cribrum.Ask), string(cribrum.Block))
+		string(limen.Allow), string(limen.Flag), string(limen.Ask), string(limen.Block))
 	check("Suggestion", strs(at(t, schemas, "Suggestion")["enum"]),
-		string(cribrum.Allow), string(cribrum.Ask), string(cribrum.Block))
+		string(limen.Allow), string(limen.Ask), string(limen.Block))
 	check("Action.effect", strs(at(t, schemas, "Action", "properties", "effect")["enum"]),
-		string(cribrum.EffectNone), string(cribrum.EffectRead), string(cribrum.EffectWrite), string(cribrum.EffectExternal))
+		string(limen.EffectNone), string(limen.EffectRead), string(limen.EffectWrite), string(limen.EffectExternal))
 	if ref := at(t, schemas, "Prediction", "properties", "verdict")["$ref"]; ref != "#/components/schemas/Suggestion" {
 		t.Errorf("Prediction.verdict is %v, want the Suggestion schema", ref)
 	}
 }
 
 // codesOf returns the codes a response stands for: those listed in
-// x-cribrum-codes, or the code its component is named after.
-func codesOf(name string, r doc) []cribrum.Code {
-	if l := strs(r["x-cribrum-codes"]); len(l) > 0 {
-		out := make([]cribrum.Code, len(l))
+// x-limen-codes, or the code its component is named after.
+func codesOf(name string, r doc) []limen.Code {
+	if l := strs(r["x-limen-codes"]); len(l) > 0 {
+		out := make([]limen.Code, len(l))
 		for i, c := range l {
-			out[i] = cribrum.Code(c)
+			out[i] = limen.Code(c)
 		}
 		return out
 	}
-	return []cribrum.Code{cribrum.Code(name)}
+	return []limen.Code{limen.Code(name)}
 }
 
 // Every code has one response whose description is its status, its code,
 // and its sentence, and every other response names codes of one status.
 func TestResponsesMatchErrorTable(t *testing.T) {
 	responses := at(t, load(t), "components", "responses")
-	known := map[cribrum.Code]bool{}
-	for _, c := range cribrum.Codes() {
+	known := map[limen.Code]bool{}
+	for _, c := range limen.Codes() {
 		known[c] = true
 		r, ok := responses[string(c)].(doc)
 		if !ok {
@@ -211,7 +211,7 @@ func TestResponsesMatchErrorTable(t *testing.T) {
 		}
 	}
 	for name, r := range responses {
-		if known[cribrum.Code(name)] {
+		if known[limen.Code(name)] {
 			continue
 		}
 		codes := codesOf(name, r.(doc))
@@ -238,7 +238,7 @@ func TestOperations(t *testing.T) {
 	components := at(t, d, "components", "responses")
 	vocab := authorizer.Vocabulary()
 	used := map[string]bool{}
-	served := map[cribrum.Code]bool{}
+	served := map[limen.Code]bool{}
 	ids := map[string]bool{}
 	for path, item := range paths {
 		for method, op := range item.(doc) {
@@ -252,15 +252,15 @@ func TestOperations(t *testing.T) {
 				t.Errorf("%s: operationId %s used twice", where, id)
 			}
 			ids[id] = true
-			action := fmt.Sprint(o["x-cribrum-action"])
+			action := fmt.Sprint(o["x-limen-action"])
 			kind, ok := vocab.Kind(action)
 			if !ok {
-				t.Errorf("%s: x-cribrum-action %q is not in the vocabulary", where, action)
+				t.Errorf("%s: x-limen-action %q is not in the vocabulary", where, action)
 			}
 			used[action] = true
-			res, _ := o["x-cribrum-resource"].(doc)
+			res, _ := o["x-limen-resource"].(doc)
 			if res == nil || res["kind"] != kind || len(strs(res["fields"])) == 0 || !slices.Contains(strs(res["fields"]), "org") {
-				t.Errorf("%s: x-cribrum-resource %v, want kind %s with fields naming org", where, res, kind)
+				t.Errorf("%s: x-limen-resource %v, want kind %s with fields naming org", where, res, kind)
 			}
 			for status, r := range o["responses"].(doc) {
 				rd := r.(doc)
@@ -272,7 +272,7 @@ func TestOperations(t *testing.T) {
 						t.Errorf("%s: %s refers to a missing response", where, ref)
 						continue
 					}
-				} else if len(strs(rd["x-cribrum-codes"])) == 0 {
+				} else if len(strs(rd["x-limen-codes"])) == 0 {
 					if s, _ := strconv.Atoi(status); s >= 400 {
 						t.Errorf("%s: error %s names no code", where, status)
 					}
@@ -292,7 +292,7 @@ func TestOperations(t *testing.T) {
 			t.Errorf("action %s is asked by no route", a.Name)
 		}
 	}
-	for _, c := range cribrum.Codes() {
+	for _, c := range limen.Codes() {
 		if !served[c] {
 			t.Errorf("code %s is served by no route", c)
 		}

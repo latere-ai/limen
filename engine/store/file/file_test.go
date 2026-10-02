@@ -13,12 +13,12 @@ import (
 	"strings"
 	"testing"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/conformance"
-	"latere.ai/x/cribrum/engine"
-	"latere.ai/x/cribrum/engine/store"
-	"latere.ai/x/cribrum/engine/store/file"
-	"latere.ai/x/cribrum/engine/store/storetest"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/conformance"
+	"latere.ai/x/limen/engine"
+	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/limen/engine/store/file"
+	"latere.ai/x/limen/engine/store/storetest"
 )
 
 var ctx = context.Background()
@@ -53,7 +53,7 @@ func TestReopen(t *testing.T) {
 // The engine over a file store passes the service contract.
 func TestEngineConformance(t *testing.T) {
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) cribrum.Service {
+		New: func(t *testing.T) limen.Service {
 			s, err := file.OpenWith(t.TempDir(), file.Options{NoSync: true})
 			if err != nil {
 				t.Fatal(err)
@@ -228,14 +228,14 @@ func TestLock(t *testing.T) {
 	defer func() { _ = again.Close() }()
 
 	// A closed store refuses every call.
-	k := cribrum.Key{Org: "o", Subject: "s", ActionID: "a"}
+	k := limen.Key{Org: "o", Subject: "s", ActionID: "a"}
 	errs := []error{
 		func() error { _, _, err := s.Case(ctx, k); return err }(),
 		s.Put(ctx, storetest.Case("o", "s", "a", 0)),
 		func() error { _, err := s.NextT(ctx, "o", "s"); return err }(),
 		func() error { _, err := s.Cases(ctx, "o", "s"); return err }(),
-		func() error { _, _, err := s.Profile(ctx, cribrum.Scope{Org: "o"}); return err }(),
-		s.PutProfile(ctx, cribrum.Profile{Org: "o"}),
+		func() error { _, _, err := s.Profile(ctx, limen.Scope{Org: "o"}); return err }(),
+		s.PutProfile(ctx, limen.Profile{Org: "o"}),
 		func() error { _, _, err := s.Snapshot(ctx, "o", "s", "1"); return err }(),
 		s.PutSnapshot(ctx, "o", "s", "1", nil),
 		s.Forget(ctx, "o", "s"),
@@ -262,7 +262,7 @@ func TestAwkwardNames(t *testing.T) {
 		if err := s.PutSnapshot(ctx, n, n, n, []byte(n)); err != nil {
 			t.Fatalf("snapshot %q: %v", n, err)
 		}
-		if err := s.PutProfile(ctx, cribrum.Profile{Org: n, AuditRate: float64(i) / 100}); err != nil {
+		if err := s.PutProfile(ctx, limen.Profile{Org: n, AuditRate: float64(i) / 100}); err != nil {
 			t.Fatalf("profile %q: %v", n, err)
 		}
 	}
@@ -274,7 +274,7 @@ func TestAwkwardNames(t *testing.T) {
 		if b, ok, _ := s.Snapshot(ctx, n, n, n); !ok || string(b) != n {
 			t.Errorf("snapshot of %q is %q", n, b)
 		}
-		if p, ok, _ := s.Profile(ctx, cribrum.Scope{Org: n}); !ok || p.AuditRate != float64(i)/100 {
+		if p, ok, _ := s.Profile(ctx, limen.Scope{Org: n}); !ok || p.AuditRate != float64(i)/100 {
 			t.Errorf("profile of %q is %+v", n, p)
 		}
 	}
@@ -284,7 +284,7 @@ func TestAwkwardNames(t *testing.T) {
 func TestDamagedProfiles(t *testing.T) {
 	dir := t.TempDir()
 	s := open(t, dir)
-	if err := s.PutProfile(ctx, cribrum.Profile{Org: "o"}); err != nil {
+	if err := s.PutProfile(ctx, limen.Profile{Org: "o"}); err != nil {
 		t.Fatal(err)
 	}
 	_ = s.Close()
@@ -297,10 +297,10 @@ func TestDamagedProfiles(t *testing.T) {
 	}
 	s = open(t, dir)
 	defer func() { _ = s.Close() }()
-	if _, _, err := s.Profile(ctx, cribrum.Scope{Org: "o"}); err == nil {
+	if _, _, err := s.Profile(ctx, limen.Scope{Org: "o"}); err == nil {
 		t.Error("a damaged profiles file loaded")
 	}
-	if err := s.PutProfile(ctx, cribrum.Profile{Org: "o"}); err == nil {
+	if err := s.PutProfile(ctx, limen.Profile{Org: "o"}); err == nil {
 		t.Error("PutProfile over a damaged profiles file succeeded")
 	}
 }

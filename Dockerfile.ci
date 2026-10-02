@@ -12,8 +12,8 @@
 # produces one multi-arch index over the two binaries already built.
 
 # >>> shared runtime base <<<
-# cribrumd forks no binary, so the runtime stage is distroless: CA roots for
-# the issuers a hosted cribrumd reads keys from, nothing else. It runs as the
+# limend forks no binary, so the runtime stage is distroless: CA roots for
+# the issuers a hosted limend reads keys from, nothing else. It runs as the
 # image's non-root user, listens on every interface of the container rather
 # than on loopback, and keeps the ledger in a volume that user owns: the
 # directory is the base image's own empty home of that user, copied with its
@@ -22,12 +22,12 @@
 # for byte, so the released image differs from this one in where the binary
 # came from and in nothing else.
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=gcr.io/distroless/static-debian12:nonroot --chown=nonroot:nonroot /home/nonroot /var/lib/cribrum
-VOLUME ["/var/lib/cribrum"]
+COPY --from=gcr.io/distroless/static-debian12:nonroot --chown=nonroot:nonroot /home/nonroot /var/lib/limen
+VOLUME ["/var/lib/limen"]
 USER nonroot:nonroot
-ENV CRIBRUM_ADDR=:7720 CRIBRUM_DATA_DIR=/var/lib/cribrum
+ENV LIMEN_ADDR=:7720 LIMEN_DATA_DIR=/var/lib/limen
 EXPOSE 7720
 # <<< shared runtime base >>>
 ARG TARGETARCH
-COPY dist/cribrumd_linux_${TARGETARCH} /usr/local/bin/cribrumd
-ENTRYPOINT ["/usr/local/bin/cribrumd"]
+COPY dist/limend_linux_${TARGETARCH} /usr/local/bin/limend
+ENTRYPOINT ["/usr/local/bin/limend"]

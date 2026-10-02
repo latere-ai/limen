@@ -13,14 +13,14 @@ import (
 
 	"latere.ai/x/topos/session"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/importer/topos"
-	"latere.ai/x/cribrum/importer/topos/topostest"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/importer/topos"
+	"latere.ai/x/limen/importer/topos/topostest"
 )
 
-func collect(t *testing.T, dataDir string, o topos.Options) ([]cribrum.ReplayRecord, error) {
+func collect(t *testing.T, dataDir string, o topos.Options) ([]limen.ReplayRecord, error) {
 	t.Helper()
-	var out []cribrum.ReplayRecord
+	var out []limen.ReplayRecord
 	for r, err := range topos.Records(dataDir, o) {
 		if err != nil {
 			return out, err
@@ -30,8 +30,8 @@ func collect(t *testing.T, dataDir string, o topos.Options) ([]cribrum.ReplayRec
 	return out, nil
 }
 
-func byID(rs []cribrum.ReplayRecord) map[string]cribrum.ReplayRecord {
-	out := map[string]cribrum.ReplayRecord{}
+func byID(rs []limen.ReplayRecord) map[string]limen.ReplayRecord {
+	out := map[string]limen.ReplayRecord{}
 	for _, r := range rs {
 		_, id, _ := cut(r.Action.ActionID)
 		out[id] = r
@@ -76,19 +76,19 @@ func TestRecords(t *testing.T) {
 	yes, no := true, false
 	cases := []struct {
 		id      string
-		verdict cribrum.Verdict
+		verdict limen.Verdict
 		prob    float64
 		source  string
 		approve *bool
-		effect  cribrum.Effect
+		effect  limen.Effect
 	}{
-		{"ask-allow", cribrum.Ask, 1, "topos/confirm", &yes, cribrum.EffectWrite},
-		{"ask-deny", cribrum.Ask, 1, "topos/confirm", &no, cribrum.EffectWrite},
-		{"allow", cribrum.Allow, 0, "topos/confirm", nil, cribrum.EffectRead},
-		{"block", cribrum.Block, 0, "topos/plan", nil, cribrum.EffectExternal},
-		{"flag", cribrum.Flag, 1, "topos/progressive", &yes, cribrum.EffectWrite},
-		{"remember", cribrum.Ask, 1, "topos/confirm", &yes, cribrum.EffectWrite},
-		{"mcp", cribrum.Ask, 1, "topos/confirm", nil, cribrum.EffectWrite},
+		{"ask-allow", limen.Ask, 1, "topos/confirm", &yes, limen.EffectWrite},
+		{"ask-deny", limen.Ask, 1, "topos/confirm", &no, limen.EffectWrite},
+		{"allow", limen.Allow, 0, "topos/confirm", nil, limen.EffectRead},
+		{"block", limen.Block, 0, "topos/plan", nil, limen.EffectExternal},
+		{"flag", limen.Flag, 1, "topos/progressive", &yes, limen.EffectWrite},
+		{"remember", limen.Ask, 1, "topos/confirm", &yes, limen.EffectWrite},
+		{"mcp", limen.Ask, 1, "topos/confirm", nil, limen.EffectWrite},
 	}
 	for _, c := range cases {
 		r, ok := got[c.id]
@@ -107,7 +107,7 @@ func TestRecords(t *testing.T) {
 		}
 	}
 	first := got["ask-allow"]
-	if first.Action.Key != (cribrum.Key{Org: topos.DefaultOrg, Subject: "https://issuer.example|usr_42", ActionID: ids[0] + "/ask-allow"}) {
+	if first.Action.Key != (limen.Key{Org: topos.DefaultOrg, Subject: "https://issuer.example|usr_42", ActionID: ids[0] + "/ask-allow"}) {
 		t.Errorf("key %+v", first.Action.Key)
 	}
 	if first.Action.Actor == nil || first.Action.Actor.ID != "agt_1" || first.Action.Actor.Session != ids[0] {
@@ -275,9 +275,9 @@ func TestUnreadable(t *testing.T) {
 }
 
 func TestEffectOf(t *testing.T) {
-	for name, want := range map[string]cribrum.Effect{
-		"read": cribrum.EffectRead, "grep": cribrum.EffectRead, "write": cribrum.EffectWrite,
-		"web_fetch": cribrum.EffectExternal, "todo": cribrum.EffectNone, "unknown_tool": cribrum.EffectWrite,
+	for name, want := range map[string]limen.Effect{
+		"read": limen.EffectRead, "grep": limen.EffectRead, "write": limen.EffectWrite,
+		"web_fetch": limen.EffectExternal, "todo": limen.EffectNone, "unknown_tool": limen.EffectWrite,
 	} {
 		if got := topos.EffectOf(name); got != want {
 			t.Errorf("EffectOf(%q) = %q, want %q", name, got, want)

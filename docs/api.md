@@ -1,6 +1,6 @@
 # API
 
-The HTTP API of Cribrum's server, `cribrumd`, for a decision point that does
+The HTTP API of Limen's server, `limend`, for a decision point that does
 not embed the engine. The same routes are in the
 [OpenAPI document](../api/openapi.yaml); the Go interfaces a Go decision
 point calls are described in [Integrating](integrating.md). The server is
@@ -9,10 +9,10 @@ not built yet: this page describes the contract it will serve.
 ## Conventions
 
 - **Base path.** The server serves every route under `/v1`. A platform
-  that hosts Cribrum may mount it under a prefix of its own.
+  that hosts Limen may mount it under a prefix of its own.
 - **Authentication.** Every request carries a bearer token from an issuer
   the installation lists, for the audience it verifies:
-  `Authorization: Bearer <token>`. Cribrum verifies the token and asks the
+  `Authorization: Bearer <token>`. Limen verifies the token and asks the
   installation's authorization endpoint whether the caller may take the
   route's action, named on each route below, before it acts.
 - **Bodies.** Requests and responses are JSON, except the replay upload,
@@ -29,7 +29,7 @@ not built yet: this page describes the contract it will serve.
   decision; a second is refused with `already_decided`.
 - **Order.** A prediction is optional; a decision is required before an
   answer, which is refused with `no_decision` otherwise.
-- **Time.** Cribrum stamps each record when it arrives and counts each
+- **Time.** Limen stamps each record when it arrives and counts each
   person's decisions itself; no request carries a time except a replayed
   record.
 - **Pagination.** A list returns `{"entries": [...], "next_cursor": "..."}`.
@@ -97,7 +97,7 @@ The response is the prediction:
 
 | Field | |
 |---|---|
-| `verdict` | Cribrum's suggestion: `allow`, `ask`, or `block`. Never `flag`, which is the decision point's when it draws a review. |
+| `verdict` | Limen's suggestion: `allow`, `ask`, or `block`. Never `flag`, which is the decision point's when it draws a review. |
 | `approve` | the probability that the person approves the action |
 | `uncertainty` | how uncertain the model is about that probability; an action like nothing seen before has a high value |
 | `thresholds` | from the profile: above `allow_above` the suggestion is allow, below `block_below` block, between them ask |
@@ -131,7 +131,7 @@ a person.
 | `verdict` | yes | the verdict applied: `allow`, `flag`, `ask`, or `block` |
 | `review_probability` | yes | the probability, fixed before the action ran, that a person sees it: positive for `flag` and `ask`, below one for `allow` and `block`. [The ledger](ledger.md#the-review-probability) lists every case. |
 | `source` | yes | the policy that decided |
-| `action` | when Cribrum has no prediction for the action | the action, as for a prediction, with the same key; if Cribrum has a prediction, it must be the same action |
+| `action` | when Limen has no prediction for the action | the action, as for a prediction, with the same key; if Limen has a prediction, it must be the same action |
 
 Returns 204 with no body.
 
@@ -200,7 +200,7 @@ Errors: `invalid_query` and the common errors.
 `reliability.read`.
 
 Reports how often one source's verdicts disagreed with one person over one
-window: `of=learned` for Cribrum's suggestions, `of=applied` for the verdicts
+window: `of=learned` for Limen's suggestions, `of=applied` for the verdicts
 decision points applied, a decision's `source` such as `rules/1`, or a
 signal's such as `classifier/claude-auto-mode`. `from` and `to` are RFC 3339
 times, `from` before `to`.
@@ -264,7 +264,7 @@ sent for `thresholds` or `default` is ignored.
 | `certify` | optional: `alpha` in (0, 1] and `delta` in (0, 1). Without it, the claim is a rate below 1% at 95% confidence, which takes 300 clean reviews. |
 
 Errors: `invalid_query` on a read; `invalid_profile` and `ask_too_costly`
-(costs under which Cribrum would decide about someone it knows nothing about)
+(costs under which Limen would decide about someone it knows nothing about)
 on a write; and the common errors.
 
 ## Replays
@@ -282,7 +282,7 @@ one record per line, at most 100,000 records:
 {"at": "2026-09-02T11:40:10Z", "action": {"...": "..."}, "verdict": "flag", "review_probability": 0.05, "source": "rules/1", "approve": false}
 ```
 
-Cribrum predicts the records in the order of `at`, each before learning its
+Limen predicts the records in the order of `at`, each before learning its
 own answer, and reports what it would have suggested:
 
 ```json
@@ -308,9 +308,9 @@ at fault), `body_too_large`, and the common errors.
 {"org": "org_7", "subject": "https://issuer.example|usr_42"}
 ```
 
-Deletes everything Cribrum holds about the subject in the organization:
+Deletes everything Limen holds about the subject in the organization:
 cases, answers, and the model learned from them. Returns 204. It is
-idempotent: forgetting a subject Cribrum knows nothing about also returns
+idempotent: forgetting a subject Limen knows nothing about also returns
 204.
 
 Errors: `invalid_query` and the common errors.
@@ -344,17 +344,17 @@ debugs. Each code has one status and one sentence:
 | `invalid_profile` | 400 | The cost profile is missing a field or has a value out of range. Fix the fields listed in the details and save it again. |
 | `invalid_query` | 400 | The request is missing a field or has a value out of range. Fix the fields listed in the details and ask again. |
 | `invalid_replay` | 400 | A replayed record is missing a field or has a value out of range. Fix the records listed in the details and replay again. |
-| `ask_too_costly` | 422 | With these costs, Cribrum would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions. |
+| `ask_too_costly` | 422 | With these costs, Limen would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions. |
 | `action_conflict` | 409 | This action id was already used for a different action. Give each action its own id. |
 | `already_decided` | 409 | This action already has a decision. Each action is decided once. |
 | `no_decision` | 409 | This action has no recorded decision. Record the decision first, then send the answer. |
 | `unauthenticated` | 401 | The request carries no valid credential. Sign in again and retry. |
 | `forbidden` | 403 | You do not have permission for this. Ask an administrator of the organization for access. |
-| `body_too_large` | 413 | The request is larger than Cribrum accepts. Send it in smaller parts. |
+| `body_too_large` | 413 | The request is larger than Limen accepts. Send it in smaller parts. |
 | `rate_limited` | 429 | Too many requests. Wait a moment and try again. |
-| `internal` | 500 | Something failed on Cribrum's side. Try again; if it keeps failing, report it with the request id. |
+| `internal` | 500 | Something failed on Limen's side. Try again; if it keeps failing, report it with the request id. |
 | `authorizer_unavailable` | 503 | The permission service is unavailable. Try again shortly. |
-| `unavailable` | 503 | Cribrum is unavailable right now. Hold the action for a person and try again shortly. |
+| `unavailable` | 503 | Limen is unavailable right now. Hold the action for a person and try again shortly. |
 
 The common errors, which any route can return, are `unauthenticated`,
 `forbidden`, `rate_limited`, `internal`, `authorizer_unavailable`, and
@@ -363,7 +363,7 @@ The common errors, which any route can return, are `unauthenticated`,
 ## Permissions
 
 Each route asks the authorization endpoint for one action about one
-resource. An endpoint written for Cribrum answers these and no others:
+resource. An endpoint written for Limen answers these and no others:
 
 | Route | Action | Resource kind | Resource fields |
 |---|---|---|---|

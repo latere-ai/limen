@@ -1,12 +1,12 @@
 # The ledger
 
-Cribrum's ledger records what decision points decided and what people
+Limen's ledger records what decision points decided and what people
 answered, and from those two facts it reports how often any source of
 decisions is wrong for a given person. This page says what is recorded,
 what each field means, and how the numbers in a reliability report come
 out of the records. The mathematics is in [Theory](theory.md#the-ledger-error-rates-of-any-source).
 
-The ledger does not need Cribrum's predictor. A decision point that decides
+The ledger does not need Limen's predictor. A decision point that decides
 by rules alone can record its decisions and the answers, and read its
 rules' error rate and its judge's.
 
@@ -23,11 +23,11 @@ Every record is a case, keyed by three fields:
 A case holds up to four things, each written once:
 
 1. **The action**, as the decision point observed it before it ran, without
-   its input: Cribrum reads the input to extract features and never keeps it.
-2. **The prediction**, when the decision point asked Cribrum for one.
+   its input: Limen reads the input to extract features and never keeps it.
+2. **The prediction**, when the decision point asked Limen for one.
 3. **The decision**: the verdict applied, the probability that a person sees
    the action, and the policy that decided.
-4. **The answers** the person gave, each stamped by Cribrum when it arrived,
+4. **The answers** the person gave, each stamped by Limen when it arrived,
    with who gave it.
 
 A decision point records a decision for every action it decides, not only
@@ -76,7 +76,7 @@ the review, a person changing their mind. Nothing fixed the probability
 with which such an answer is given, so there is no weight to give it. The
 model learns the latest answer.
 
-Cribrum derives each answer's role from the recorded decision, so an answer
+Limen derives each answer's role from the recorded decision, so an answer
 needs a recorded decision first: an answer for an action with none is
 refused with `no_decision`.
 
@@ -86,7 +86,7 @@ A reliability report is about one source of verdicts:
 
 | `of` | The source's verdict on an action is |
 |---|---|
-| `learned` | Cribrum's suggestion, from the prediction |
+| `learned` | Limen's suggestion, from the prediction |
 | `applied` | the verdict the decision point applied, whatever decided it |
 | a decision's `source`, such as `rules/1` or `topos/progressive` | the verdict applied, on the actions that policy decided |
 | a signal's `source`, such as `classifier/claude-auto-mode` | the signal's verdict, on the actions that carried one |

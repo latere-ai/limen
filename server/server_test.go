@@ -27,10 +27,10 @@ import (
 	"latere.ai/x/pkg/authz"
 	azstub "latere.ai/x/pkg/authz/stub"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/authorizer"
-	"latere.ai/x/cribrum/engine"
-	"latere.ai/x/cribrum/stub"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/authorizer"
+	"latere.ai/x/limen/engine"
+	"latere.ai/x/limen/stub"
 )
 
 const (
@@ -42,39 +42,39 @@ const (
 
 // spy counts the calls that reach the service.
 type spy struct {
-	cribrum.Service
+	limen.Service
 	calls atomic.Int64
 }
 
-func (s *spy) Predict(ctx context.Context, a cribrum.Action) (cribrum.Prediction, error) {
+func (s *spy) Predict(ctx context.Context, a limen.Action) (limen.Prediction, error) {
 	s.calls.Add(1)
 	return s.Service.Predict(ctx, a)
 }
-func (s *spy) Record(ctx context.Context, d cribrum.Decision) error {
+func (s *spy) Record(ctx context.Context, d limen.Decision) error {
 	s.calls.Add(1)
 	return s.Service.Record(ctx, d)
 }
-func (s *spy) Answer(ctx context.Context, a cribrum.Answer) error {
+func (s *spy) Answer(ctx context.Context, a limen.Answer) error {
 	s.calls.Add(1)
 	return s.Service.Answer(ctx, a)
 }
-func (s *spy) Cases(ctx context.Context, q cribrum.CaseQuery) (cribrum.Page, error) {
+func (s *spy) Cases(ctx context.Context, q limen.CaseQuery) (limen.Page, error) {
 	s.calls.Add(1)
 	return s.Service.Cases(ctx, q)
 }
-func (s *spy) Reliability(ctx context.Context, q cribrum.ReliabilityQuery) (cribrum.Reliability, error) {
+func (s *spy) Reliability(ctx context.Context, q limen.ReliabilityQuery) (limen.Reliability, error) {
 	s.calls.Add(1)
 	return s.Service.Reliability(ctx, q)
 }
-func (s *spy) Profile(ctx context.Context, sc cribrum.Scope) (cribrum.Profile, error) {
+func (s *spy) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, error) {
 	s.calls.Add(1)
 	return s.Service.Profile(ctx, sc)
 }
-func (s *spy) PutProfile(ctx context.Context, p cribrum.Profile) (cribrum.Profile, error) {
+func (s *spy) PutProfile(ctx context.Context, p limen.Profile) (limen.Profile, error) {
 	s.calls.Add(1)
 	return s.Service.PutProfile(ctx, p)
 }
-func (s *spy) Replay(ctx context.Context, r iter.Seq2[cribrum.ReplayRecord, error], o cribrum.ReplayOptions) (cribrum.ReplayReport, error) {
+func (s *spy) Replay(ctx context.Context, r iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
 	s.calls.Add(1)
 	return s.Service.Replay(ctx, r, o)
 }
@@ -83,8 +83,8 @@ func (s *spy) Forget(ctx context.Context, org, subject string) error {
 	return s.Service.Forget(ctx, org, subject)
 }
 
-func action(subject, id string) cribrum.Action {
-	return cribrum.Action{Org: "o", Subject: subject, ActionID: id, Kind: "tool", Name: "bash", Effect: cribrum.EffectWrite,
+func action(subject, id string) limen.Action {
+	return limen.Action{Org: "o", Subject: subject, ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
 		Input: json.RawMessage(`{"command":"ls"}`)}
 }
 
@@ -127,7 +127,7 @@ func errorOf(t *testing.T, w *httptest.ResponseRecorder) envelope {
 	return e
 }
 
-func wantCode(t *testing.T, w *httptest.ResponseRecorder, code cribrum.Code, fields ...string) {
+func wantCode(t *testing.T, w *httptest.ResponseRecorder, code limen.Code, fields ...string) {
 	t.Helper()
 	if w.Code != code.Status() {
 		t.Fatalf("status %d, want %d (%s): %s", w.Code, code.Status(), code, w.Body.String())
@@ -148,37 +148,37 @@ func wantCode(t *testing.T, w *httptest.ResponseRecorder, code cribrum.Code, fie
 func valid(t *testing.T) []req {
 	a := action(alice, "a1")
 	now := time.Now().UTC()
-	rec := cribrum.ReplayRecord{At: now, Action: action(alice, "r1"), Verdict: cribrum.Ask, ReviewProbability: 1, Source: "rules/1"}
+	rec := limen.ReplayRecord{At: now, Action: action(alice, "r1"), Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1"}
 	return []req{
 		{http.MethodPost, "/v1/predictions", body(t, a)},
-		{http.MethodPost, "/v1/decisions", body(t, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "rules/1", Action: &a})},
-		{http.MethodPost, "/v1/answers", body(t, cribrum.Answer{Org: "o", Subject: alice, ActionID: "seed", Approve: true})},
+		{http.MethodPost, "/v1/decisions", body(t, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1", Action: &a})},
+		{http.MethodPost, "/v1/answers", body(t, limen.Answer{Org: "o", Subject: alice, ActionID: "seed", Approve: true})},
 		{http.MethodGet, "/v1/cases?org=o&subject=" + alice + "&pending=false&limit=10", ""},
 		{http.MethodGet, "/v1/reliability?org=o&subject=" + alice + "&of=applied&from=" + now.Add(-time.Hour).Format(time.RFC3339) + "&to=" + now.Add(time.Hour).Format(time.RFC3339), ""},
 		{http.MethodGet, "/v1/profiles?org=o&kind=tool&agent=x", ""},
-		{http.MethodPut, "/v1/profiles", body(t, cribrum.Profile{Org: "o", Kind: "tool", Costs: cribrum.DefaultCosts, AuditRate: 0.05})},
+		{http.MethodPut, "/v1/profiles", body(t, limen.Profile{Org: "o", Kind: "tool", Costs: limen.DefaultCosts, AuditRate: 0.05})},
 		{http.MethodPost, "/v1/replays?keep=false", body(t, rec) + "\n\n"},
 		{http.MethodPost, "/v1/subjects/forget", body(t, map[string]string{"org": "o", "subject": bob})},
 	}
 }
 
 // seeded returns a service holding alice's decided seed action.
-func seeded(t *testing.T, svc cribrum.Service) cribrum.Service {
+func seeded(t *testing.T, svc limen.Service) limen.Service {
 	t.Helper()
 	a := action(alice, "seed")
 	if _, err := svc.Predict(context.Background(), a); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.Record(context.Background(), cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "rules/1"}); err != nil {
+	if err := svc.Record(context.Background(), limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1"}); err != nil {
 		t.Fatal(err)
 	}
 	return svc
 }
 
-func services(t *testing.T) map[string]cribrum.Service {
+func services(t *testing.T) map[string]limen.Service {
 	e := engine.New(engine.Options{Inline: 1})
 	t.Cleanup(func() { e.Close() })
-	return map[string]cribrum.Service{"stub": stub.New(stub.Options{}), "engine": e}
+	return map[string]limen.Service{"stub": stub.New(stub.Options{}), "engine": e}
 }
 
 // Every route answers its success status against the stub and the engine.
@@ -213,7 +213,7 @@ func TestRoutesMatchOpenAPI(t *testing.T) {
 	for path, ops := range doc.Paths {
 		for method, op := range ops {
 			documented = append(documented, strings.ToUpper(method)+" "+path)
-			action := fmt.Sprint(op.(map[string]any)["x-cribrum-action"])
+			action := fmt.Sprint(op.(map[string]any)["x-limen-action"])
 			i := slices.IndexFunc(routes, func(r route) bool { return r.method == strings.ToUpper(method) && r.path == path })
 			if i >= 0 && routes[i].action != action {
 				t.Errorf("%s %s asks %s, the document says %s", method, path, routes[i].action, action)
@@ -289,7 +289,7 @@ func TestRefusalsActOnNothing(t *testing.T) {
 	h := New(s, Options{Authenticator: StaticToken(tok, admin), Authorizer: client})
 	az.Deny(azstub.Rule{}, "no")
 	for _, r := range valid(t) {
-		wantCode(t, do(t, h, r), cribrum.CodeForbidden)
+		wantCode(t, do(t, h, r), limen.CodeForbidden)
 	}
 	// A fresh client, since the first one caches the denies.
 	az.Fail(http.StatusInternalServerError)
@@ -299,7 +299,7 @@ func TestRefusalsActOnNothing(t *testing.T) {
 	}
 	h = New(s, Options{Authenticator: StaticToken(tok, admin), Authorizer: client})
 	for _, r := range valid(t) {
-		wantCode(t, do(t, h, r), cribrum.CodeAuthorizerUnavailable)
+		wantCode(t, do(t, h, r), limen.CodeAuthorizerUnavailable)
 	}
 	if n := s.calls.Load(); n != 0 {
 		t.Errorf("refused requests reached the service %d times", n)
@@ -318,7 +318,7 @@ func TestSubjectBinding(t *testing.T) {
 			}
 			continue
 		}
-		wantCode(t, w, cribrum.CodeForbidden)
+		wantCode(t, w, limen.CodeForbidden)
 	}
 	own := action(bob, "b1")
 	if w := do(t, h, req{http.MethodPost, "/v1/predictions", body(t, own)}); w.Code != http.StatusOK {
@@ -334,7 +334,7 @@ func TestAnswerBy(t *testing.T) {
 		if _, err := svc.Predict(context.Background(), a); err != nil {
 			t.Fatal(err)
 		}
-		if err := svc.Record(context.Background(), cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "r"}); err != nil {
+		if err := svc.Record(context.Background(), limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "r"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -342,7 +342,7 @@ func TestAnswerBy(t *testing.T) {
 	self := New(svc, Options{Authenticator: StaticToken(tok, alice), Authorizer: OwnerPolicy{}})
 	answer := func(h http.Handler, id, by string) {
 		t.Helper()
-		w := do(t, h, req{http.MethodPost, "/v1/answers", body(t, cribrum.Answer{Org: "o", Subject: alice, ActionID: id, Approve: true, By: by})})
+		w := do(t, h, req{http.MethodPost, "/v1/answers", body(t, limen.Answer{Org: "o", Subject: alice, ActionID: id, Approve: true, By: by})})
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("answer %s: %d %s", id, w.Code, w.Body.String())
 		}
@@ -351,7 +351,7 @@ func TestAnswerBy(t *testing.T) {
 	answer(relay, "x2", "")
 	answer(self, "x3", "https://issuer.example|usr_forged")
 	want := map[string]string{"x1": "https://issuer.example|usr_lead", "x2": admin, "x3": alice}
-	page, err := svc.Cases(context.Background(), cribrum.CaseQuery{Org: "o", Subject: alice})
+	page, err := svc.Cases(context.Background(), limen.CaseQuery{Org: "o", Subject: alice})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,8 +364,8 @@ func TestAnswerBy(t *testing.T) {
 
 func record(t *testing.T, i int) string {
 	t.Helper()
-	return body(t, cribrum.ReplayRecord{At: time.Unix(int64(i), 0).UTC(), Action: action(alice, fmt.Sprintf("r%d", i)),
-		Verdict: cribrum.Allow, ReviewProbability: 0, Source: "rules/1"})
+	return body(t, limen.ReplayRecord{At: time.Unix(int64(i), 0).UTC(), Action: action(alice, fmt.Sprintf("r%d", i)),
+		Verdict: limen.Allow, ReviewProbability: 0, Source: "rules/1"})
 }
 
 func TestReplayLimits(t *testing.T) {
@@ -373,21 +373,21 @@ func TestReplayLimits(t *testing.T) {
 	h := New(s, Local(tok, admin))
 	line := record(t, 0) + "\n"
 	var b strings.Builder
-	for range cribrum.MaxReplayRecords + 1 {
+	for range limen.MaxReplayRecords + 1 {
 		b.WriteString(line)
 	}
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", b.String()}), cribrum.CodeBodyTooLarge)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", b.String()}), limen.CodeBodyTooLarge)
 	if s.calls.Load() != 0 {
 		t.Error("an oversized replay reached the service")
 	}
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", record(t, 1) + "\n{not json\n"}), cribrum.CodeInvalidReplay, "records[1]")
-	bad := cribrum.ReplayRecord{At: time.Now(), Action: cribrum.Action{Org: "o", Subject: alice, ActionID: "z"}, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "s"}
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", body(t, bad)}), cribrum.CodeInvalidReplay, "records[0].action.kind")
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays?keep=maybe", line}), cribrum.CodeInvalidReplay, "keep")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", record(t, 1) + "\n{not json\n"}), limen.CodeInvalidReplay, "records[1]")
+	bad := limen.ReplayRecord{At: time.Now(), Action: limen.Action{Org: "o", Subject: alice, ActionID: "z"}, Verdict: limen.Ask, ReviewProbability: 1, Source: "s"}
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays", body(t, bad)}), limen.CodeInvalidReplay, "records[0].action.kind")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays?keep=maybe", line}), limen.CodeInvalidReplay, "keep")
 	small := New(s, Options{Authenticator: StaticToken(tok, admin), Authorizer: OwnerPolicy{Admins: []string{admin}}, MaxBodyBytes: 64})
-	wantCode(t, do(t, small, req{http.MethodPost, "/v1/replays", line}), cribrum.CodeBodyTooLarge)
+	wantCode(t, do(t, small, req{http.MethodPost, "/v1/replays", line}), limen.CodeBodyTooLarge)
 	tiny := New(s, Options{Authenticator: StaticToken(tok, admin), Authorizer: OwnerPolicy{Admins: []string{admin}}, MaxReplayBytes: 100})
-	wantCode(t, do(t, tiny, req{http.MethodPost, "/v1/replays", line + line}), cribrum.CodeBodyTooLarge)
+	wantCode(t, do(t, tiny, req{http.MethodPost, "/v1/replays", line + line}), limen.CodeBodyTooLarge)
 	if s.calls.Load() != 0 {
 		t.Error("a refused replay reached the service")
 	}
@@ -402,47 +402,47 @@ func TestDecoding(t *testing.T) {
 	if w := do(t, h, req{http.MethodPost, "/v1/predictions", extra}); w.Code != http.StatusOK {
 		t.Errorf("an unknown field: %d %s", w.Code, w.Body.String())
 	}
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", "{"}), cribrum.CodeInvalidAction)
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", `{"effect":3}`}), cribrum.CodeInvalidAction, "effect")
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", body(t, cribrum.Action{})}), cribrum.CodeInvalidAction, "org", "kind")
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/decisions", "[]"}), cribrum.CodeInvalidDecision)
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/decisions", "{}"}), cribrum.CodeInvalidDecision, "verdict")
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/answers", "{}"}), cribrum.CodeInvalidAnswer, "org")
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/answers", "x"}), cribrum.CodeInvalidAnswer)
-	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", "x"}), cribrum.CodeInvalidProfile)
-	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", body(t, cribrum.Profile{Org: "o", Costs: cribrum.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}})}), cribrum.CodeAskTooCostly)
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "x"}), cribrum.CodeInvalidQuery)
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "{}"}), cribrum.CodeInvalidQuery, "org", "subject")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", "{"}), limen.CodeInvalidAction)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", `{"effect":3}`}), limen.CodeInvalidAction, "effect")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", body(t, limen.Action{})}), limen.CodeInvalidAction, "org", "kind")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/decisions", "[]"}), limen.CodeInvalidDecision)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/decisions", "{}"}), limen.CodeInvalidDecision, "verdict")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/answers", "{}"}), limen.CodeInvalidAnswer, "org")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/answers", "x"}), limen.CodeInvalidAnswer)
+	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", "x"}), limen.CodeInvalidProfile)
+	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", body(t, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}})}), limen.CodeAskTooCostly)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "x"}), limen.CodeInvalidQuery)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "{}"}), limen.CodeInvalidQuery, "org", "subject")
 	big := `{"org":"` + strings.Repeat("x", DefaultMaxBodyBytes) + `"}`
-	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", big}), cribrum.CodeBodyTooLarge)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", big}), limen.CodeBodyTooLarge)
 }
 
 func TestQueryErrors(t *testing.T) {
 	h := New(stub.New(stub.Options{}), Local(tok, admin))
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?org=o&subject=s&limit=0", ""}), cribrum.CodeInvalidQuery, "limit")
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?org=o&subject=s&limit=x&pending=maybe", ""}), cribrum.CodeInvalidQuery, "limit", "pending")
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?subject=s&limit=501", ""}), cribrum.CodeInvalidQuery, "org", "limit")
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned&from=yesterday&to=2026-10-02T00:00:00Z", ""}), cribrum.CodeInvalidQuery, "from")
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned", ""}), cribrum.CodeInvalidQuery, "from")
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles", ""}), cribrum.CodeInvalidQuery, "org")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?org=o&subject=s&limit=0", ""}), limen.CodeInvalidQuery, "limit")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?org=o&subject=s&limit=x&pending=maybe", ""}), limen.CodeInvalidQuery, "limit", "pending")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?subject=s&limit=501", ""}), limen.CodeInvalidQuery, "org", "limit")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned&from=yesterday&to=2026-10-02T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles", ""}), limen.CodeInvalidQuery, "org")
 }
 
 // failing answers every call with err, or panics.
 type failing struct {
-	cribrum.Service
+	limen.Service
 	err   error
 	panic bool
 }
 
-func (f failing) Predict(context.Context, cribrum.Action) (cribrum.Prediction, error) {
+func (f failing) Predict(context.Context, limen.Action) (limen.Prediction, error) {
 	if f.panic {
 		panic("boom")
 	}
-	return cribrum.Prediction{}, f.err
+	return limen.Prediction{}, f.err
 }
 
-func (f failing) Profile(context.Context, cribrum.Scope) (cribrum.Profile, error) {
-	return cribrum.Profile{}, f.err
+func (f failing) Profile(context.Context, limen.Scope) (limen.Profile, error) {
+	return limen.Profile{}, f.err
 }
 
 func TestErrorMapping(t *testing.T) {
@@ -451,13 +451,13 @@ func TestErrorMapping(t *testing.T) {
 	predict := req{http.MethodPost, "/v1/predictions", body(t, action(admin, "e1"))}
 	cases := []struct {
 		svc  failing
-		code cribrum.Code
+		code limen.Code
 	}{
-		{failing{err: errors.New("store: down")}, cribrum.CodeUnavailable},
-		{failing{err: context.DeadlineExceeded}, cribrum.CodeUnavailable},
-		{failing{err: &cribrum.Error{Code: cribrum.CodeInternal, Detail: "bug"}}, cribrum.CodeInternal},
-		{failing{err: &cribrum.Error{Code: cribrum.CodeActionConflict, Fields: []string{"action_id"}}}, cribrum.CodeActionConflict},
-		{failing{panic: true}, cribrum.CodeInternal},
+		{failing{err: errors.New("store: down")}, limen.CodeUnavailable},
+		{failing{err: context.DeadlineExceeded}, limen.CodeUnavailable},
+		{failing{err: &limen.Error{Code: limen.CodeInternal, Detail: "bug"}}, limen.CodeInternal},
+		{failing{err: &limen.Error{Code: limen.CodeActionConflict, Fields: []string{"action_id"}}}, limen.CodeActionConflict},
+		{failing{panic: true}, limen.CodeInternal},
 	}
 	for _, c := range cases {
 		h := New(c.svc, Options{Authenticator: StaticToken(tok, admin), Authorizer: OwnerPolicy{Admins: []string{admin}}, Logger: log})
@@ -468,7 +468,7 @@ func TestErrorMapping(t *testing.T) {
 	}
 	logged.Reset()
 	h := New(failing{err: context.Canceled}, Options{Authenticator: StaticToken(tok, admin), Authorizer: OwnerPolicy{Admins: []string{admin}}, Logger: log})
-	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles?org=o", ""}), cribrum.CodeUnavailable)
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles?org=o", ""}), limen.CodeUnavailable)
 	if logged.Len() != 0 {
 		t.Errorf("a canceled request was logged: %s", logged.String())
 	}
@@ -477,19 +477,19 @@ func TestErrorMapping(t *testing.T) {
 func TestAuthentication(t *testing.T) {
 	svc := stub.New(stub.Options{})
 	profile := req{http.MethodGet, "/v1/profiles?org=o", ""}
-	wantCode(t, do(t, New(svc, Options{}), profile), cribrum.CodeUnauthenticated)
+	wantCode(t, do(t, New(svc, Options{}), profile), limen.CodeUnauthenticated)
 	h := New(svc, Local(tok, admin))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/profiles?org=o", nil))
-	wantCode(t, w, cribrum.CodeUnauthenticated)
+	wantCode(t, w, limen.CodeUnauthenticated)
 	wrong := httptest.NewRequest(http.MethodGet, "/v1/profiles?org=o", nil)
 	wrong.Header.Set("Authorization", "Bearer nope")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, wrong)
-	wantCode(t, w, cribrum.CodeUnauthenticated)
-	wantCode(t, do(t, New(svc, Options{Authenticator: StaticToken("", admin)}), profile), cribrum.CodeUnauthenticated)
+	wantCode(t, w, limen.CodeUnauthenticated)
+	wantCode(t, do(t, New(svc, Options{Authenticator: StaticToken("", admin)}), profile), limen.CodeUnauthenticated)
 	nobody := AuthenticatorFunc(func(*http.Request) (Caller, error) { return Caller{}, nil })
-	wantCode(t, do(t, New(svc, Options{Authenticator: nobody}), profile), cribrum.CodeUnauthenticated)
+	wantCode(t, do(t, New(svc, Options{Authenticator: nobody}), profile), limen.CodeUnauthenticated)
 	if c, err := StaticToken(tok, admin).Authenticate(httptest.NewRequest(http.MethodGet, "/", nil)); !errors.Is(err, ErrNoBearer) || c.Subject != "" {
 		t.Errorf("no bearer: %+v, %v", c, err)
 	}
@@ -551,7 +551,7 @@ func TestOwnerPolicy(t *testing.T) {
 	if !ask(alice, caseResource("o", alice)) || ask(bob, caseResource("o", alice)) || !ask(admin, caseResource("o", alice)) {
 		t.Error("case ownership")
 	}
-	if ask(alice, profileResource(cribrum.Scope{Org: "o"})) || !ask(admin, replayResource("o")) || ask("", caseResource("o", "")) {
+	if ask(alice, profileResource(limen.Scope{Org: "o"})) || !ask(admin, replayResource("o")) || ask("", caseResource("o", "")) {
 		t.Error("admin-only resources")
 	}
 	if ask(admin, authz.NewResource(authorizer.KindCase, authz.ProbeID, nil)) {
@@ -617,7 +617,7 @@ func TestReplayReadError(t *testing.T) {
 	hr.Header.Set("Authorization", "Bearer "+tok)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, hr)
-	wantCode(t, w, cribrum.CodeInvalidReplay)
+	wantCode(t, w, limen.CodeInvalidReplay)
 }
 
 type errReader struct{}

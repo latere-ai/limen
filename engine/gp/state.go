@@ -9,7 +9,7 @@ import (
 	"math"
 	"slices"
 
-	"latere.ai/x/cribrum/engine/kernel"
+	"latere.ai/x/limen/engine/kernel"
 )
 
 // State is everything a fitted posterior holds except its kernel, for a

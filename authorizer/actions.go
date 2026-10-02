@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package authorizer is Cribrum's action vocabulary for the shared
-// authorizer contract, latere.ai/x/pkg/authz: every question cribrumd asks
+// Package authorizer is Limen's action vocabulary for the shared
+// authorizer contract, latere.ai/x/pkg/authz: every question limend asks
 // an authorization endpoint before it acts, and the resource kind each
-// question is about. An endpoint written for Cribrum answers these actions
+// question is about. An endpoint written for Limen answers these actions
 // and no others.
 package authorizer
 
 import "latere.ai/x/pkg/authz"
 
 // Core is the name the shared contract carries this vocabulary under.
-const Core = "cribrum"
+const Core = "limen"
 
-// The resource kinds of Cribrum's API. A Case carries the org and subject
+// The resource kinds of Limen's API. A Case carries the org and subject
 // it belongs to; a Profile its org, and its kind and agent when it is
 // scoped to them; a Replay and a Subject the org.
 const (
@@ -34,7 +34,7 @@ const (
 	ActionCasePredict = "case.predict"
 	ActionCaseDecide  = "case.decide"
 	// ActionCaseAnswer is also the permission to relay an answer for the
-	// subject, which [cribrum.Answer.By] attributes.
+	// subject, which [limen.Answer.By] attributes.
 	ActionCaseAnswer = "case.answer"
 	ActionCaseList   = "case.list"
 
@@ -71,7 +71,7 @@ var labels = map[string]string{
 	KindSubject:     "People",
 }
 
-// Vocabulary returns Cribrum's action table. It panics only if the table
+// Vocabulary returns Limen's action table. It panics only if the table
 // above is malformed, which its test rules out.
 func Vocabulary() authz.Vocabulary { return must(build(table)) }
 

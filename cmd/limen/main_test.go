@@ -18,8 +18,8 @@ import (
 	"latere.ai/x/pkg/errwriter"
 	"latere.ai/x/topos/session"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/importer/topos/topostest"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/importer/topos/topostest"
 )
 
 // env is a getenv over a map, so no test reads the process's environment.
@@ -67,11 +67,11 @@ func TestReplayTopos(t *testing.T) {
 		"Replayed 160 actions; 160 of them have your answer.",
 		"Skipped 1 action:",
 		"the log predates recorded verdicts",
-		"What Cribrum would have suggested:",
+		"What Limen would have suggested:",
 		"allow", "ask", "block",
 		"would have allowed, and you denied:",
-		"How often Cribrum's allows would be wrong:",
-		"under Cribrum:",
+		"How often Limen's allows would be wrong:",
+		"under Limen:",
 		"in this history: 100.0% of actions had your answer",
 	} {
 		if !strings.Contains(out, want) {
@@ -90,8 +90,8 @@ func TestReplayToposJSON(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
 	var got struct {
-		Report  cribrum.ReplayReport `json:"report"`
-		Skipped map[string]int       `json:"skipped"`
+		Report  limen.ReplayReport `json:"report"`
+		Skipped map[string]int     `json:"skipped"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("%v:\n%s", err, out)
@@ -99,8 +99,8 @@ func TestReplayToposJSON(t *testing.T) {
 	if got.Report.Records != 80 || got.Report.Answered != 80 || got.Skipped["the log predates recorded verdicts"] != 1 {
 		t.Errorf("report %+v, skipped %v", got.Report, got.Skipped)
 	}
-	if got.Report.Would[cribrum.Allow] == 0 || got.Report.Would[cribrum.Block] == 0 {
-		t.Errorf("Cribrum learned nothing from 80 answers: %+v", got.Report.Would)
+	if got.Report.Would[limen.Allow] == 0 || got.Report.Would[limen.Block] == 0 {
+		t.Errorf("Limen learned nothing from 80 answers: %+v", got.Report.Would)
 	}
 }
 
@@ -132,13 +132,13 @@ func TestReplayFile(t *testing.T) {
 	var lines []string
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	for i := range 40 {
-		a := cribrum.Action{Org: "o", Subject: "s", ActionID: fmt.Sprintf("a%d", i), Kind: "tool", Name: "bash", Effect: cribrum.EffectWrite,
+		a := limen.Action{Org: "o", Subject: "s", ActionID: fmt.Sprintf("a%d", i), Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
 			Input: json.RawMessage(`{"command":"go test ./..."}`)}
 		approve := &yes
 		if i%5 == 0 {
 			approve = &no
 		}
-		b, err := json.Marshal(cribrum.ReplayRecord{At: at.Add(time.Duration(i) * time.Minute), Action: a, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "rules/1", Approve: approve})
+		b, err := json.Marshal(limen.ReplayRecord{At: at.Add(time.Duration(i) * time.Minute), Action: a, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1", Approve: approve})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,7 +208,7 @@ func TestUsage(t *testing.T) {
 			t.Errorf("%v: exit %d", help, code)
 		}
 	}
-	if code, out, _ := runCLI(t, "", env(nil), "version"); code != exitOK || !strings.HasPrefix(out, "cribrum ") {
+	if code, out, _ := runCLI(t, "", env(nil), "version"); code != exitOK || !strings.HasPrefix(out, "limen ") {
 		t.Errorf("version: exit %d: %q", code, out)
 	}
 }
@@ -237,10 +237,10 @@ func TestReportPieces(t *testing.T) {
 	}
 	var buf bytes.Buffer
 	v := 0.02
-	writeReport(errwriter.New(&buf), cribrum.ReplayReport{Records: 10, Answered: 40, Would: map[cribrum.Verdict]int{cribrum.Allow: 10},
-		FalseAllow: cribrum.Estimate{Value: &v, Covered: 0.5, Reviews: 9}, Kept: true}, nil)
+	writeReport(errwriter.New(&buf), limen.ReplayReport{Records: 10, Answered: 40, Would: map[limen.Verdict]int{limen.Allow: 10},
+		FalseAllow: limen.Estimate{Value: &v, Covered: 0.5, Reviews: 9}, Kept: true}, nil)
 	out := buf.String()
-	for _, want := range []string{"2.0% of its allows (95% interval 0.0% to 100.0%)", "50.0% of its allows", "now part of Cribrum's ledger"} {
+	for _, want := range []string{"2.0% of its allows (95% interval 0.0% to 100.0%)", "50.0% of its allows", "now part of Limen's ledger"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}

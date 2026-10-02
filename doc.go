@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package cribrum is the contract of Cribrum, the oversight layer for automated
+// Package limen is the contract of Limen, the oversight layer for automated
 // actions: which actions may run on their own, which a person should see,
 // and how often each source of those decisions is wrong.
 //
 // An automated actor, an agent most often, proposes an [Action]: a tool
 // call, a network request, a push, a payment. A decision point, the code
-// that lets the action run or not, owns the decision. Cribrum serves it in
+// that lets the action run or not, owns the decision. Limen serves it in
 // three orthogonal parts:
 //
 //   - The [Predictor] predicts, for the person on whose behalf the action
@@ -20,7 +20,7 @@
 //     ([Decision]).
 //   - The [Ledger] keeps every decision and the person's [Answer], learns
 //     from them, and reports how often any source of decisions allows
-//     what the person would deny ([Reliability]): Cribrum's own predictions,
+//     what the person would deny ([Reliability]): Limen's own predictions,
 //     the decisions applied, a rule, or an LLM judge whose verdict arrived
 //     as a [Signal].
 //
@@ -39,4 +39,4 @@
 // ([CertificationSize]), and the fail-closed wrapper every decision point
 // should put around a predictor ([FailClosed]). It imports the standard
 // library and latere.ai/x/pkg/verdict only.
-package cribrum
+package limen

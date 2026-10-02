@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Command cribrumd serves Cribrum's HTTP API over a ledger kept in a
+// Command limend serves Limen's HTTP API over a ledger kept in a
 // directory, for one person: decision points such as Topos send their
 // actions, decisions and answers to it, and it learns from them.
 //
 // It is configured by the environment:
 //
-//	CRIBRUM_TOKEN     the bearer every request carries; required
-//	CRIBRUM_ADDR      the address to listen on; default 127.0.0.1:7720
-//	CRIBRUM_DATA_DIR  the ledger's directory; default $XDG_STATE_HOME/cribrum,
-//	                  or ~/.local/state/cribrum
-//	CRIBRUM_SUBJECT   the person the server answers to, who may act for every
+//	LIMEN_TOKEN     the bearer every request carries; required
+//	LIMEN_ADDR      the address to listen on; default 127.0.0.1:7720
+//	LIMEN_DATA_DIR  the ledger's directory; default $XDG_STATE_HOME/limen,
+//	                  or ~/.local/state/limen
+//	LIMEN_SUBJECT   the person the server answers to, who may act for every
 //	                  subject in it; default local
 //
 // It stops on an interrupt or a termination signal, after fitting what
@@ -37,10 +37,10 @@ import (
 
 	"latere.ai/x/pkg/errwriter"
 
-	"latere.ai/x/cribrum/engine"
-	"latere.ai/x/cribrum/engine/store/file"
-	"latere.ai/x/cribrum/internal/version"
-	"latere.ai/x/cribrum/server"
+	"latere.ai/x/limen/engine"
+	"latere.ai/x/limen/engine/store/file"
+	"latere.ai/x/limen/internal/version"
+	"latere.ai/x/limen/server"
 )
 
 // The exit codes.
@@ -68,11 +68,11 @@ var listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", 
 
 func run(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	out, errOut := errwriter.New(stdout), errwriter.New(stderr)
-	fs := flag.NewFlagSet("cribrumd", flag.ContinueOnError)
+	fs := flag.NewFlagSet("limend", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		errOut.Print("Usage: cribrumd [-version]\n\nConfigured by CRIBRUM_TOKEN, CRIBRUM_ADDR, CRIBRUM_DATA_DIR and CRIBRUM_SUBJECT.\n")
+		errOut.Print("Usage: limend [-version]\n\nConfigured by LIMEN_TOKEN, LIMEN_ADDR, LIMEN_DATA_DIR and LIMEN_SUBJECT.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -81,38 +81,38 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		return exitConfig
 	}
 	if *showVersion {
-		out.Println(version.String("cribrumd"))
+		out.Println(version.String("limend"))
 		return exitOK
 	}
 	if fs.NArg() > 0 {
-		errOut.Printf("cribrumd: unexpected argument %q.\n", fs.Arg(0))
+		errOut.Printf("limend: unexpected argument %q.\n", fs.Arg(0))
 		return exitConfig
 	}
-	token := strings.TrimSpace(getenv("CRIBRUM_TOKEN"))
+	token := strings.TrimSpace(getenv("LIMEN_TOKEN"))
 	if token == "" {
-		errOut.Println("cribrumd: set CRIBRUM_TOKEN to a secret first. Decision points send it as their bearer token.")
+		errOut.Println("limend: set LIMEN_TOKEN to a secret first. Decision points send it as their bearer token.")
 		return exitConfig
 	}
-	addr := cmp.Or(strings.TrimSpace(getenv("CRIBRUM_ADDR")), defaultAddr)
-	subject := cmp.Or(strings.TrimSpace(getenv("CRIBRUM_SUBJECT")), "local")
+	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
+	subject := cmp.Or(strings.TrimSpace(getenv("LIMEN_SUBJECT")), "local")
 	dir := dataDir(getenv)
 	if dir == "" {
-		errOut.Println("cribrumd: there is no directory for the ledger. Set CRIBRUM_DATA_DIR.")
+		errOut.Println("limend: there is no directory for the ledger. Set LIMEN_DATA_DIR.")
 		return exitConfig
 	}
 	st, err := file.Open(dir)
 	if err != nil {
-		errOut.Printf("cribrumd: could not open the ledger in %s: %v\n", dir, err)
+		errOut.Printf("limend: could not open the ledger in %s: %v\n", dir, err)
 		return exitFail
 	}
 	defer func() {
 		if err := st.Close(); err != nil {
-			errOut.Printf("cribrumd: closing the ledger: %v\n", err)
+			errOut.Printf("limend: closing the ledger: %v\n", err)
 		}
 	}()
 	ln, err := listen(addr)
 	if err != nil {
-		errOut.Printf("cribrumd: could not listen on %s: %v\n", addr, err)
+		errOut.Printf("limend: could not listen on %s: %v\n", addr, err)
 		return exitFail
 	}
 	ctx, stop := signalContext()
@@ -128,41 +128,41 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	out.Printf("Cribrum is serving http://%s with its ledger in %s. Stop it with Ctrl-C.\n", ln.Addr(), dir)
+	out.Printf("Limen is serving http://%s with its ledger in %s. Stop it with Ctrl-C.\n", ln.Addr(), dir)
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	select {
 	case err := <-done:
-		errOut.Printf("cribrumd: the server stopped: %v\n", err)
+		errOut.Printf("limend: the server stopped: %v\n", err)
 		return exitFail
 	case <-ctx.Done():
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdown); err != nil {
-		errOut.Printf("cribrumd: stopping: %v\n", err)
+		errOut.Printf("limend: stopping: %v\n", err)
 		return exitFail
 	}
 	// Fit what arrived since the last fit, so a restart predicts from it.
 	if err := eng.Flush(shutdown); err != nil {
-		errOut.Printf("cribrumd: fitting before stopping: %v\n", err)
+		errOut.Printf("limend: fitting before stopping: %v\n", err)
 		return exitFail
 	}
-	out.Println("Cribrum stopped.")
+	out.Println("Limen stopped.")
 	return exitOK
 }
 
-// dataDir is where the ledger lives: CRIBRUM_DATA_DIR, or cribrum under the
+// dataDir is where the ledger lives: LIMEN_DATA_DIR, or limen under the
 // XDG state directory or ~/.local/state.
 func dataDir(getenv func(string) string) string {
-	if d := strings.TrimSpace(getenv("CRIBRUM_DATA_DIR")); d != "" {
+	if d := strings.TrimSpace(getenv("LIMEN_DATA_DIR")); d != "" {
 		return d
 	}
 	if d := strings.TrimSpace(getenv("XDG_STATE_HOME")); d != "" {
-		return filepath.Join(d, "cribrum")
+		return filepath.Join(d, "limen")
 	}
 	if h := strings.TrimSpace(getenv("HOME")); h != "" {
-		return filepath.Join(h, ".local", "state", "cribrum")
+		return filepath.Join(h, ".local", "state", "limen")
 	}
 	return ""
 }

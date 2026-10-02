@@ -3,11 +3,11 @@
 
 package estimate
 
-import "latere.ai/x/cribrum"
+import "latere.ai/x/limen"
 
 // ReviewOf returns the case's review, the first answer to an action its
 // decision showed a person, or nil when it has none.
-func ReviewOf(c cribrum.Case) *cribrum.RecordedAnswer {
+func ReviewOf(c limen.Case) *limen.RecordedAnswer {
 	for i := range c.Answers {
 		if c.Answers[i].Review {
 			return &c.Answers[i]
@@ -18,7 +18,7 @@ func ReviewOf(c cribrum.Case) *cribrum.RecordedAnswer {
 
 // Pending reports whether the case waits for a review: its decision showed
 // the action to a person, and nobody has answered yet.
-func Pending(c cribrum.Case) bool {
+func Pending(c limen.Case) bool {
 	return c.Decision != nil && c.Decision.Verdict.Shown() && ReviewOf(c) == nil
 }
 
@@ -26,12 +26,12 @@ func Pending(c cribrum.Case) bool {
 // source gave no verdict on the case. Every ledger builds its rows here, so
 // two implementations report the same estimates for the same cases.
 //
-// The source's verdict is the prediction's for [cribrum.OfLearned] (a
+// The source's verdict is the prediction's for [limen.OfLearned] (a
 // fallback prediction is no suggestion and gives no row), [Automatic] of the
-// decision for [cribrum.OfApplied] and for a decision source, and the
+// decision for [limen.OfApplied] and for a decision source, and the
 // signal's for a signal source, where a flag counts as an allow because the
 // action ran.
-func RowOf(c cribrum.Case, of string) (Row, bool) {
+func RowOf(c limen.Case, of string) (Row, bool) {
 	var r Row
 	if c.Decision != nil {
 		r.Review = c.Decision.ReviewProbability
@@ -41,12 +41,12 @@ func RowOf(c cribrum.Case, of string) (Row, bool) {
 		}
 	}
 	switch {
-	case of == cribrum.OfLearned:
-		if c.Prediction == nil || c.Prediction.Source == cribrum.SourceUnavailable {
+	case of == limen.OfLearned:
+		if c.Prediction == nil || c.Prediction.Source == limen.SourceUnavailable {
 			return r, false
 		}
 		r.Verdict = c.Prediction.Verdict
-	case of == cribrum.OfApplied || (c.Decision != nil && c.Decision.Source == of):
+	case of == limen.OfApplied || (c.Decision != nil && c.Decision.Source == of):
 		if c.Decision == nil {
 			return r, false
 		}
@@ -55,8 +55,8 @@ func RowOf(c cribrum.Case, of string) (Row, bool) {
 		for _, s := range c.Action.Signals {
 			if s.Source == of && s.Verdict != "" {
 				r.Verdict = s.Verdict
-				if r.Verdict == cribrum.Flag {
-					r.Verdict = cribrum.Allow
+				if r.Verdict == limen.Flag {
+					r.Verdict = limen.Allow
 				}
 			}
 		}

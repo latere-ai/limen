@@ -1,11 +1,11 @@
 # Contributing
 
-Thanks for looking. This file is for people and agents changing Cribrum.
+Thanks for looking. This file is for people and agents changing Limen.
 Users read the [README](README.md) and [`docs/`](docs/README.md), and the
 design records with the reasoning behind each decision are in
 [`specs/`](specs/README.md).
 
-Cribrum is the oversight layer for automated actions: a shared verdict
+Limen is the oversight layer for automated actions: a shared verdict
 vocabulary (`latere.ai/x/pkg/verdict`), a ledger that records what
 decision points decided and how often each source of decisions is
 wrong, and a predictor that learns when a person needs to see an action.
@@ -86,7 +86,7 @@ named in the CHANGELOG.
 Eight invariants of [spec 001](specs/001-architecture.md) are not
 negotiable in a change: a deterministic deny is final; a failure asks;
 the review probability is the decision point's, drawn once and recorded
-with its decision; an action Cribrum knows nothing about is an ask; an
+with its decision; an action Limen knows nothing about is an ask; an
 action's input is never stored; an answer's role follows from the
 recorded decision; a key names one action; and forgetting a person
 removes everything of theirs in that organization.
@@ -109,8 +109,8 @@ In this repository:
 
 | Reader | Surfaces |
 |---|---|
-| User: a person, or a harness that shows Cribrum's output to one | `README.md`, `docs/`, the `message` of an API error, a prediction's `reason` |
-| Contributor: someone changing Cribrum | `specs/`, this file, package documentation, source comments, commit messages |
+| User: a person, or a harness that shows Limen's output to one | `README.md`, `docs/`, the `message` of an API error, a prediction's `reason` |
+| Contributor: someone changing Limen | `specs/`, this file, package documentation, source comments, commit messages |
 | Developer: someone debugging a running installation | an error's `details.detail` and `details.fields`, log lines, `Error.Error()` |
 
 An error code's sentence is fixed in `errors.go` beside the code and

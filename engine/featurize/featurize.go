@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package featurize turns an action into the two feature vectors Cribrum's
+// Package featurize turns an action into the two feature vectors Limen's
 // kernel compares: A, what the action is, and C, where and how it runs.
 // This is features/1 of specs/004-engine.md, and its tables are the
 // contract: the groups, their widths and offsets, and their encodings.
@@ -54,7 +54,7 @@ import (
 	"sort"
 	"strings"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 // Version names this featurizer; a model keeps the version it was fitted
@@ -102,7 +102,7 @@ type Features struct{ A, C []float64 }
 // Of featurizes one action. It never fails: every input, including an
 // empty action, an unknown kind or tool, malformed input JSON, a missing
 // target or environment, has a defined encoding.
-func Of(a cribrum.Action) Features {
+func Of(a limen.Action) Features {
 	A := make([]float64, DimA)
 	C := make([]float64, DimC)
 
@@ -114,7 +114,7 @@ func Of(a cribrum.Action) Features {
 	}
 
 	// A: effect, one-hot.
-	if i := slices.Index([]cribrum.Effect{cribrum.EffectNone, cribrum.EffectRead, cribrum.EffectWrite, cribrum.EffectExternal}, a.Effect); i >= 0 {
+	if i := slices.Index([]limen.Effect{limen.EffectNone, limen.EffectRead, limen.EffectWrite, limen.EffectExternal}, a.Effect); i >= 0 {
 		A[aEffect+i] = 1
 	}
 	// A: irreversibility in [0, 1].
@@ -195,7 +195,7 @@ func Of(a cribrum.Action) Features {
 // shellNames are the tool names whose input is a shell command.
 var shellNames = set("bash", "shell", "sh", "exec_command", "run_shell_command", "local_shell")
 
-func isShell(a cribrum.Action) bool {
+func isShell(a limen.Action) bool {
 	return strings.EqualFold(a.Kind, "tool") && shellNames[strings.ToLower(a.Name)]
 }
 
@@ -338,13 +338,13 @@ func number(x any) (float64, bool) {
 }
 
 // levels place a signal's verdict on [0, 1].
-var levels = map[cribrum.Verdict]float64{cribrum.Allow: 0, cribrum.Flag: 1.0 / 3, cribrum.Ask: 2.0 / 3, cribrum.Block: 1}
+var levels = map[limen.Verdict]float64{limen.Allow: 0, limen.Flag: 1.0 / 3, limen.Ask: 2.0 / 3, limen.Block: 1}
 
 // signals encodes the signals in eight buckets by hash(source), three
 // slots each: the verdict's level, 1 when a verdict is present, and the
 // score; within a bucket each slot keeps its maximum. The group is scaled
 // to length at most 1.
-func signals(v []float64, sigs []cribrum.Signal) {
+func signals(v []float64, sigs []limen.Signal) {
 	for _, s := range sigs {
 		b := 3 * bucket(s.Source, signalBuckets)
 		if lv, ok := levels[s.Verdict]; ok {

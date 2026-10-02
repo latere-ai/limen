@@ -29,18 +29,18 @@ LDFLAGS = -X $(VERSION_PKG).Version=$(VERSION) \
           -X $(VERSION_PKG).Commit=$(COMMIT)$(DIRTY) \
           -X $(VERSION_PKG).Date=$(BUILD_DATE)
 
-# Both binaries: cribrumd, the server, and cribrum, the replay command line.
+# Both binaries: limend, the server, and limen, the replay command line.
 build:
 	@mkdir -p $(OUT_DIR)
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(OUT_DIR)/cribrumd ./cmd/cribrumd
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(OUT_DIR)/cribrum ./cmd/cribrum
-	@echo "built $(OUT_DIR)/cribrumd $(OUT_DIR)/cribrum"
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(OUT_DIR)/limend ./cmd/limend
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(OUT_DIR)/limen ./cmd/limen
+	@echo "built $(OUT_DIR)/limend $(OUT_DIR)/limen"
 
 # The server on loopback as one person runs it, with its ledger under out/
-# so a trial run leaves the person's own ledger alone. CRIBRUM_TOKEN is the
-# bearer a decision point sends, and cribrumd refuses to start without it.
+# so a trial run leaves the person's own ledger alone. LIMEN_TOKEN is the
+# bearer a decision point sends, and limend refuses to start without it.
 run: build
-	CRIBRUM_DATA_DIR=$${CRIBRUM_DATA_DIR:-$(OUT_DIR)/ledger} $(OUT_DIR)/cribrumd
+	LIMEN_DATA_DIR=$${LIMEN_DATA_DIR:-$(OUT_DIR)/ledger} $(OUT_DIR)/limend
 
 fmt:
 	gofmt -w $$(git ls-files '*.go')

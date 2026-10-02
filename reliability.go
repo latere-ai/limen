@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package cribrum
+package limen
 
 import "time"
 
 // The two sources a reliability query names besides the sources of
 // signals and decisions.
 const (
-	// OfLearned asks about Cribrum's own suggestions.
+	// OfLearned asks about Limen's own suggestions.
 	OfLearned = "learned"
 	// OfApplied asks about the verdicts decision points applied, whatever
 	// decided them.

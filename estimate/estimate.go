@@ -20,7 +20,7 @@ import (
 	"math"
 	"slices"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 // Side selects which error a [Rate] estimates.
@@ -39,7 +39,7 @@ const (
 type Row struct {
 	// Verdict is the source's verdict on the action: what a prediction or a
 	// signal said, or, for a decision source, [Automatic] of the decision.
-	Verdict cribrum.Verdict
+	Verdict limen.Verdict
 	// Review is the review probability the action's decision recorded; zero
 	// when the action has no decision.
 	Review float64
@@ -53,16 +53,16 @@ type Row struct {
 
 // Automatic maps a recorded decision to the automatic verdict it stands
 // for: an allow or a flag ran without a person deciding first, so both are
-// [cribrum.Allow]; a block, and an ask drawn from a block for review (review
-// probability below one), are [cribrum.Block]; an ask with review probability
+// [limen.Allow]; a block, and an ask drawn from a block for review (review
+// probability below one), are [limen.Block]; an ask with review probability
 // one was a person's decision from the start and is no automatic verdict,
 // so it returns the empty verdict.
-func Automatic(v cribrum.Verdict, review float64) cribrum.Verdict {
+func Automatic(v limen.Verdict, review float64) limen.Verdict {
 	switch {
-	case v == cribrum.Allow || v == cribrum.Flag:
-		return cribrum.Allow
-	case v == cribrum.Block || (v == cribrum.Ask && review < 1):
-		return cribrum.Block
+	case v == limen.Allow || v == limen.Flag:
+		return limen.Allow
+	case v == limen.Block || (v == limen.Ask && review < 1):
+		return limen.Block
 	}
 	return ""
 }
@@ -72,8 +72,8 @@ const z = 1.959963984540054
 
 // Rate estimates one error rate from the rows.
 //
-// The rows on the side's verdict ([cribrum.Allow] for [FalseAllow],
-// [cribrum.Block] for [FalseBlock]) are the population. Covered rows are
+// The rows on the side's verdict ([limen.Allow] for [FalseAllow],
+// [limen.Block] for [FalseBlock]) are the population. Covered rows are
 // those with a positive review probability; the value is nil when there are
 // none, because nothing could have been observed. Otherwise the value is
 // the Horvitz-Thompson estimate of the errors among covered rows, adjusted
@@ -87,14 +87,14 @@ const z = 1.959963984540054
 // weights standing in for the number of trials, so a review at probability
 // 0.05 counts for less than twenty reviews at probability one. With no
 // review the interval is [0, 1].
-func Rate(rows []Row, side Side) cribrum.Estimate {
-	target := cribrum.Allow
+func Rate(rows []Row, side Side) limen.Estimate {
+	target := limen.Allow
 	if side == FalseBlock {
-		target = cribrum.Block
+		target = limen.Block
 	}
 	var (
 		n, covered         int
-		est                cribrum.Estimate
+		est                limen.Estimate
 		errW, revW, shownW float64
 		sumW, sumW2        float64
 	)
@@ -165,16 +165,16 @@ func wilson(p, n float64) [2]float64 {
 // Certificate tests the claim certify against rows in chronological order:
 // the most recent run of clean audited allows, reviews with probability
 // below one on the source's allows that the person approved. A denied one
-// ends the run. A zero certify takes [cribrum.DefaultCertify]; an invalid one
+// ends the run. A zero certify takes [limen.DefaultCertify]; an invalid one
 // reports a certificate that does not hold.
-func Certificate(rows []Row, certify cribrum.Certify) cribrum.Certificate {
-	if certify == (cribrum.Certify{}) {
-		certify = cribrum.DefaultCertify
+func Certificate(rows []Row, certify limen.Certify) limen.Certificate {
+	if certify == (limen.Certify{}) {
+		certify = limen.DefaultCertify
 	}
-	c := cribrum.Certificate{Alpha: certify.Alpha, Delta: certify.Delta}
+	c := limen.Certificate{Alpha: certify.Alpha, Delta: certify.Delta}
 	for _, r := range slices.Backward(rows) {
 
-		if r.Verdict != cribrum.Allow || !r.Shown || !r.Reviewed || !(r.Review > 0 && r.Review < 1) {
+		if r.Verdict != limen.Allow || !r.Shown || !r.Reviewed || !(r.Review > 0 && r.Review < 1) {
 			continue
 		}
 		if !r.Approve {
@@ -182,7 +182,7 @@ func Certificate(rows []Row, certify cribrum.Certify) cribrum.Certificate {
 		}
 		c.Clean++
 	}
-	needed, err := cribrum.CertificationSize(certify.Alpha, certify.Delta)
+	needed, err := limen.CertificationSize(certify.Alpha, certify.Delta)
 	if err != nil {
 		return c
 	}

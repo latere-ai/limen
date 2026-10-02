@@ -6,9 +6,9 @@ package storetest_test
 import (
 	"testing"
 
-	"latere.ai/x/cribrum/engine/store"
-	"latere.ai/x/cribrum/engine/store/file"
-	"latere.ai/x/cribrum/engine/store/storetest"
+	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/limen/engine/store/file"
+	"latere.ai/x/limen/engine/store/storetest"
 )
 
 // The suite passes against the memory store.

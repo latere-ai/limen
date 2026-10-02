@@ -1,6 +1,6 @@
 # Principles
 
-Fourteen rules every implementation of Cribrum keeps. Each says what holds,
+Fourteen rules every implementation of Limen keeps. Each says what holds,
 why, and how it is checked. Most are checked by the conformance suite in
 `conformance/`, which runs against any implementation of the contract;
 the rest by the tests of the shared verdict package
@@ -8,19 +8,19 @@ the rest by the tests of the shared verdict package
 reasoning behind the rules is in [Theory](theory.md) and in the paper it
 cites.
 
-## 1. Cribrum suggests; the decision point decides
+## 1. Limen suggests; the decision point decides
 
-Cribrum predicts and suggests. The decision point, the code that lets an
+Limen predicts and suggests. The decision point, the code that lets an
 action run, composes that suggestion with its own rules, applies the
 verdict, and records what it did.
 
 **Why.** Only the code that applies a verdict knows which verdict was
 applied: a rule that narrowed it, a hook, a person's earlier "always allow
-this", a rollout in which Cribrum is only watching. If Cribrum also decided,
+this", a rollout in which Limen is only watching. If Limen also decided,
 its records would describe what it would have done, and every error rate
 built on them would be wrong whenever the decision point did something
 else. Keeping the decision with the decision point makes the record true by
-construction, and it lets a harness use Cribrum's ledger with no predictor at
+construction, and it lets a harness use Limen's ledger with no predictor at
 all.
 
 **Checked by.** The contract: a prediction carries only a suggestion
@@ -62,11 +62,11 @@ prediction's thresholds are the ones its profile's costs imply.
 
 ## 4. An action about someone unknown is an ask
 
-Cribrum refuses a cost profile under which it would allow or block an action
+Limen refuses a cost profile under which it would allow or block an action
 about a person it knows nothing about. Each kind of error must cost more
 than two interruptions.
 
-**Why.** With no answers from a person, Cribrum's probability that they
+**Why.** With no answers from a person, Limen's probability that they
 approve is one half. The ask band contains one half exactly when
 `false_allow > 2 * ask` and `false_block > 2 * ask`. Under any other costs a
 new person's first action would be decided on no evidence at all. Saving
@@ -79,7 +79,7 @@ profile.
 ## 5. A deterministic deny is final
 
 Your decision point's rules set a ceiling: the most permissive verdict
-they leave open. Nothing Cribrum suggests can exceed it, and a ceiling of
+they leave open. Nothing Limen suggests can exceed it, and a ceiling of
 `block` is never reviewed or overturned.
 
 **Why.** Rules you wrote down, such as "never push to a protected branch",
@@ -93,7 +93,7 @@ input yields a verdict more permissive than the ceiling.
 
 ## 6. Failure means ask
 
-When Cribrum fails, is slow, or cannot be reached, the action waits for a
+When Limen fails, is slow, or cannot be reached, the action waits for a
 person. It is never allowed by default.
 
 **Why.** A gate that fails open is not a gate. `FailClosed` bounds how long
@@ -108,13 +108,13 @@ never as suggestions.
 
 ## 7. Some asks never go away
 
-Where a person is genuinely undecided about a kind of action, Cribrum keeps
+Where a person is genuinely undecided about a kind of action, Limen keeps
 suggesting to ask, however much it has learned.
 
 **Why.** If a person approves a kind of action about half the time, no
 model can predict their answer, and under most costs asking is the
 cheapest choice. The share of actions that must be asked about, even with
-a perfect model, is set by the person and the costs, not by Cribrum. In the
+a perfect model, is set by the person and the costs, not by Limen. In the
 paper's simulation it was 10.3% of actions under symmetric costs and 31.3%
 under costs that weigh a wrong allow ten times an interruption. A promise
 of "95% automation" is a claim about the person, not the product.
@@ -124,7 +124,7 @@ because thresholds come only from the profile (rule 3).
 
 ## 8. Forget the person's tolerance, not the action's risk
 
-Cribrum's model lets a person's tolerance drift over time, but keeps what it
+Limen's model lets a person's tolerance drift over time, but keeps what it
 learned about how risky each kind of action is.
 
 **Why.** People change: trust grows over a project and drops on a new one.
@@ -134,7 +134,7 @@ back to "unsure" on a fixed clock and asks again about actions it already
 knew. In the paper's simulation, keeping the static part cut human answers
 per action from 28.4% to 13.5% and cost-weighted regret by 59%, at a
 false-allow rate of about 1%. Time is counted in decisions, per person,
-and Cribrum keeps the count itself.
+and Limen keeps the count itself.
 
 **Checked by.** The engine's tests, against fixtures exported from the
 research implementation.
@@ -182,7 +182,7 @@ refused, and that a second decision is refused.
 ## 11. A judge is evidence, and its reliability is personal
 
 An LLM judge's verdict, or any rule's score, enters as a `signal`: an
-input to Cribrum's prediction of what this person would say. Its error rate
+input to Limen's prediction of what this person would say. Its error rate
 is reported per source, per person, and per window.
 
 **Why.** A judge's error rate for a person cannot be read off its verdicts;
@@ -205,25 +205,25 @@ the model and never enters an error estimate.
 
 **Why.** Nothing fixed the probability with which a later answer is given,
 so it cannot be weighted the way a review is. Counting it would bias the
-estimate toward whatever happens to get noticed. Cribrum derives each
+estimate toward whatever happens to get noticed. Limen derives each
 answer's role from the recorded decision; the caller does not declare it.
 
 **Checked by.** The conformance suite checks that a later answer changes
 no estimate and changes what the model learns.
 
-## 13. Text an agent writes never reaches a model, and Cribrum never keeps it
+## 13. Text an agent writes never reaches a model, and Limen never keeps it
 
 An action's input is read only by deterministic feature extractors, for
 example one that recognizes a recursive delete in a shell command. No
-language model inside Cribrum reads it, and Cribrum does not store it: it keeps
+language model inside Limen reads it, and Limen does not store it: it keeps
 the features and drops the input.
 
 **Why.** The agent writes the input. If a model inside the gate read it,
 the agent could write instructions to the gate. Judges that read the
-transcript have been attacked this way; Cribrum takes a judge's verdict as a
+transcript have been attacked this way; Limen takes a judge's verdict as a
 signal and never the text the judge read. Not keeping the input also means
 a harness's redaction of a secret in a command is never undone by a copy in
-Cribrum.
+Limen.
 
 **Checked by.** The engine's architecture test (no package that reads an
 action's input depends on a model client), and the conformance suite,
@@ -231,7 +231,7 @@ which checks that a case read back carries no input.
 
 ## 14. A person's data is theirs
 
-Cribrum learns from a person's answers only for that person, and forgets
+Limen learns from a person's answers only for that person, and forgets
 everything about them in an organization on request: cases, answers, and
 the model learned from them.
 

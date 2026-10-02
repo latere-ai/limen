@@ -10,15 +10,15 @@ import (
 
 	"latere.ai/x/pkg/errwriter"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 // minAnswers is the number of answers below which the report warns that
-// Cribrum has too little to learn from.
+// Limen has too little to learn from.
 const minAnswers = 30
 
 // writeReport prints a replay's report for the person who ran it.
-func writeReport(w *errwriter.Writer, rep cribrum.ReplayReport, skipped map[string]int) {
+func writeReport(w *errwriter.Writer, rep limen.ReplayReport, skipped map[string]int) {
 	w.Printf("Replayed %d %s; %d of them have your answer.\n", rep.Records, plural(rep.Records, "action", "actions"), rep.Answered)
 	if n := total(skipped); n > 0 {
 		w.Printf("Skipped %d %s:\n", n, plural(n, "action", "actions"))
@@ -36,21 +36,21 @@ func writeReport(w *errwriter.Writer, rep cribrum.ReplayReport, skipped map[stri
 		return
 	}
 
-	w.Println("\nWhat Cribrum would have suggested:")
+	w.Println("\nWhat Limen would have suggested:")
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	for _, v := range []cribrum.Verdict{cribrum.Allow, cribrum.Ask, cribrum.Block} {
+	for _, v := range []limen.Verdict{limen.Allow, limen.Ask, limen.Block} {
 		twPrintf(tw, "  %s\t%d\t%s\n", v, rep.Would[v], share(rep.Would[v], rep.Records))
 	}
 	_ = tw.Flush() // tw writes through w, which latches a failed write
 
-	w.Println("\nWhere Cribrum and your answers disagree:")
+	w.Println("\nWhere Limen and your answers disagree:")
 	w.Printf("  would have allowed, and you denied:   %d\n", rep.AllowedDenied)
 	w.Printf("  would have blocked, and you approved: %d\n", rep.BlockedApproved)
 
-	w.Println("\nHow often Cribrum's allows would be wrong:")
+	w.Println("\nHow often Limen's allows would be wrong:")
 	fa := rep.FalseAllow
 	if fa.Value == nil {
-		w.Println("  Not measurable from this history: none of the actions Cribrum would have allowed was shown to you.")
+		w.Println("  Not measurable from this history: none of the actions Limen would have allowed was shown to you.")
 	} else {
 		lo, hi := 0.0, 1.0
 		if fa.Interval != nil {
@@ -61,19 +61,19 @@ func writeReport(w *errwriter.Writer, rep cribrum.ReplayReport, skipped map[stri
 		w.Printf("  This speaks for the %s of its allows that you could have seen.\n", pct(fa.Covered))
 	}
 
-	asks := float64(rep.Would[cribrum.Ask]) / float64(rep.Records)
-	auto := float64(rep.Would[cribrum.Allow]+rep.Would[cribrum.Block]) / float64(rep.Records)
+	asks := float64(rep.Would[limen.Ask]) / float64(rep.Records)
+	auto := float64(rep.Would[limen.Allow]+rep.Would[limen.Block]) / float64(rep.Records)
 	w.Println("\nHow often you would be asked:")
-	w.Printf("  under Cribrum: %s of actions (%s asks, and a %s review sample of the rest)\n",
-		pct(asks+cribrum.DefaultAuditRate*auto), pct(asks), pct(cribrum.DefaultAuditRate))
+	w.Printf("  under Limen: %s of actions (%s asks, and a %s review sample of the rest)\n",
+		pct(asks+limen.DefaultAuditRate*auto), pct(asks), pct(limen.DefaultAuditRate))
 	w.Printf("  in this history: %s of actions had your answer\n", share(rep.Answered, rep.Records))
 
 	if rep.Answered < minAnswers {
-		w.Printf("\nOnly %d %s: Cribrum needs a few dozen before it suggests anything but ask. "+
+		w.Printf("\nOnly %d %s: Limen needs a few dozen before it suggests anything but ask. "+
 			"Use Topos in manual mode for a while, then replay again.\n", rep.Answered, plural(rep.Answered, "answer", "answers"))
 	}
 	if rep.Kept {
-		w.Println("\nThe history is now part of Cribrum's ledger, and its models have learned from it.")
+		w.Println("\nThe history is now part of Limen's ledger, and its models have learned from it.")
 	}
 }
 

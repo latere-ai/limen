@@ -16,7 +16,7 @@ import (
 	"context"
 	"time"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 // Case is one action as the store keeps it. Action never holds the input:
@@ -25,23 +25,23 @@ import (
 type Case struct {
 	// T is the case's ordinal in its subject's history, the kernel's time.
 	T int64 `json:"t"`
-	// ReceivedAt is when Cribrum first saw the case, which report windows read.
-	ReceivedAt time.Time      `json:"received_at"`
-	Digest     string         `json:"digest"`
-	Action     cribrum.Action `json:"action"`
+	// ReceivedAt is when Limen first saw the case, which report windows read.
+	ReceivedAt time.Time    `json:"received_at"`
+	Digest     string       `json:"digest"`
+	Action     limen.Action `json:"action"`
 	// Featurizer names the featurizer A and C came from.
-	Featurizer string                   `json:"featurizer"`
-	A          []float64                `json:"a"`
-	C          []float64                `json:"c"`
-	Prediction *cribrum.Prediction      `json:"prediction,omitempty"`
-	Decision   *cribrum.Decision        `json:"decision,omitempty"`
-	DecidedAt  time.Time                `json:"decided_at,omitzero"`
-	Answers    []cribrum.RecordedAnswer `json:"answers,omitempty"`
+	Featurizer string                 `json:"featurizer"`
+	A          []float64              `json:"a"`
+	C          []float64              `json:"c"`
+	Prediction *limen.Prediction      `json:"prediction,omitempty"`
+	Decision   *limen.Decision        `json:"decision,omitempty"`
+	DecidedAt  time.Time              `json:"decided_at,omitzero"`
+	Answers    []limen.RecordedAnswer `json:"answers,omitempty"`
 }
 
-// Cribrum returns the case as the contract shows it.
-func (c Case) Contract() cribrum.Case {
-	out := cribrum.Case{Action: c.Action, Answers: append([]cribrum.RecordedAnswer(nil), c.Answers...)}
+// Limen returns the case as the contract shows it.
+func (c Case) Contract() limen.Case {
+	out := limen.Case{Action: c.Action, Answers: append([]limen.RecordedAnswer(nil), c.Answers...)}
 	out.Action.Input = nil
 	if c.Prediction != nil {
 		p := *c.Prediction
@@ -58,7 +58,7 @@ func (c Case) Contract() cribrum.Case {
 // Store keeps cases, profiles and model snapshots.
 type Store interface {
 	// Case returns the case for the key, and false when there is none.
-	Case(ctx context.Context, k cribrum.Key) (Case, bool, error)
+	Case(ctx context.Context, k limen.Key) (Case, bool, error)
 	// Put stores the case under its action's key, replacing any earlier one.
 	Put(ctx context.Context, c Case) error
 	// NextT returns the next ordinal of the subject's history, starting at
@@ -68,8 +68,8 @@ type Store interface {
 	Cases(ctx context.Context, org, subject string) ([]Case, error)
 	// Profile returns the profile saved for exactly this scope, and false
 	// when there is none.
-	Profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile, bool, error)
-	PutProfile(ctx context.Context, p cribrum.Profile) error
+	Profile(ctx context.Context, s limen.Scope) (limen.Profile, bool, error)
+	PutProfile(ctx context.Context, p limen.Profile) error
 	// Snapshot returns a model's stored state, and false when there is none.
 	Snapshot(ctx context.Context, org, subject, version string) ([]byte, bool, error)
 	PutSnapshot(ctx context.Context, org, subject, version string, state []byte) error

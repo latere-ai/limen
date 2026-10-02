@@ -11,14 +11,14 @@ import (
 	"strconv"
 	"testing"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 func ptr[T any](x T) *T { return &x }
 
-func bash(cmd string) cribrum.Action {
+func bash(cmd string) limen.Action {
 	in, _ := json.Marshal(map[string]string{"command": cmd})
-	return cribrum.Action{Kind: "tool", Name: "bash", Effect: cribrum.EffectWrite, Input: in}
+	return limen.Action{Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: in}
 }
 
 func finite(t *testing.T, f Features) {
@@ -56,7 +56,7 @@ func TestGroupLayout(t *testing.T) {
 
 // The empty action has the absent encodings and nothing else.
 func TestEmptyAction(t *testing.T) {
-	f := Of(cribrum.Action{})
+	f := Of(limen.Action{})
 	finite(t, f)
 	wantA := make([]float64, DimA)
 	wantA[aIrrev] = 0.5
@@ -70,7 +70,7 @@ func TestEmptyAction(t *testing.T) {
 func TestDeterministic(t *testing.T) {
 	a := bash("cd x && rm -rf ../y | tee /etc/z")
 	a.Attributes = map[string]any{"a": 1, "b": true, "c": "x", "d": 2.5, "e": -3, "f": json.Number("4"), "g": uint8(1)}
-	a.Signals = []cribrum.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/x", Verdict: cribrum.Block}}
+	a.Signals = []limen.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/x", Verdict: limen.Block}}
 	first := Of(a)
 	for range 50 {
 		if g := Of(a); !slices.Equal(g.A, first.A) || !slices.Equal(g.C, first.C) {
@@ -80,14 +80,14 @@ func TestDeterministic(t *testing.T) {
 }
 
 func TestEncodings(t *testing.T) {
-	f := Of(cribrum.Action{
+	f := Of(limen.Action{
 		Kind:        "Tool",
 		Name:        "mcp__github__merge_pull_request",
-		Effect:      cribrum.EffectExternal,
+		Effect:      limen.EffectExternal,
 		Reversible:  ptr(false),
-		Actor:       &cribrum.Actor{Kind: "Agent"},
-		Target:      &cribrum.Target{Kind: "ref", Sensitivity: ptr(0.9)},
-		Environment: &cribrum.Environment{Kind: "sandbox", Credentialed: true},
+		Actor:       &limen.Actor{Kind: "Agent"},
+		Target:      &limen.Target{Kind: "ref", Sensitivity: ptr(0.9)},
+		Environment: &limen.Environment{Kind: "sandbox", Credentialed: true},
 	})
 	finite(t, f)
 	if f.A[aEffect+3] != 1 || f.A[aIrrev] != 1 || f.A[aActor] != 1 || f.A[aKind+bucket("tool", kindBuckets)] != 1 {
@@ -108,29 +108,29 @@ func TestEncodings(t *testing.T) {
 		r    *bool
 		want float64
 	}{{nil, 0.5}, {ptr(true), 0}, {ptr(false), 1}} {
-		if got := Of(cribrum.Action{Reversible: c.r}).A[aIrrev]; got != c.want {
+		if got := Of(limen.Action{Reversible: c.r}).A[aIrrev]; got != c.want {
 			t.Errorf("reversible %v: %v", c.r, got)
 		}
 	}
 	envs := map[string]int{"host": 0, "sandbox": 1, "service": 2, "vm": 3}
 	for k, i := range envs {
-		f := Of(cribrum.Action{Environment: &cribrum.Environment{Kind: k}})
+		f := Of(limen.Action{Environment: &limen.Environment{Kind: k}})
 		if f.C[cEnv+i] != 1 || f.C[cCredential] != 0 {
 			t.Errorf("environment %s: %v", k, f.C[cEnv:cEnv+5])
 		}
 	}
-	if f := Of(cribrum.Action{Environment: &cribrum.Environment{}}); slices.ContainsFunc(f.C[cEnv:cEnv+4], func(v float64) bool { return v != 0 }) {
+	if f := Of(limen.Action{Environment: &limen.Environment{}}); slices.ContainsFunc(f.C[cEnv:cEnv+4], func(v float64) bool { return v != 0 }) {
 		t.Error("an empty environment kind is not absent")
 	}
 	for _, c := range []struct {
 		s    *float64
 		want float64
 	}{{nil, 0.5}, {ptr(math.NaN()), 0.5}, {ptr(-1.0), 0}, {ptr(2.0), 1}, {ptr(0.3), 0.3}} {
-		if got := Of(cribrum.Action{Target: &cribrum.Target{Sensitivity: c.s}}).C[cSensitivity]; got != c.want {
+		if got := Of(limen.Action{Target: &limen.Target{Sensitivity: c.s}}).C[cSensitivity]; got != c.want {
 			t.Errorf("sensitivity %v: %v", c.s, got)
 		}
 	}
-	if f := Of(cribrum.Action{Actor: &cribrum.Actor{Kind: "robot"}, Effect: "bogus"}); slices.ContainsFunc(f.A[aActor:], func(v float64) bool { return v != 0 }) || slices.ContainsFunc(f.A[aEffect:aEffect+4], func(v float64) bool { return v != 0 }) {
+	if f := Of(limen.Action{Actor: &limen.Actor{Kind: "robot"}, Effect: "bogus"}); slices.ContainsFunc(f.A[aActor:], func(v float64) bool { return v != 0 }) || slices.ContainsFunc(f.A[aEffect:aEffect+4], func(v float64) bool { return v != 0 }) {
 		t.Error("an unknown actor or effect is not absent")
 	}
 }
@@ -146,20 +146,20 @@ func TestShellGroups(t *testing.T) {
 		t.Errorf("classes %v", classes)
 	}
 	// The programs join the tool name's tokens.
-	plain := Of(cribrum.Action{Kind: "tool", Name: "bash"})
+	plain := Of(limen.Action{Kind: "tool", Name: "bash"})
 	if slices.Equal(plain.A[aTokens:aTokens+tokenBuckets], f.A[aTokens:aTokens+tokenBuckets]) {
 		t.Error("the programs added no tokens")
 	}
 	// The command may be an array, or under cmd.
 	for _, in := range []string{`{"command":["rm","-rf","x"]}`, `{"cmd":"rm -rf x"}`, `{"cmd":["rm","-rf","x"]}`} {
-		a := cribrum.Action{Kind: "tool", Name: "exec_command", Input: json.RawMessage(in)}
+		a := limen.Action{Kind: "tool", Name: "exec_command", Input: json.RawMessage(in)}
 		if Of(a).C[cDestructive] != 1 {
 			t.Errorf("%s is not read", in)
 		}
 	}
 	// A tool that is not a shell, a kind that is not a tool, malformed
 	// input, and an unusable command have zero shell groups.
-	for _, a := range []cribrum.Action{
+	for _, a := range []limen.Action{
 		{Kind: "tool", Name: "write", Input: json.RawMessage(`{"command":"rm -rf x"}`)},
 		{Kind: "egress", Name: "bash", Input: json.RawMessage(`{"command":"rm -rf x"}`)},
 		{Kind: "tool", Name: "bash", Input: json.RawMessage(`{`)},
@@ -237,9 +237,9 @@ func TestAttributes(t *testing.T) {
 
 func TestSignals(t *testing.T) {
 	v := make([]float64, 3*signalBuckets)
-	signals(v, []cribrum.Signal{
-		{Source: "classifier/x", Verdict: cribrum.Flag},
-		{Source: "classifier/x", Verdict: cribrum.Ask, Score: ptr(0.2)},
+	signals(v, []limen.Signal{
+		{Source: "classifier/x", Verdict: limen.Flag},
+		{Source: "classifier/x", Verdict: limen.Ask, Score: ptr(0.2)},
 		{Source: "classifier/x", Score: ptr(0.6)},
 	})
 	b := 3 * bucket("classifier/x", signalBuckets)
@@ -252,9 +252,9 @@ func TestSignals(t *testing.T) {
 			t.Errorf("signal slots %v, want %v", got, want)
 		}
 	}
-	for verdict, level := range map[cribrum.Verdict]float64{cribrum.Allow: 0, cribrum.Flag: 1.0 / 3, cribrum.Ask: 2.0 / 3, cribrum.Block: 1} {
+	for verdict, level := range map[limen.Verdict]float64{limen.Allow: 0, limen.Flag: 1.0 / 3, limen.Ask: 2.0 / 3, limen.Block: 1} {
 		v := make([]float64, 3*signalBuckets)
-		signals(v, []cribrum.Signal{{Source: "s", Verdict: verdict}})
+		signals(v, []limen.Signal{{Source: "s", Verdict: verdict}})
 		b := 3 * bucket("s", signalBuckets)
 		if n := math.Hypot(level, 1); math.Abs(v[b]-level/n) > 1e-12 || math.Abs(v[b+1]-1/n) > 1e-12 {
 			t.Errorf("%s: %v", verdict, v[b:b+3])
@@ -262,19 +262,19 @@ func TestSignals(t *testing.T) {
 	}
 	// An invalid verdict, a NaN score and a score outside [0, 1].
 	v = make([]float64, 3*signalBuckets)
-	signals(v, []cribrum.Signal{{Source: "s", Verdict: "deny", Score: ptr(math.NaN())}, {Source: "t", Score: ptr(7.0)}})
+	signals(v, []limen.Signal{{Source: "s", Verdict: "deny", Score: ptr(math.NaN())}, {Source: "t", Score: ptr(7.0)}})
 	if v[3*bucket("s", signalBuckets)+1] != 0 || v[3*bucket("t", signalBuckets)+2] != 1 {
 		t.Errorf("signals %v", v)
 	}
 }
 
 // randomAction draws an action whose every group varies.
-func randomAction(r *rand.Rand) cribrum.Action {
+func randomAction(r *rand.Rand) limen.Action {
 	pick := func(xs ...string) string { return xs[r.IntN(len(xs))] }
-	a := cribrum.Action{
+	a := limen.Action{
 		Kind:   pick("", "tool", "egress", "repo", "spend", strconv.Itoa(r.IntN(100))),
 		Name:   pick("", "bash", "write", "mcp__github__merge_pull_request", "a b c dd ee ff gg hh ii jj kk", strconv.Itoa(r.IntN(1000))),
-		Effect: cribrum.Effect(pick("", "none", "read", "write", "external", "bogus")),
+		Effect: limen.Effect(pick("", "none", "read", "write", "external", "bogus")),
 	}
 	if r.IntN(2) == 0 {
 		a.Kind, a.Name = "tool", "bash"
@@ -285,13 +285,13 @@ func randomAction(r *rand.Rand) cribrum.Action {
 		a.Reversible = ptr(r.IntN(2) == 0)
 	}
 	if r.IntN(2) == 0 {
-		a.Actor = &cribrum.Actor{Kind: pick("agent", "service", "person", "other")}
+		a.Actor = &limen.Actor{Kind: pick("agent", "service", "person", "other")}
 	}
 	if r.IntN(2) == 0 {
-		a.Target = &cribrum.Target{Kind: pick("", "ref", "path", "host"), Sensitivity: ptr(r.Float64()*3 - 1)}
+		a.Target = &limen.Target{Kind: pick("", "ref", "path", "host"), Sensitivity: ptr(r.Float64()*3 - 1)}
 	}
 	if r.IntN(2) == 0 {
-		a.Environment = &cribrum.Environment{Kind: pick("", "host", "sandbox", "service", "vm"), Credentialed: r.IntN(2) == 0}
+		a.Environment = &limen.Environment{Kind: pick("", "host", "sandbox", "service", "vm"), Credentialed: r.IntN(2) == 0}
 	}
 	if n := r.IntN(6); n > 0 {
 		a.Attributes = map[string]any{}
@@ -308,9 +308,9 @@ func randomAction(r *rand.Rand) cribrum.Action {
 		}
 	}
 	for range r.IntN(12) {
-		a.Signals = append(a.Signals, cribrum.Signal{
+		a.Signals = append(a.Signals, limen.Signal{
 			Source:  "s" + strconv.Itoa(r.IntN(20)),
-			Verdict: cribrum.Verdict(pick("", "allow", "flag", "ask", "block")),
+			Verdict: limen.Verdict(pick("", "allow", "flag", "ask", "block")),
 			Score:   ptr(r.Float64()),
 		})
 	}
@@ -362,11 +362,11 @@ func FuzzOf(f *testing.F) {
 	f.Add("", "", "", math.NaN(), math.Inf(1), "", math.NaN(), "")
 	f.Add("tool", "exec_command", `{"cmd":["sh","-c","eval $(x)"]}`, -3.0, 9.0, "x=y", -1e300, "classifier/a")
 	f.Fuzz(func(t *testing.T, kind, name, input string, sens, score float64, key string, num float64, source string) {
-		a := cribrum.Action{
+		a := limen.Action{
 			Kind: kind, Name: name, Input: json.RawMessage(input),
-			Target:     &cribrum.Target{Kind: kind, Sensitivity: &sens},
+			Target:     &limen.Target{Kind: kind, Sensitivity: &sens},
 			Attributes: map[string]any{key: num, key + "s": name, key + "b": sens > 0},
-			Signals:    []cribrum.Signal{{Source: source, Verdict: cribrum.Verdict(name), Score: &score}},
+			Signals:    []limen.Signal{{Source: source, Verdict: limen.Verdict(name), Score: &score}},
 		}
 		finite(t, Of(a))
 	})
@@ -374,12 +374,12 @@ func FuzzOf(f *testing.F) {
 
 func BenchmarkOf(b *testing.B) {
 	a := bash("cd repo && git add -A && git commit -m wip && git push origin HEAD")
-	a.Effect = cribrum.EffectExternal
-	a.Target = &cribrum.Target{Kind: "ref", ID: "refs/heads/main", Sensitivity: ptr(0.9)}
-	a.Environment = &cribrum.Environment{Kind: "sandbox", Credentialed: true}
-	a.Actor = &cribrum.Actor{Kind: "agent"}
+	a.Effect = limen.EffectExternal
+	a.Target = &limen.Target{Kind: "ref", ID: "refs/heads/main", Sensitivity: ptr(0.9)}
+	a.Environment = &limen.Environment{Kind: "sandbox", Credentialed: true}
+	a.Actor = &limen.Actor{Kind: "agent"}
 	a.Attributes = map[string]any{"protected": true, "files": 3}
-	a.Signals = []cribrum.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/claude-auto-mode", Verdict: cribrum.Allow}}
+	a.Signals = []limen.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/claude-auto-mode", Verdict: limen.Allow}}
 	for b.Loop() {
 		Of(a)
 	}

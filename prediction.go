@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package cribrum
+package limen
 
 // SourceUnavailable is the [Prediction.Source] of a prediction
 // [FailClosed] produced because the predictor failed or timed out. Its
 // verdict is [Ask]; its numbers are zero and mean nothing, because no
-// model produced them, and Cribrum holds no record of it.
+// model produced them, and Limen holds no record of it.
 const SourceUnavailable = "learned/unavailable"
 
-// Prediction is Cribrum's opinion about one action, for the decision point
+// Prediction is Limen's opinion about one action, for the decision point
 // to compose with its own rules.
 type Prediction struct {
 	Key
@@ -18,7 +18,7 @@ type Prediction struct {
 	// ceiling and review sampling before applying anything.
 	Verdict Verdict `json:"verdict"`
 	// Approve is the posterior predictive probability that the subject
-	// approves the action, given every answer Cribrum has from them.
+	// approves the action, given every answer Limen has from them.
 	Approve float64 `json:"approve"`
 	// Uncertainty is the posterior standard deviation of the latent
 	// tolerance behind Approve: two actions with the same Approve can

@@ -3,7 +3,7 @@ title: "HTTP API: routes, bodies, statuses, the authorizer action and resource f
 status: drafted
 track: core
 depends_on: [001-architecture.md, 002-contract.md]
-affects: [api/, authorizer/, client/, cmd/cribrumd/]
+affects: [api/, authorizer/, client/, cmd/limend/]
 effort: medium
 created: 2026-09-28
 updated: 2026-10-02
@@ -14,10 +14,10 @@ author: changkun
 
 ## Overview
 
-`cribrumd` serves the contract of [[002-contract]] over HTTP for decision
+`limend` serves the contract of [[002-contract]] over HTTP for decision
 points that do not embed the engine: hosted agent runners, hook
 commands, decision points written in other languages. `client/` is the
-Go implementation of `cribrum.Service` over this API, so a Go decision
+Go implementation of `limen.Service` over this API, so a Go decision
 point changes nothing but its constructor to move between the engine and
 the server. `api/openapi.yaml` is the same surface as an OpenAPI 3.1
 document.
@@ -26,7 +26,7 @@ document.
 
 ### Routes
 
-`cribrumd` serves the routes under `/v1`. A platform that serves several
+`limend` serves the routes under `/v1`. A platform that serves several
 services behind one origin may mount them under a prefix of its own; the
 server is told its public base so the links it writes carry it.
 
@@ -46,7 +46,7 @@ Every route answers the errors of [[002-contract]] that its contract
 method can return, plus `unauthenticated`, `forbidden`, `body_too_large`
 for a body past its limit, `internal` and `authorizer_unavailable`; the
 OpenAPI document lists them per operation. `rate_limited` is reserved for
-an installation that puts a rate limit in front of `cribrumd`, which itself
+an installation that puts a rate limit in front of `limend`, which itself
 limits nothing.
 
 ### The authorizer
@@ -63,7 +63,7 @@ it acts, about a resource whose kind and fields are fixed per action:
 | `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own |
 | `subject.forget` | `Subject` | `org`, `subject` |
 
-With no endpoint configured, `cribrumd` applies the shared owner policy: a
+With no endpoint configured, `limend` applies the shared owner policy: a
 caller acts on cases and reports whose `subject` is the caller's own
 rendered subject, admins act on everything, and every other request is
 refused.
@@ -82,7 +82,7 @@ to decision points and not to the people who answer.
 
 ### Ordering and pagination
 
-`GET /v1/cases` returns a subject's cases oldest first by the time Cribrum
+`GET /v1/cases` returns a subject's cases oldest first by the time Limen
 received the action, `{"entries": [...], "next_cursor": "..."}`, where
 `next_cursor` is present only when a further page exists. `limit` runs
 from 1 to 500 with a default of 100; a value outside is `invalid_query`.
@@ -106,7 +106,7 @@ from 1 to 500 with a default of 100; a value outside is `invalid_query`.
   default included (`"default": true`), and never 404. `PUT` derives
   `thresholds`, fills a zero `certify` with the default, and ignores a
   sent `thresholds` or `default`.
-- Times in bodies are RFC 3339. Cribrum stamps its own receive times;
+- Times in bodies are RFC 3339. Limen stamps its own receive times;
   `ReplayRecord.at` is the one time a caller supplies, and only for
   history.
 
@@ -135,7 +135,7 @@ caller).
 - an enum differs from the Go constants (verdicts, effects);
 - a response for an error code differs from `"<status> <code>:
   <message>"`, or a code has no response;
-- an operation's `x-cribrum-action` is not in the vocabulary, an action is
+- an operation's `x-limen-action` is not in the vocabulary, an action is
   asked by no route, or an error response sits under a status that is not
   its code's.
 
@@ -144,9 +144,9 @@ caller).
 | # | Criterion | Proved by |
 |---|---|---|
 | 1 | The OpenAPI document agrees with the Go types, the error table and the vocabulary in the four ways listed | `api/openapi_test.go` |
-| 2 | Every route asks exactly its action with exactly the resource fields above before acting, and acts on nothing when the authorizer refuses or is unavailable | `cribrumd` handler tests against `authz/stub` |
+| 2 | Every route asks exactly its action with exactly the resource fields above before acting, and acts on nothing when the authorizer refuses or is unavailable | `limend` handler tests against `authz/stub` |
 | 3 | A caller the authorizer does not allow for a subject cannot predict, decide, answer, list or read reliability for that subject | the same tests |
 | 4 | `Answer.by` is recorded only for a caller allowed `case.answer` on the case | a handler test |
 | 5 | A replay of 100001 records is `body_too_large` and learns nothing; an invalid record is `invalid_replay` naming its line | handler tests |
 | 6 | An unknown request field is ignored, and a known field out of range is the route's `invalid_*` naming it | handler tests |
-| 7 | `client/` satisfies `cribrum.Service` and passes the conformance suite against a running `cribrumd` | an e2e test with `conformance.Run` ([[006-conformance]]) |
+| 7 | `client/` satisfies `limen.Service` and passes the conformance suite against a running `limend` | an e2e test with `conformance.Run` ([[006-conformance]]) |

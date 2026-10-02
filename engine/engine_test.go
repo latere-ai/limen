@@ -15,17 +15,17 @@ import (
 
 	"latere.ai/x/pkg/verdict"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/conformance"
-	"latere.ai/x/cribrum/engine"
-	"latere.ai/x/cribrum/engine/store"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/conformance"
+	"latere.ai/x/limen/engine"
+	"latere.ai/x/limen/engine/store"
 )
 
 var ctx = context.Background()
 
 func TestConformance(t *testing.T) {
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) cribrum.Service {
+		New: func(t *testing.T) limen.Service {
 			e := engine.New(engine.Options{Debounce: time.Millisecond})
 			t.Cleanup(func() { e.Close() })
 			return e
@@ -35,7 +35,7 @@ func TestConformance(t *testing.T) {
 
 func TestConformanceInline(t *testing.T) {
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) cribrum.Service {
+		New: func(t *testing.T) limen.Service {
 			e := engine.New(engine.Options{Inline: 1})
 			t.Cleanup(func() { e.Close() })
 			return e
@@ -56,27 +56,27 @@ func (c *clock) Now() time.Time {
 	return c.now
 }
 
-func bash(subject, id, command string) cribrum.Action {
+func bash(subject, id, command string) limen.Action {
 	in, _ := json.Marshal(map[string]string{"command": command})
-	return cribrum.Action{
+	return limen.Action{
 		Org:         "o",
 		Subject:     subject,
 		ActionID:    id,
-		Actor:       &cribrum.Actor{Kind: "agent", ID: "agt", Session: "ses"},
+		Actor:       &limen.Actor{Kind: "agent", ID: "agt", Session: "ses"},
 		Kind:        "tool",
 		Name:        "bash",
-		Effect:      cribrum.EffectWrite,
+		Effect:      limen.EffectWrite,
 		Input:       in,
-		Environment: &cribrum.Environment{Kind: "sandbox"},
+		Environment: &limen.Environment{Kind: "sandbox"},
 	}
 }
 
 // decide records the decision a decision point under the default profile
 // would make with no review draw, and returns whether the person sees it.
-func decide(t *testing.T, s cribrum.Service, a cribrum.Action, p cribrum.Prediction) bool {
+func decide(t *testing.T, s limen.Service, a limen.Action, p limen.Prediction) bool {
 	t.Helper()
-	v, prob := verdict.Decide(p.Verdict, cribrum.Allow, p.AuditRate, 0.99)
-	if err := s.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "test"}); err != nil {
+	v, prob := verdict.Decide(p.Verdict, limen.Allow, p.AuditRate, 0.99)
+	if err := s.Record(ctx, limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	return v.Shown()
@@ -89,7 +89,7 @@ func TestLearns(t *testing.T) {
 	c := &clock{now: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)}
 	e := engine.New(engine.Options{Inline: 1, Clock: c.Now})
 	defer e.Close()
-	if _, err := e.PutProfile(ctx, cribrum.Profile{Org: "o", Costs: cribrum.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}, AuditRate: 0.05}); err != nil {
+	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}, AuditRate: 0.05}); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 40 {
@@ -103,11 +103,11 @@ func TestLearns(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Under manual mode every call is asked, so every answer is a review.
-			if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
+			if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
 				t.Fatal(err)
 			}
 			_ = p
-			if err := e.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: step.approve}); err != nil {
+			if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: step.approve}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -120,17 +120,17 @@ func TestLearns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if test.Verdict != cribrum.Allow || test.Approve < 0.65 {
+	if test.Verdict != limen.Allow || test.Approve < 0.65 {
 		t.Errorf("a familiar test run: %+v", test)
 	}
-	if del.Verdict != cribrum.Block || del.Approve > 0.35 {
+	if del.Verdict != limen.Block || del.Approve > 0.35 {
 		t.Errorf("a familiar recursive delete: %+v", del)
 	}
 	fresh, err := e.Predict(ctx, bash("someone else", "x", "go test ./..."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fresh.Verdict != cribrum.Ask || fresh.Approve != 0.5 {
+	if fresh.Verdict != limen.Ask || fresh.Approve != 0.5 {
 		t.Errorf("a subject with no answers: %+v", fresh)
 	}
 	if test.Source != engine.Source || test.Uncertainty <= 0 || test.Reason == "" {
@@ -139,22 +139,22 @@ func TestLearns(t *testing.T) {
 }
 
 // train teaches subject s to approve test runs, under any engine.
-func train(t *testing.T, s cribrum.Service, subject string, n int) {
+func train(t *testing.T, s limen.Service, subject string, n int) {
 	t.Helper()
 	trainIDs(t, s, subject, "t", n)
 }
 
-func trainIDs(t *testing.T, s cribrum.Service, subject, prefix string, n int) {
+func trainIDs(t *testing.T, s limen.Service, subject, prefix string, n int) {
 	t.Helper()
 	for i := range n {
 		a := bash(subject, fmt.Sprintf("%s-%d", prefix, i), "go test ./...")
 		if _, err := s.Predict(ctx, a); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
+		if err := s.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: true}); err != nil {
+		if err := s.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -245,13 +245,13 @@ func TestForgetDropsTheModel(t *testing.T) {
 	if p.Approve != 0.5 {
 		t.Errorf("a forgotten subject still predicts %+v", p)
 	}
-	if err := e.Forget(ctx, "", ""); cribrum.CodeOf(err) != cribrum.CodeInvalidQuery {
+	if err := e.Forget(ctx, "", ""); limen.CodeOf(err) != limen.CodeInvalidQuery {
 		t.Errorf("forget with no subject: %v", err)
 	}
 }
 
-func recs(rs []cribrum.ReplayRecord) iter.Seq2[cribrum.ReplayRecord, error] {
-	return func(yield func(cribrum.ReplayRecord, error) bool) {
+func recs(rs []limen.ReplayRecord) iter.Seq2[limen.ReplayRecord, error] {
+	return func(yield func(limen.ReplayRecord, error) bool) {
 		for _, r := range rs {
 			if !yield(r, nil) {
 				return
@@ -267,27 +267,27 @@ func TestReplayLearnsInOrder(t *testing.T) {
 	defer e.Close()
 	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	yes := true
-	var rs []cribrum.ReplayRecord
+	var rs []limen.ReplayRecord
 	for i := range 60 {
-		rs = append(rs, cribrum.ReplayRecord{
+		rs = append(rs, limen.ReplayRecord{
 			At: start.Add(time.Duration(i) * time.Minute), Action: bash("s", fmt.Sprintf("r-%d", i), "go test ./..."),
-			Verdict: cribrum.Ask, ReviewProbability: 1, Source: "manual", Approve: &yes,
+			Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Approve: &yes,
 		})
 	}
 	// Out of order on purpose: a replay sorts by time.
 	rs[0], rs[59] = rs[59], rs[0]
-	rep, err := e.Replay(ctx, recs(rs), cribrum.ReplayOptions{})
+	rep, err := e.Replay(ctx, recs(rs), limen.ReplayOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Records != 60 || rep.Answered != 60 || rep.Would[cribrum.Ask] == 0 || rep.Would[cribrum.Allow] == 0 || rep.Kept {
+	if rep.Records != 60 || rep.Answered != 60 || rep.Would[limen.Ask] == 0 || rep.Would[limen.Allow] == 0 || rep.Kept {
 		t.Errorf("report %+v", rep)
 	}
-	page, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s"})
+	page, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s"})
 	if err != nil || len(page.Entries) != 0 {
 		t.Errorf("a replay without keep kept %d cases, %v", len(page.Entries), err)
 	}
-	rep, err = e.Replay(ctx, recs(rs), cribrum.ReplayOptions{Keep: true})
+	rep, err = e.Replay(ctx, recs(rs), limen.ReplayOptions{Keep: true})
 	if err != nil || !rep.Kept {
 		t.Fatalf("keep: %+v, %v", rep, err)
 	}
@@ -295,10 +295,10 @@ func TestReplayLearnsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Verdict != cribrum.Allow {
+	if p.Verdict != limen.Allow {
 		t.Errorf("a kept replay did not teach the live model: %+v", p)
 	}
-	if _, err := e.Replay(ctx, recs(rs[:1]), cribrum.ReplayOptions{Keep: true}); cribrum.CodeOf(err) != cribrum.CodeAlreadyDecided {
+	if _, err := e.Replay(ctx, recs(rs[:1]), limen.ReplayOptions{Keep: true}); limen.CodeOf(err) != limen.CodeAlreadyDecided {
 		t.Errorf("replaying a kept record again: %v", err)
 	}
 }
@@ -307,17 +307,17 @@ func TestReplayErrors(t *testing.T) {
 	e := engine.New(engine.Options{})
 	defer e.Close()
 	boom := errors.New("boom")
-	if _, err := e.Replay(ctx, func(yield func(cribrum.ReplayRecord, error) bool) { yield(cribrum.ReplayRecord{}, boom) }, cribrum.ReplayOptions{}); !errors.Is(err, boom) {
+	if _, err := e.Replay(ctx, func(yield func(limen.ReplayRecord, error) bool) { yield(limen.ReplayRecord{}, boom) }, limen.ReplayOptions{}); !errors.Is(err, boom) {
 		t.Errorf("source error: %v", err)
 	}
-	if _, err := e.Replay(ctx, recs([]cribrum.ReplayRecord{{}}), cribrum.ReplayOptions{}); cribrum.CodeOf(err) != cribrum.CodeInvalidReplay {
+	if _, err := e.Replay(ctx, recs([]limen.ReplayRecord{{}}), limen.ReplayOptions{}); limen.CodeOf(err) != limen.CodeInvalidReplay {
 		t.Errorf("invalid record: %v", err)
 	}
 	c, cancel := context.WithCancel(ctx)
 	cancel()
 	yes := true
-	ok := cribrum.ReplayRecord{At: time.Now(), Action: bash("s", "a", "ls"), Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m", Approve: &yes}
-	if _, err := e.Replay(c, recs([]cribrum.ReplayRecord{ok}), cribrum.ReplayOptions{}); !errors.Is(err, context.Canceled) {
+	ok := limen.ReplayRecord{At: time.Now(), Action: bash("s", "a", "ls"), Verdict: limen.Ask, ReviewProbability: 1, Source: "m", Approve: &yes}
+	if _, err := e.Replay(c, recs([]limen.ReplayRecord{ok}), limen.ReplayOptions{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("canceled replay: %v", err)
 	}
 }
@@ -365,10 +365,10 @@ func TestDecisionWithoutPrediction(t *testing.T) {
 	defer e.Close()
 	for i := range 12 {
 		a := bash("s", fmt.Sprintf("f-%d", i), "go test ./...")
-		if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "manual", Action: &a}); err != nil {
+		if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Action: &a}); err != nil {
 			t.Fatal(err)
 		}
-		if err := e.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: true}); err != nil {
+		if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
 			t.Fatal(err)
 		}
 	}

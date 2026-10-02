@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package cribrum
+package limen
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // the network; a decision point codes against the interface and wraps it
 // with [FailClosed].
 type Predictor interface {
-	// Predict returns Cribrum's prediction for one action. It is idempotent
+	// Predict returns Limen's prediction for one action. It is idempotent
 	// on the action's Key: a repeat with the same action returns the first
 	// prediction, and a repeat with a different action fails with
 	// [CodeActionConflict].
@@ -27,7 +27,7 @@ type Predictor interface {
 // error rate.
 type Ledger interface {
 	// Record keeps one decision. An action takes one decision; a second
-	// fails with [CodeAlreadyDecided]. A decision for an action Cribrum made
+	// fails with [CodeAlreadyDecided]. A decision for an action Limen made
 	// no prediction for must carry the action, or it fails with
 	// [CodeInvalidDecision] on the field action; an action it carries must
 	// be the predicted one, or it fails with [CodeActionConflict].
@@ -52,15 +52,15 @@ type Admin interface {
 	// zero Certify with [DefaultCertify], stores it, and returns it.
 	PutProfile(ctx context.Context, p Profile) (Profile, error)
 	// Replay predicts recorded actions in time order, each before its own
-	// answer is learned, and reports what Cribrum would have suggested.
+	// answer is learned, and reports what Limen would have suggested.
 	Replay(ctx context.Context, records iter.Seq2[ReplayRecord, error], o ReplayOptions) (ReplayReport, error)
-	// Forget deletes everything Cribrum holds about a subject in an
+	// Forget deletes everything Limen holds about a subject in an
 	// organization: cases, answers, and the model learned from them. It is
 	// idempotent.
 	Forget(ctx context.Context, org, subject string) error
 }
 
-// Service is all of Cribrum.
+// Service is all of Limen.
 type Service interface {
 	Predictor
 	Ledger
@@ -75,7 +75,7 @@ type Service interface {
 // whose verdict is [Ask] and whose source is [SourceUnavailable], and hands
 // the error to report when report is not nil. A decision point then
 // composes it like any suggestion: verdict.Decide narrows the ask by the
-// ceiling and shows the action to a person. Because Cribrum may hold no
+// ceiling and shows the action to a person. Because Limen may hold no
 // record of the action, the decision point sends the action with its
 // [Decision]. A timeout of zero or less sets no bound.
 func FailClosed(p Predictor, timeout time.Duration, report func(error)) Predictor {
@@ -119,6 +119,6 @@ func (f failClosed) Predict(ctx context.Context, a Action) (Prediction, error) {
 		Key:     a.Key,
 		Verdict: Ask,
 		Source:  SourceUnavailable,
-		Reason:  "Cribrum could not predict this action in time, so it waits for a person.",
+		Reason:  "Limen could not predict this action in time, so it waits for a person.",
 	}, nil
 }

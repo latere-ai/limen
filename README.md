@@ -1,27 +1,27 @@
-# Cribrum
+# Limen
 
 **The oversight layer for automated actions: which actions may run on
 their own, which a person should see, and how often each source of those
 decisions is wrong.**
 
 Agents propose actions: a shell command, a merge, a network request, a
-deploy, a payment. Something decides whether each one runs. Cribrum learns,
+deploy, a payment. Something decides whether each one runs. Limen learns,
 from each person's own approve and deny answers, when an action needs
 them; it derives its suggestions from what your organization says errors
 and interruptions cost; and it keeps a ledger of every decision, with the
 probability that a person saw the action, which makes the error rate of
-any decision source measurable: your rules, an LLM judge, Cribrum itself.
+any decision source measurable: your rules, an LLM judge, Limen itself.
 
 > **Status: pre-release.** Built: the contract (the Go types and
 > interfaces, the HTTP API, the error codes); the engine, which predicts
 > with the Gaussian-process model ported from the research code, keeps the
 > ledger in memory or in a directory, and refits off the decision path; the
-> HTTP server and client; the `cribrum` command, which serves the API for one
-> person (`cribrum serve`) and replays recorded history (`cribrum replay`),
+> HTTP server and client; the `limen` command, which serves the API for one
+> person (`limen serve`) and replays recorded history (`limen replay`),
 > including a Topos data directory; an in-memory stub and the conformance
 > suite every implementation passes. Not built yet: a Postgres store for a
 > hosted installation, and hooks for Claude Code and Codex, which
-> [`specs/`](specs/README.md) describes. Cribrum has not yet decided a live
+> [`specs/`](specs/README.md) describes. Limen has not yet decided a live
 > action for anyone; start with a replay.
 
 ## The problem
@@ -52,25 +52,25 @@ Three parts, each usable on its own:
 
 ```mermaid
 flowchart LR
-  A[proposed action] --> P[Cribrum predicts<br/>chance of approval,<br/>suggested verdict]
+  A[proposed action] --> P[Limen predicts<br/>chance of approval,<br/>suggested verdict]
   P --> D[your decision point decides<br/>ceiling from your rules,<br/>review drawn once]
   D --> R{verdict}
   R -->|allow, block| X[runs or not]
   R -->|flag, ask| H[a person sees it]
-  D -->|decision and its<br/>review probability| L[(Cribrum's ledger)]
+  D -->|decision and its<br/>review probability| L[(Limen's ledger)]
   H -->|answer| L
   L -->|learns| P
-  L --> Rel[error rate of any source:<br/>Cribrum, your rules, a judge]
+  L --> Rel[error rate of any source:<br/>Limen, your rules, a judge]
 ```
 
-- **Predict.** For the person on whose behalf an action runs, Cribrum
+- **Predict.** For the person on whose behalf an action runs, Limen
   predicts the probability that they would approve it, says how uncertain
   that is, and suggests allow, ask, or block.
-- **Decide.** Your decision point decides, not Cribrum. It composes the
+- **Decide.** Your decision point decides, not Limen. It composes the
   suggestion with the ceiling its own rules leave open and with a random
   review of a small share of automatic verdicts, using one shared function,
   and records what it did.
-- **Ledger.** Cribrum keeps every decision and every answer, learns from
+- **Ledger.** Limen keeps every decision and every answer, learns from
   them, and reports how often any source of decisions allows what the
   person would deny. A harness that decides by rules alone can use the
   ledger without the predictor, to learn how often its rules and its judge
@@ -82,17 +82,17 @@ What that buys, in rules every implementation keeps:
   waits for a person instead of failing.
 - **Thresholds come from costs.** You state what a wrong allow, a wrong
   block, and one interruption cost; the thresholds follow by a closed
-  formula. Nobody tunes them, and an action about someone Cribrum knows
+  formula. Nobody tunes them, and an action about someone Limen knows
   nothing about is always an ask.
-- **Your rules win.** Your deterministic rules set a ceiling Cribrum's
-  suggestion cannot exceed, and when Cribrum fails or times out, the action
+- **Your rules win.** Your deterministic rules set a ceiling Limen's
+  suggestion cannot exceed, and when Limen fails or times out, the action
   waits for a person.
 - **Learn the person, keep the risk.** A Gaussian-process model lets each
   person's tolerance drift, but keeps what it learned about how risky each
   kind of action is.
 - **Know every source's error rate.** Each decision is recorded with the
   probability that a person saw the action, so each answer counts with the
-  right weight and error rates come out unbiased, for Cribrum, for your
+  right weight and error rates come out unbiased, for Limen, for your
   rules, and for any judge whose verdict you pass in.
 
 [Principles](docs/principles.md) states each rule and why it holds;
@@ -107,23 +107,23 @@ In Go:
 import (
 	"math/rand/v2"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 	"latere.ai/x/pkg/verdict"
 )
 
-// svc is Cribrum: the in-process engine, or the HTTP client.
-predictor := cribrum.FailClosed(svc, 200*time.Millisecond, func(err error) { log.Print(err) })
+// svc is Limen: the in-process engine, or the HTTP client.
+predictor := limen.FailClosed(svc, 200*time.Millisecond, func(err error) { log.Print(err) })
 
-a := cribrum.Action{
-	Key:         cribrum.Key{Org: "org_7", Subject: "https://issuer.example|usr_42", ActionID: "ses_9f/toolu_01"},
-	Actor:       &cribrum.Actor{Kind: "agent", ID: "agt_ci", Session: "ses_9f"},
+a := limen.Action{
+	Key:         limen.Key{Org: "org_7", Subject: "https://issuer.example|usr_42", ActionID: "ses_9f/toolu_01"},
+	Actor:       &limen.Actor{Kind: "agent", ID: "agt_ci", Session: "ses_9f"},
 	Kind:        "tool",
 	Name:        "bash",
-	Effect:      cribrum.EffectExternal,
+	Effect:      limen.EffectExternal,
 	Input:       json.RawMessage(`{"command":"git push origin main"}`),
-	Target:      &cribrum.Target{Kind: "ref", ID: "refs/heads/main"},
-	Environment: &cribrum.Environment{Kind: "sandbox", Credentialed: true},
-	Signals:     []cribrum.Signal{{Source: "classifier/claude-auto-mode", Verdict: cribrum.Allow}},
+	Target:      &limen.Target{Kind: "ref", ID: "refs/heads/main"},
+	Environment: &limen.Environment{Kind: "sandbox", Credentialed: true},
+	Signals:     []limen.Signal{{Source: "classifier/claude-auto-mode", Verdict: limen.Allow}},
 }
 
 // Never an error: a failure comes back as an ask.
@@ -132,22 +132,22 @@ p, _ := predictor.Predict(ctx, a)
 // Your rules set the ceiling. The review is drawn once, here, for this action.
 v, prob := verdict.Decide(p.Verdict, ceiling(a), p.AuditRate, rand.Float64())
 
-d := cribrum.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
-if p.Source == cribrum.SourceUnavailable {
-	d.Action = &a // Cribrum holds no record of this action yet
+d := limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
+if p.Source == limen.SourceUnavailable {
+	d.Action = &a // Limen holds no record of this action yet
 }
 svc.Record(ctx, d)
 
 switch v {
-case cribrum.Allow:
+case limen.Allow:
 	run()
-case cribrum.Flag:
+case limen.Flag:
 	run()
 	queueForReview(a.Key) // the person answers later
-case cribrum.Ask:
-	svc.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: holdForPerson()})
-case cribrum.Block:
-	refuse() // with your own words, never Cribrum's reason
+case limen.Ask:
+	svc.Answer(ctx, limen.Answer{Key: a.Key, Approve: holdForPerson()})
+case limen.Block:
+	refuse() // with your own words, never Limen's reason
 }
 ```
 
@@ -189,7 +189,7 @@ Content-Type: application/json
 }
 ```
 
-The judge said allow, but Cribrum does not know this person approves a push
+The judge said allow, but Limen does not know this person approves a push
 to `main` often enough to skip asking under these costs. Your decision
 point asks, and records it:
 
@@ -206,24 +206,24 @@ says how often that judge allowed what this person would have denied.
 
 ## Try it
 
-Replay what a decision point already recorded, to see what Cribrum would
+Replay what a decision point already recorded, to see what Limen would
 have suggested. From a Topos data directory:
 
 ```sh
-go run ./cmd/cribrum replay topos
+go run ./cmd/limen replay topos
 ```
 
 Serve the API for yourself, with the ledger on disk, and point Topos at
-it. Manual mode teaches Cribrum from your answers; auto mode lets its
+it. Manual mode teaches Limen from your answers; auto mode lets its
 suggestions decide inside Topos's rules:
 
 ```sh
-export CRIBRUM_TOKEN=$(openssl rand -hex 16)
-go run ./cmd/cribrum serve &          # http://127.0.0.1:7720
+export LIMEN_TOKEN=$(openssl rand -hex 16)
+go run ./cmd/limen serve &          # http://127.0.0.1:7720
 
-export TOPOS_DECISIONS_URL=http://127.0.0.1:7720 TOPOS_DECISIONS_TOKEN=$CRIBRUM_TOKEN
-topos run --mode manual "..."       # every call asks; each answer teaches Cribrum
-topos run --mode auto   "..."       # Cribrum decides inside the rules, and asks when unsure
+export TOPOS_DECISIONS_URL=http://127.0.0.1:7720 TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
+topos run --mode manual "..."       # every call asks; each answer teaches Limen
+topos run --mode auto   "..."       # Limen decides inside the rules, and asks when unsure
 ```
 
 [Integrating](docs/integrating.md#notes-by-harness) has the details.
@@ -240,12 +240,12 @@ topos run --mode auto   "..."       # Cribrum decides inside the rules, and asks
 | [Theory](docs/theory.md) | the model, the decision rule, forgetting, the estimators, and what can be known about a judge |
 | [Specs](specs/README.md) | the design records the implementation is built from |
 
-The Go reference is the package documentation of `latere.ai/x/cribrum` and
+The Go reference is the package documentation of `latere.ai/x/limen` and
 `latere.ai/x/pkg/verdict`.
 
 ## Research
 
-Cribrum is built on the paper *Learning When to Ask: Trust Calibration for
+Limen is built on the paper *Learning When to Ask: Trust Calibration for
 Agentic Tool Use, from Known Tools to Opaque LLM Judges*
 ([arXiv:2605.19151](https://arxiv.org/abs/2605.19151)). Its simulations,
 a reference implementation, and machine-checked proofs of its eight

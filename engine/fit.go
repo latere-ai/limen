@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"latere.ai/x/cribrum/engine/featurize"
-	"latere.ai/x/cribrum/engine/gp"
-	"latere.ai/x/cribrum/engine/kernel"
+	"latere.ai/x/limen/engine/featurize"
+	"latere.ai/x/limen/engine/gp"
+	"latere.ai/x/limen/engine/kernel"
 )
 
 // model is one subject's fitted posterior. Predictions read post without

@@ -9,7 +9,7 @@ func TestStringNamesTheBinaryAndTheBuild(t *testing.T) {
 	old := [3]string{Version, Commit, Date}
 	t.Cleanup(func() { Version, Commit, Date = old[0], old[1], old[2] })
 	Version, Commit, Date = "v0.1.0", "abc1234", "2026-10-02T00:00:00Z"
-	if got, want := String("cribrumd"), "cribrumd v0.1.0 (abc1234, 2026-10-02T00:00:00Z)"; got != want {
+	if got, want := String("limend"), "limend v0.1.0 (abc1234, 2026-10-02T00:00:00Z)"; got != want {
 		t.Fatalf("String = %q, want %q", got, want)
 	}
 }

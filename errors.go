@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package cribrum
+package limen
 
 import (
 	"errors"
@@ -52,17 +52,17 @@ var table = map[Code]row{
 	CodeInvalidProfile:        {400, "The cost profile is missing a field or has a value out of range. Fix the fields listed in the details and save it again."},
 	CodeInvalidQuery:          {400, "The request is missing a field or has a value out of range. Fix the fields listed in the details and ask again."},
 	CodeInvalidReplay:         {400, "A replayed record is missing a field or has a value out of range. Fix the records listed in the details and replay again."},
-	CodeAskTooCostly:          {422, "With these costs, Cribrum would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."},
+	CodeAskTooCostly:          {422, "With these costs, Limen would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."},
 	CodeActionConflict:        {409, "This action id was already used for a different action. Give each action its own id."},
 	CodeAlreadyDecided:        {409, "This action already has a decision. Each action is decided once."},
 	CodeNoDecision:            {409, "This action has no recorded decision. Record the decision first, then send the answer."},
 	CodeUnauthenticated:       {401, "The request carries no valid credential. Sign in again and retry."},
 	CodeForbidden:             {403, "You do not have permission for this. Ask an administrator of the organization for access."},
-	CodeBodyTooLarge:          {413, "The request is larger than Cribrum accepts. Send it in smaller parts."},
+	CodeBodyTooLarge:          {413, "The request is larger than Limen accepts. Send it in smaller parts."},
 	CodeRateLimited:           {429, "Too many requests. Wait a moment and try again."},
-	CodeInternal:              {500, "Something failed on Cribrum's side. Try again; if it keeps failing, report it with the request id."},
+	CodeInternal:              {500, "Something failed on Limen's side. Try again; if it keeps failing, report it with the request id."},
 	CodeAuthorizerUnavailable: {503, "The permission service is unavailable. Try again shortly."},
-	CodeUnavailable:           {503, "Cribrum is unavailable right now. Hold the action for a person and try again shortly."},
+	CodeUnavailable:           {503, "Limen is unavailable right now. Hold the action for a person and try again shortly."},
 }
 
 // Codes returns every code in the table, in the order the constants are

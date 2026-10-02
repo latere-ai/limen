@@ -16,7 +16,7 @@ import (
 
 	"gonum.org/v1/gonum/mat"
 
-	"latere.ai/x/cribrum/engine/kernel"
+	"latere.ai/x/limen/engine/kernel"
 )
 
 // The fixtures are the research implementation's, written by trustcalib's

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-package cribrum
+package limen
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ const (
 	Block = verdict.Block
 )
 
-// Key names one proposed action in every record Cribrum keeps. The decision
+// Key names one proposed action in every record Limen keeps. The decision
 // point chooses ActionID and keeps it unique within the organization and
 // subject; Topos, for example, uses the session id and the tool call's id.
 type Key struct {
@@ -30,7 +30,7 @@ type Key struct {
 	// these are.
 	Org string `json:"org"`
 	// Subject is the person on whose behalf the action runs and whose
-	// approvals Cribrum learns, rendered as the issuer and the token's sub
+	// approvals Limen learns, rendered as the issuer and the token's sub
 	// joined by a pipe. It may name a group whose members answer for it.
 	Subject  string `json:"subject"`
 	ActionID string `json:"action_id"`
@@ -73,7 +73,7 @@ func (e Effect) Valid() bool {
 const MaxAttributes = 64
 
 // Action is one proposed action, described by what the decision point can
-// observe before it runs. Cribrum learns from these fields and from time,
+// observe before it runs. Limen learns from these fields and from time,
 // which it keeps itself; nothing else about the action reaches the model.
 type Action struct {
 	Key
@@ -91,7 +91,7 @@ type Action struct {
 	Reversible *bool `json:"reversible,omitempty"`
 	// Input is the action's input, such as a tool call's arguments. Only
 	// deterministic feature extractors read it, so text an agent writes
-	// never instructs a model inside Cribrum, and Cribrum never stores it.
+	// never instructs a model inside Limen, and Limen never stores it.
 	Input       json.RawMessage `json:"input,omitempty"`
 	Target      *Target         `json:"target,omitempty"`
 	Environment *Environment    `json:"environment,omitempty"`
@@ -100,7 +100,7 @@ type Action struct {
 	// strings, numbers or booleans.
 	Attributes map[string]any `json:"attributes,omitempty"`
 	// Signals are other opinions about the action: a rule's score, an LLM
-	// judge's verdict. Cribrum treats them as evidence about the person's
+	// judge's verdict. Limen treats them as evidence about the person's
 	// answer, and reports the reliability of each source.
 	Signals []Signal `json:"signals,omitempty"`
 }

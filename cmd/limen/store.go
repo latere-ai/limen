@@ -4,8 +4,8 @@
 package main
 
 import (
-	"latere.ai/x/cribrum/engine/store"
-	"latere.ai/x/cribrum/engine/store/file"
+	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/limen/engine/store/file"
 )
 
 // openStore opens the ledger kept in dir, creating it when it is new.

@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Command cribrum is Cribrum's command line. It replays recorded decisions
-// through Cribrum, from a Topos data directory or from a file of records,
-// and reports what Cribrum would have suggested and how often it would have
-// been wrong. The server is cribrumd:
+// Command limen is Limen's command line. It replays recorded decisions
+// through Limen, from a Topos data directory or from a file of records,
+// and reports what Limen would have suggested and how often it would have
+// been wrong. The server is limend:
 //
-//	cribrum replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-//	cribrum replay file  [--keep --store DIR] [--json] RECORDS.ndjson
-//	cribrum version
+//	limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
+//	limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+//	limen version
 //
 // It exits 0 on success, 1 when the replay fails, and 2 on a usage error.
 package main
@@ -19,7 +19,7 @@ import (
 
 	"latere.ai/x/pkg/errwriter"
 
-	"latere.ai/x/cribrum/internal/version"
+	"latere.ai/x/limen/internal/version"
 )
 
 func main() {
@@ -33,14 +33,14 @@ const (
 	exitUsage = 2
 )
 
-const usage = `Cribrum learns when an automated action needs a person.
+const usage = `Limen learns when an automated action needs a person.
 
 Usage:
-  cribrum replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-  cribrum replay file  [--keep --store DIR] [--json] RECORDS.ndjson
-  cribrum version
+  limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
+  limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+  limen version
 
-Run "cribrum replay topos -h" for the options of a command.
+Run "limen replay topos -h" for the options of a command.
 `
 
 // run is the command line, with its environment passed in so a test can
@@ -64,12 +64,12 @@ func dispatch(args []string, stdin io.Reader, out, errOut *errwriter.Writer, get
 	case "replay":
 		return replay(args[1:], stdin, out, errOut, getenv)
 	case "version":
-		out.Println(version.String("cribrum"))
+		out.Println(version.String("limen"))
 		return exitOK
 	case "help", "-h", "--help":
 		out.Print(usage)
 		return exitOK
 	}
-	errOut.Printf("cribrum: unknown command %q.\n\n%s", args[0], usage)
+	errOut.Printf("limen: unknown command %q.\n\n%s", args[0], usage)
 	return exitUsage
 }

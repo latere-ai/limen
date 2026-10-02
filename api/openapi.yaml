@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Cribrum
+  title: Limen
   version: "1"
   summary: The oversight layer for automated actions.
   description: >-
-    Cribrum serves the decision point that lets an automated action run or
+    Limen serves the decision point that lets an automated action run or
     not: an agent's tool call, a network request, a push, a payment. It
     predicts, for the person on whose behalf the action runs, the
     probability that they would approve it and suggests a verdict from the
@@ -12,17 +12,17 @@ info:
     point decided, with the probability that a person saw the action, and
     of the person's answers; and it reports how often any source of
     decisions allows what the person would deny. The decision point decides
-    and draws reviews itself; Cribrum never applies a verdict. Every record is
+    and draws reviews itself; Limen never applies a verdict. Every record is
     keyed by the organization, the subject, and the decision point's own id
     for the action. The server serves these routes under /v1; a platform may
     mount them under a prefix of its own. Every route asks the
-    installation's authorizer for the action named in x-cribrum-action, about
-    a resource of the kind and with the fields named in x-cribrum-resource,
+    installation's authorizer for the action named in x-limen-action, about
+    a resource of the kind and with the fields named in x-limen-resource,
     before it acts. Request and response bodies are JSON (the replay upload
     is newline-delimited JSON); a receiver ignores fields it does not know,
     so a newer client can talk to an older server, and validates the fields
     it knows strictly. Where several error codes share a status on one
-    route, the response lists them in x-cribrum-codes.
+    route, the response lists them in x-limen-codes.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -34,15 +34,15 @@ paths:
       operationId: predict
       summary: Predict an action
       description: >-
-        Cribrum's prediction for one proposed action: the probability that the
+        Limen's prediction for one proposed action: the probability that the
         subject approves it, how uncertain that is, and the verdict it
         suggests under the cost profile that applies. Idempotent on the
         action's key: a repeat with the same action returns the first
         prediction, and a repeat with a different action is refused with
-        action_conflict. Cribrum reads the action's input to extract features
+        action_conflict. Limen reads the action's input to extract features
         and never stores it.
-      x-cribrum-action: case.predict
-      x-cribrum-resource:
+      x-limen-action: case.predict
+      x-limen-resource:
         kind: Case
         fields: [org, subject]
       requestBody:
@@ -83,11 +83,11 @@ paths:
         applied, the probability, fixed before the action ran, that a person
         sees it, and the policy that decided. Record every decision, not
         only the ones a person sees: a source's allows are the denominator
-        of its error rate. An action takes one decision. When Cribrum holds no
+        of its error rate. An action takes one decision. When Limen holds no
         prediction for the action, as after a fail-closed fallback, the
         decision carries the action.
-      x-cribrum-action: case.decide
-      x-cribrum-resource:
+      x-limen-action: case.decide
+      x-limen-resource:
         kind: Case
         fields: [org, subject]
       requestBody:
@@ -107,7 +107,7 @@ paths:
           $ref: "#/components/responses/forbidden"
         "409":
           description: "409 already_decided or action_conflict: the action already has a decision, or the action the decision carries differs from the one predicted."
-          x-cribrum-codes: [already_decided, action_conflict]
+          x-limen-codes: [already_decided, action_conflict]
           content:
             application/json:
               schema:
@@ -126,14 +126,14 @@ paths:
       summary: Send an answer
       description: >-
         Record a person's answer about an action whose decision is recorded.
-        Cribrum stamps the time. The first answer to an action the decision
+        Limen stamps the time. The first answer to an action the decision
         showed a person is its review and enters error estimates; any later
         answer, or an answer to an action nobody was shown, trains the model
         only. A caller that relays an answer for someone else names them in
         by, which is honored only when the authorizer allows the caller to
         answer for the subject.
-      x-cribrum-action: case.answer
-      x-cribrum-resource:
+      x-limen-action: case.answer
+      x-limen-resource:
         kind: Case
         fields: [org, subject]
       requestBody:
@@ -171,8 +171,8 @@ paths:
         With action_id, the one case of that action. With pending=true, the
         review queue: actions a decision showed a person that have no review
         yet.
-      x-cribrum-action: case.list
-      x-cribrum-resource:
+      x-limen-action: case.list
+      x-limen-resource:
         kind: Case
         fields: [org, subject]
       parameters:
@@ -224,14 +224,14 @@ paths:
       summary: Report a source's error rates
       description: >-
         How often one source's verdicts disagreed with one person over one
-        window: Cribrum's suggestions (of=learned), the verdicts decision
+        window: Limen's suggestions (of=learned), the verdicts decision
         points applied (of=applied), one decision source such as rules/1, or
         one signal source such as classifier/claude-auto-mode. Each review
         counts with weight one over its decision's review probability. A
         rate is null, not zero, when no action in the window could have been
         reviewed.
-      x-cribrum-action: reliability.read
-      x-cribrum-resource:
+      x-limen-action: reliability.read
+      x-limen-resource:
         kind: Reliability
         fields: [org, subject]
       parameters:
@@ -286,8 +286,8 @@ paths:
         The cost profile that applies to a scope: the most specific saved
         profile, in the order kind and agent, agent, kind, organization, or
         the built-in default, which says so in default.
-      x-cribrum-action: profile.read
-      x-cribrum-resource:
+      x-limen-action: profile.read
+      x-limen-resource:
         kind: Profile
         fields: [org, action_kind, agent]
       parameters:
@@ -326,8 +326,8 @@ paths:
         Validate and save a profile for its scope. The thresholds are derived
         from the costs, and a profile that states no certify claim takes the
         default; values sent for thresholds or default are ignored.
-      x-cribrum-action: profile.write
-      x-cribrum-resource:
+      x-limen-action: profile.write
+      x-limen-resource:
         kind: Profile
         fields: [org, action_kind, agent]
       requestBody:
@@ -365,13 +365,13 @@ paths:
       summary: Replay recorded history
       description: >-
         Predict recorded actions in time order, each before its own answer
-        is learned, and report what Cribrum would have suggested. Without
+        is learned, and report what Limen would have suggested. Without
         keep, the replay learns in a scratch model and keeps nothing; with
         keep=true, the records are learned into the live models and the
         ledger, as if they had arrived as decisions and answers. At most
         100000 records per replay.
-      x-cribrum-action: replay.create
-      x-cribrum-resource:
+      x-limen-action: replay.create
+      x-limen-resource:
         kind: Replay
         fields: [org]
       parameters:
@@ -412,10 +412,10 @@ paths:
       operationId: forgetSubject
       summary: Forget a person
       description: >-
-        Delete everything Cribrum holds about one subject in one organization:
+        Delete everything Limen holds about one subject in one organization:
         cases, answers, and the model learned from them. Idempotent.
-      x-cribrum-action: subject.forget
-      x-cribrum-resource:
+      x-limen-action: subject.forget
+      x-limen-resource:
         kind: Subject
         fields: [org, subject]
       requestBody:
@@ -468,7 +468,7 @@ components:
       enum: [allow, flag, ask, block]
     Suggestion:
       type: string
-      description: Cribrum's suggestion. Cribrum never suggests flag; a flag is the decision point's, when it draws a review.
+      description: Limen's suggestion. Limen never suggests flag; a flag is the decision point's, when it draws a review.
       enum: [allow, ask, block]
     Probability:
       type: number
@@ -483,7 +483,7 @@ components:
           description: The organization whose cost profile applies and whose records these are.
         subject:
           type: string
-          description: The person on whose behalf the action runs and whose approvals Cribrum learns, as the issuer and the token's sub joined by a pipe.
+          description: The person on whose behalf the action runs and whose approvals Limen learns, as the issuer and the token's sub joined by a pipe.
           examples:
           - https://issuer.example|usr_42
         action_id:
@@ -516,7 +516,7 @@ components:
           type: boolean
           description: Whether the action can be undone, when known.
         input:
-          description: The action's input. Only deterministic feature extractors read it; Cribrum never stores it.
+          description: The action's input. Only deterministic feature extractors read it; Limen never stores it.
         target:
           $ref: "#/components/schemas/Target"
         environment:
@@ -595,7 +595,7 @@ components:
       - required: [score]
     Prediction:
       type: object
-      description: Cribrum's opinion about one action, for the decision point to compose with its own rules.
+      description: Limen's opinion about one action, for the decision point to compose with its own rules.
       properties:
         org:
           type: string
@@ -691,11 +691,11 @@ components:
       required: [org, subject, action_id, approve]
     Case:
       type: object
-      description: Everything Cribrum holds about one action.
+      description: Everything Limen holds about one action.
       properties:
         action:
           $ref: "#/components/schemas/Action"
-          description: The action, without its input, which Cribrum never stores.
+          description: The action, without its input, which Limen never stores.
         prediction:
           $ref: "#/components/schemas/Prediction"
         decision:
@@ -753,7 +753,7 @@ components:
         default:
           type: boolean
           readOnly: true
-          description: True for the built-in profile Cribrum applies to a scope with no saved profile.
+          description: True for the built-in profile Limen applies to a scope with no saved profile.
       required: [org, costs, audit_rate, thresholds]
     Costs:
       type: object
@@ -882,7 +882,7 @@ components:
           type: integer
         would:
           type: object
-          description: Cribrum's suggestions on the records, counted by verdict.
+          description: Limen's suggestions on the records, counted by verdict.
           propertyNames:
             $ref: "#/components/schemas/Suggestion"
           additionalProperties:
@@ -933,8 +933,8 @@ components:
       required: [error]
   responses:
     service_unavailable:
-      description: "503 unavailable or authorizer_unavailable: Cribrum, or the permission service it asks, is unavailable; a decision point holds the action for a person."
-      x-cribrum-codes: [unavailable, authorizer_unavailable]
+      description: "503 unavailable or authorizer_unavailable: Limen, or the permission service it asks, is unavailable; a decision point holds the action for a person."
+      x-limen-codes: [unavailable, authorizer_unavailable]
       content:
         application/json:
           schema:
@@ -976,7 +976,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     ask_too_costly:
-      description: "422 ask_too_costly: With these costs, Cribrum would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."
+      description: "422 ask_too_costly: With these costs, Limen would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."
       content:
         application/json:
           schema:
@@ -1012,7 +1012,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     body_too_large:
-      description: "413 body_too_large: The request is larger than Cribrum accepts. Send it in smaller parts."
+      description: "413 body_too_large: The request is larger than Limen accepts. Send it in smaller parts."
       content:
         application/json:
           schema:
@@ -1024,7 +1024,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     internal:
-      description: "500 internal: Something failed on Cribrum's side. Try again; if it keeps failing, report it with the request id."
+      description: "500 internal: Something failed on Limen's side. Try again; if it keeps failing, report it with the request id."
       content:
         application/json:
           schema:
@@ -1036,7 +1036,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     unavailable:
-      description: "503 unavailable: Cribrum is unavailable right now. Hold the action for a person and try again shortly."
+      description: "503 unavailable: Limen is unavailable right now. Hold the action for a person and try again shortly."
       content:
         application/json:
           schema:

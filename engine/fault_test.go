@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"latere.ai/x/cribrum"
-	"latere.ai/x/cribrum/engine"
-	"latere.ai/x/cribrum/engine/store"
+	"latere.ai/x/limen"
+	"latere.ai/x/limen/engine"
+	"latere.ai/x/limen/engine/store"
 )
 
 var errStore = errors.New("store: down")
@@ -50,7 +50,7 @@ func (f *faulty) called(name string) int {
 	return f.calls[name]
 }
 
-func (f *faulty) Case(ctx context.Context, k cribrum.Key) (store.Case, bool, error) {
+func (f *faulty) Case(ctx context.Context, k limen.Key) (store.Case, bool, error) {
 	if err := f.hit("Case"); err != nil {
 		return store.Case{}, false, err
 	}
@@ -78,14 +78,14 @@ func (f *faulty) Cases(ctx context.Context, org, subject string) ([]store.Case, 
 	return f.Memory.Cases(ctx, org, subject)
 }
 
-func (f *faulty) Profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile, bool, error) {
+func (f *faulty) Profile(ctx context.Context, s limen.Scope) (limen.Profile, bool, error) {
 	if err := f.hit("Profile"); err != nil {
-		return cribrum.Profile{}, false, err
+		return limen.Profile{}, false, err
 	}
 	return f.Memory.Profile(ctx, s)
 }
 
-func (f *faulty) PutProfile(ctx context.Context, p cribrum.Profile) error {
+func (f *faulty) PutProfile(ctx context.Context, p limen.Profile) error {
 	if err := f.hit("PutProfile"); err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (f *faulty) PutSnapshot(ctx context.Context, org, subject, version string, 
 // Every store failure reaches the caller as an error, never as a verdict.
 func TestStoreFailuresSurface(t *testing.T) {
 	a := bash("s", "a", "go test ./...")
-	ask := cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m"}
+	ask := limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "m"}
 	withAction := ask
 	withAction.Action = &a
 	steps := map[string]func(e *engine.Engine) error{
@@ -117,18 +117,18 @@ func TestStoreFailuresSurface(t *testing.T) {
 		"record": func(e *engine.Engine) error {
 			return e.Record(ctx, withAction)
 		},
-		"answer": func(e *engine.Engine) error { return e.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: true}) },
+		"answer": func(e *engine.Engine) error { return e.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}) },
 		"cases": func(e *engine.Engine) error {
-			_, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s"})
+			_, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s"})
 			return err
 		},
 		"reliability": func(e *engine.Engine) error {
-			_, err := e.Reliability(ctx, cribrum.ReliabilityQuery{Org: "o", Subject: "s", Of: cribrum.OfApplied, From: time.Unix(0, 0), To: time.Now().Add(time.Hour)})
+			_, err := e.Reliability(ctx, limen.ReliabilityQuery{Org: "o", Subject: "s", Of: limen.OfApplied, From: time.Unix(0, 0), To: time.Now().Add(time.Hour)})
 			return err
 		},
-		"profile": func(e *engine.Engine) error { _, err := e.Profile(ctx, cribrum.Scope{Org: "o"}); return err },
+		"profile": func(e *engine.Engine) error { _, err := e.Profile(ctx, limen.Scope{Org: "o"}); return err },
 		"put profile": func(e *engine.Engine) error {
-			_, err := e.PutProfile(ctx, cribrum.Profile{Org: "o", Costs: cribrum.DefaultCosts})
+			_, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.DefaultCosts})
 			return err
 		},
 	}
@@ -155,10 +155,10 @@ func TestFitFailures(t *testing.T) {
 	if _, err := e.Predict(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m"}); err != nil {
+	if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "m"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Answer(ctx, cribrum.Answer{Key: a.Key, Approve: true}); err != nil {
+	if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Predict(ctx, bash("s", "b", "go test ./...")); !errors.Is(err, errStore) {
@@ -198,8 +198,8 @@ func TestRefeaturizes(t *testing.T) {
 		a := bash("s", fmt.Sprintf("old-%d", i), "go test ./...")
 		a.Input = nil
 		c := store.Case{T: int64(i), ReceivedAt: time.Now(), Action: a, Featurizer: "features/0", A: []float64{1}, C: []float64{1},
-			Decision: &cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m"},
-			Answers:  []cribrum.RecordedAnswer{{Approve: true, Review: true}}}
+			Decision: &limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "m"},
+			Answers:  []limen.RecordedAnswer{{Approve: true, Review: true}}}
 		if err := st.Put(ctx, c); err != nil {
 			t.Fatal(err)
 		}
@@ -226,12 +226,12 @@ func TestQueryValidation(t *testing.T) {
 	a := bash("s", "a", "ls")
 	canceled := []error{
 		func() error { _, err := e.Predict(c, a); return err }(),
-		e.Record(c, cribrum.Decision{}),
-		e.Answer(c, cribrum.Answer{}),
-		func() error { _, err := e.Cases(c, cribrum.CaseQuery{}); return err }(),
-		func() error { _, err := e.Reliability(c, cribrum.ReliabilityQuery{}); return err }(),
-		func() error { _, err := e.Profile(c, cribrum.Scope{}); return err }(),
-		func() error { _, err := e.PutProfile(c, cribrum.Profile{}); return err }(),
+		e.Record(c, limen.Decision{}),
+		e.Answer(c, limen.Answer{}),
+		func() error { _, err := e.Cases(c, limen.CaseQuery{}); return err }(),
+		func() error { _, err := e.Reliability(c, limen.ReliabilityQuery{}); return err }(),
+		func() error { _, err := e.Profile(c, limen.Scope{}); return err }(),
+		func() error { _, err := e.PutProfile(c, limen.Profile{}); return err }(),
 		e.Forget(c, "o", "s"),
 	}
 	for i, err := range canceled {
@@ -239,16 +239,16 @@ func TestQueryValidation(t *testing.T) {
 			t.Errorf("call %d under a canceled context: %v", i, err)
 		}
 	}
-	if _, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s", Cursor: "x"}); cribrum.CodeOf(err) != cribrum.CodeInvalidQuery {
+	if _, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", Cursor: "x"}); limen.CodeOf(err) != limen.CodeInvalidQuery {
 		t.Errorf("bad cursor: %v", err)
 	}
-	if _, err := e.Profile(ctx, cribrum.Scope{}); cribrum.CodeOf(err) != cribrum.CodeInvalidQuery {
+	if _, err := e.Profile(ctx, limen.Scope{}); limen.CodeOf(err) != limen.CodeInvalidQuery {
 		t.Errorf("profile with no org: %v", err)
 	}
-	if _, err := e.PutProfile(ctx, cribrum.Profile{Org: "o", Costs: cribrum.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}}); cribrum.CodeOf(err) != cribrum.CodeAskTooCostly {
+	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}}); limen.CodeOf(err) != limen.CodeAskTooCostly {
 		t.Errorf("costs that decide on no evidence: %v", err)
 	}
-	if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m"}); cribrum.CodeOf(err) != cribrum.CodeInvalidDecision {
+	if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "m"}); limen.CodeOf(err) != limen.CodeInvalidDecision {
 		t.Errorf("a decision with no prediction and no action: %v", err)
 	}
 	other := a
@@ -256,7 +256,7 @@ func TestQueryValidation(t *testing.T) {
 	if _, err := e.Predict(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: cribrum.Ask, ReviewProbability: 1, Source: "m", Action: &other}); cribrum.CodeOf(err) != cribrum.CodeActionConflict {
+	if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "m", Action: &other}); limen.CodeOf(err) != limen.CodeActionConflict {
 		t.Errorf("a decision carrying a different action: %v", err)
 	}
 }
@@ -270,22 +270,22 @@ func TestCasesPaging(t *testing.T) {
 		if _, err := e.Predict(ctx, a); err != nil {
 			t.Fatal(err)
 		}
-		v := cribrum.Ask
+		v := limen.Ask
 		if i%2 == 0 {
-			v = cribrum.Allow
+			v = limen.Allow
 		}
 		prob := 1.0
-		if v == cribrum.Allow {
+		if v == limen.Allow {
 			prob = 0
 		}
-		if err := e.Record(ctx, cribrum.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "m"}); err != nil {
+		if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "m"}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var seen int
 	cursor := ""
 	for {
-		page, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s", Cursor: cursor, Limit: 3})
+		page, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", Cursor: cursor, Limit: 3})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -298,11 +298,11 @@ func TestCasesPaging(t *testing.T) {
 	if seen != 7 {
 		t.Errorf("paged through %d cases, want 7", seen)
 	}
-	pending, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s", Pending: true})
+	pending, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", Pending: true})
 	if err != nil || len(pending.Entries) != 3 {
 		t.Errorf("pending %d, %v; want the 3 asks", len(pending.Entries), err)
 	}
-	one, err := e.Cases(ctx, cribrum.CaseQuery{Org: "o", Subject: "s", ActionID: "p-4"})
+	one, err := e.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", ActionID: "p-4"})
 	if err != nil || len(one.Entries) != 1 || one.Entries[0].Action.Input != nil {
 		t.Errorf("one case %+v, %v", one, err)
 	}
@@ -313,12 +313,12 @@ func TestCasesPaging(t *testing.T) {
 func TestReplayUsesProfiles(t *testing.T) {
 	e := engine.New(engine.Options{})
 	defer e.Close()
-	if _, err := e.PutProfile(ctx, cribrum.Profile{Org: "o", Kind: "tool", Costs: cribrum.Costs{FalseAllow: 3, FalseBlock: 3, Ask: 1}, AuditRate: 0.1}); err != nil {
+	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Kind: "tool", Costs: limen.Costs{FalseAllow: 3, FalseBlock: 3, Ask: 1}, AuditRate: 0.1}); err != nil {
 		t.Fatal(err)
 	}
-	r := cribrum.ReplayRecord{At: time.Now(), Action: bash("s", "a", "ls"), Verdict: cribrum.Allow, ReviewProbability: 0.1, Source: "m"}
-	rep, err := e.Replay(ctx, recs([]cribrum.ReplayRecord{r}), cribrum.ReplayOptions{})
-	if err != nil || rep.Would[cribrum.Ask] != 1 {
+	r := limen.ReplayRecord{At: time.Now(), Action: bash("s", "a", "ls"), Verdict: limen.Allow, ReviewProbability: 0.1, Source: "m"}
+	rep, err := e.Replay(ctx, recs([]limen.ReplayRecord{r}), limen.ReplayOptions{})
+	if err != nil || rep.Would[limen.Ask] != 1 {
 		t.Errorf("%+v, %v", rep, err)
 	}
 	if rep.FalseAllow.Value != nil {

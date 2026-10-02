@@ -8,7 +8,7 @@ package version
 
 import "fmt"
 
-// Set by -ldflags "-X latere.ai/x/cribrum/internal/version.Version=..." at
+// Set by -ldflags "-X latere.ai/x/limen/internal/version.Version=..." at
 // build time.
 var (
 	Version = "dev"

@@ -8,21 +8,21 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 func TestAutomatic(t *testing.T) {
 	cases := []struct {
-		v      cribrum.Verdict
+		v      limen.Verdict
 		review float64
-		want   cribrum.Verdict
+		want   limen.Verdict
 	}{
-		{cribrum.Allow, 0.05, cribrum.Allow},
-		{cribrum.Flag, 0.05, cribrum.Allow},
-		{cribrum.Flag, 1, cribrum.Allow},
-		{cribrum.Block, 0, cribrum.Block},
-		{cribrum.Ask, 0.05, cribrum.Block},
-		{cribrum.Ask, 1, ""},
+		{limen.Allow, 0.05, limen.Allow},
+		{limen.Flag, 0.05, limen.Allow},
+		{limen.Flag, 1, limen.Allow},
+		{limen.Block, 0, limen.Block},
+		{limen.Ask, 0.05, limen.Block},
+		{limen.Ask, 1, ""},
 		{"", 0.5, ""},
 	}
 	for _, c := range cases {
@@ -36,7 +36,7 @@ func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
 func TestRate(t *testing.T) {
 	allow := func(p float64, shown, reviewed, approve bool) Row {
-		return Row{Verdict: cribrum.Allow, Review: p, Shown: shown, Reviewed: reviewed, Approve: approve}
+		return Row{Verdict: limen.Allow, Review: p, Shown: shown, Reviewed: reviewed, Approve: approve}
 	}
 	t.Run("not estimable is null, not zero", func(t *testing.T) {
 		e := Rate([]Row{allow(0, false, false, false), allow(0, false, false, false)}, FalseAllow)
@@ -95,8 +95,8 @@ func TestRate(t *testing.T) {
 	})
 	t.Run("false block counts approvals of blocks", func(t *testing.T) {
 		rows := []Row{
-			{Verdict: cribrum.Block, Review: 1, Shown: true, Reviewed: true, Approve: true},
-			{Verdict: cribrum.Block, Review: 1, Shown: true, Reviewed: true, Approve: false},
+			{Verdict: limen.Block, Review: 1, Shown: true, Reviewed: true, Approve: true},
+			{Verdict: limen.Block, Review: 1, Shown: true, Reviewed: true, Approve: false},
 			allow(1, true, true, false),
 		}
 		e := Rate(rows, FalseBlock)
@@ -142,7 +142,7 @@ func TestRateIsUnbiased(t *testing.T) {
 				p = 1
 			}
 			shown := rng.Float64() < p
-			rows[i] = Row{Verdict: cribrum.Allow, Review: p, Shown: shown, Reviewed: shown, Approve: !errs[i]}
+			rows[i] = Row{Verdict: limen.Allow, Review: p, Shown: shown, Reviewed: shown, Approve: !errs[i]}
 		}
 		e := Rate(rows, FalseAllow)
 		sum += *e.Value
@@ -170,7 +170,7 @@ func TestIntervalCoverage(t *testing.T) {
 		rows := make([]Row, n)
 		for i := range n {
 			shown := rng.Float64() < rate
-			rows[i] = Row{Verdict: cribrum.Allow, Review: rate, Shown: shown, Reviewed: shown, Approve: !errs[i]}
+			rows[i] = Row{Verdict: limen.Allow, Review: rate, Shown: shown, Reviewed: shown, Approve: !errs[i]}
 		}
 		iv := Rate(rows, FalseAllow).Interval
 		if iv[0] <= truth && truth <= iv[1] {
@@ -184,7 +184,7 @@ func TestIntervalCoverage(t *testing.T) {
 
 func TestCertificate(t *testing.T) {
 	audit := func(approve bool) Row {
-		return Row{Verdict: cribrum.Allow, Review: 0.05, Shown: true, Reviewed: true, Approve: approve}
+		return Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true, Approve: approve}
 	}
 	rows := []Row{audit(true), audit(false)}
 	for range 12 {
@@ -192,18 +192,18 @@ func TestCertificate(t *testing.T) {
 	}
 	// Forced reviews, blocks and unreviewed allows do not count either way.
 	rows = append(rows,
-		Row{Verdict: cribrum.Allow, Review: 1, Shown: true, Reviewed: true, Approve: false},
-		Row{Verdict: cribrum.Block, Review: 0.05, Shown: true, Reviewed: true, Approve: false},
-		Row{Verdict: cribrum.Allow, Review: 0.05})
-	c := Certificate(rows, cribrum.Certify{Alpha: 0.25, Delta: 0.05})
+		Row{Verdict: limen.Allow, Review: 1, Shown: true, Reviewed: true, Approve: false},
+		Row{Verdict: limen.Block, Review: 0.05, Shown: true, Reviewed: true, Approve: false},
+		Row{Verdict: limen.Allow, Review: 0.05})
+	c := Certificate(rows, limen.Certify{Alpha: 0.25, Delta: 0.05})
 	if c.Clean != 12 || c.Needed != 12 || !c.Holds {
 		t.Errorf("%+v", c)
 	}
-	c = Certificate(rows, cribrum.Certify{})
+	c = Certificate(rows, limen.Certify{})
 	if c.Alpha != 0.01 || c.Needed != 300 || c.Holds {
 		t.Errorf("default: %+v", c)
 	}
-	c = Certificate(rows, cribrum.Certify{Alpha: 2, Delta: 0.05})
+	c = Certificate(rows, limen.Certify{Alpha: 2, Delta: 0.05})
 	if c.Holds || c.Needed != 0 || c.Clean != 12 {
 		t.Errorf("invalid: %+v", c)
 	}

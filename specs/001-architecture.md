@@ -3,7 +3,7 @@ title: "Architecture: the shared vocabulary, the ledger, the predictor, and the 
 status: drafted
 track: core
 depends_on: []
-affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, cmd/cribrumd/, cmd/cribrum-hook/, api/, docs/]
+affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, cmd/limend/, cmd/limen-hook/, api/, docs/]
 effort: medium
 created: 2026-09-28
 updated: 2026-10-02
@@ -27,7 +27,7 @@ that their tolerance changes when they move to an unfamiliar system. And
 an automatic allow never receives an answer, so its error rate is never
 observed.
 
-Cribrum is the oversight layer for those decisions. It is three orthogonal
+Limen is the oversight layer for those decisions. It is three orthogonal
 parts, each usable without the parts that build on it:
 
 1. **A shared vocabulary**, `latere.ai/x/pkg/verdict`: the four verdicts
@@ -40,7 +40,7 @@ parts, each usable without the parts that build on it:
    that probability, and every answer a person gave, and reports how
    often any source of decisions allows what the person would deny: a
    rule, an LLM judge whose verdict arrived as a signal, the verdicts
-   applied, or Cribrum's own predictions. A decision point that decides by
+   applied, or Limen's own predictions. A decision point that decides by
    rules alone can use the ledger to learn how often its rules, and the
    judge it consults, are wrong.
 3. **A predictor**, which learns each person's tolerance from the
@@ -53,7 +53,7 @@ applies the result, and records it in the ledger. That division is the
 architecture's main decision: whoever applies a verdict is the only
 party that knows the probability with which a person sees the action,
 so the probability is recorded by the decision point and never inferred
-by Cribrum.
+by Limen.
 
 The design follows the research in *Learning When to Ask: Trust
 Calibration for Agentic Tool Use, from Known Tools to Opaque LLM Judges*
@@ -69,8 +69,8 @@ propositions are machine-checked in Lean 4 at
 sequenceDiagram
   participant A as actor (an agent)
   participant D as decision point
-  participant P as Cribrum predictor
-  participant L as Cribrum ledger
+  participant P as Limen predictor
+  participant L as Limen ledger
   participant H as person
   A->>D: proposes an action
   D->>D: ceiling from deterministic layers
@@ -94,7 +94,7 @@ sequenceDiagram
 1. The decision point evaluates its deterministic layers (deny lists,
    always-confirm lists, modes, hooks) and takes their least permissive
    verdict as the ceiling. A ceiling of `block` is a deterministic deny,
-   final whatever Cribrum predicts.
+   final whatever Limen predicts.
 2. It calls `Predictor.Predict` with the `Action`, wrapped in
    `FailClosed`, so an error or a timeout is a prediction of `ask`.
 3. It calls `verdict.Decide(prediction.Verdict, ceiling,
@@ -128,7 +128,7 @@ write, external), whether it is `Reversible`, its `Input` (read by
 deterministic extractors only, never stored), its `Target` and the
 target's sensitivity, the `Environment` it runs in, domain
 `Attributes`, and `Signals`, the other opinions the decision point
-already has. Cribrum keeps time itself ([[004-engine]]).
+already has. Limen keeps time itself ([[004-engine]]).
 
 ### Packages
 
@@ -138,23 +138,23 @@ already has. Cribrum keeps time itself ([[004-engine]]).
 | `authorizer/` | the action vocabulary for the shared authorizer contract | [[003-http-api]] |
 | `api/openapi.yaml` | the HTTP surface, held to the Go types by a test | [[003-http-api]] |
 | `estimate/` | the estimators, shared by the stub and the engine | [[008-ledger-and-estimation]] |
-| `stub/` | an in-memory `cribrum.Service` with a pluggable predictor, for the test tiers of decision points | [[006-conformance]] |
-| `conformance/` | the suite every `cribrum.Service` passes | [[006-conformance]] |
+| `stub/` | an in-memory `limen.Service` with a pluggable predictor, for the test tiers of decision points | [[006-conformance]] |
+| `conformance/` | the suite every `limen.Service` passes | [[006-conformance]] |
 | `engine/kernel`, `engine/gp` | the additive kernel and the Laplace GP-probit, ported from the research | [[004-engine]] |
 | `engine/featurize` | the open-set featurizer | [[004-engine]] |
 | `engine/store` | the memory, file and Postgres stores | [[004-engine]] |
-| `engine/` | the in-process `cribrum.Service` | [[004-engine]] |
-| `client/` | the HTTP `cribrum.Service` | [[003-http-api]] |
-| `cmd/cribrumd` | the server | [[003-http-api]] |
-| `cmd/cribrum-hook` | the decision point for hook-based harnesses | [[005-adapters]] |
+| `engine/` | the in-process `limen.Service` | [[004-engine]] |
+| `client/` | the HTTP `limen.Service` | [[003-http-api]] |
+| `cmd/limend` | the server | [[003-http-api]] |
+| `cmd/limen-hook` | the decision point for hook-based harnesses | [[005-adapters]] |
 
 ### Deployment
 
 A decision point that runs as one process with its own state, such as a
 local agent CLI, embeds `engine/` in process. A decision point that runs
 on many machines, such as hosted agent runners that move between hosts
-and hold no store credential, calls one `cribrumd` over HTTP through
-`client/`. Both satisfy `cribrum.Service`, so the decision point codes
+and hold no store credential, calls one `limend` over HTTP through
+`client/`. Both satisfy `limen.Service`, so the decision point codes
 against one interface. `FailClosed` wraps both: 200 milliseconds in
 process, 2 seconds over HTTP from a hook. Predictions never fit a model
 on the hot path; fitting runs in the background ([[004-engine]]).
@@ -162,23 +162,23 @@ on the hot path; fitting runs in the background ([[004-engine]]).
 ### Invariants
 
 Every implementation holds these, and [[006-conformance]] checks each
-that a `cribrum.Service` can show:
+that a `limen.Service` can show:
 
 1. **A deterministic deny is final.** It lives in the decision point's
    ceiling; `verdict.Decide` never returns anything but `block` under a
-   `block` ceiling, and nothing Cribrum predicts reaches past it.
+   `block` ceiling, and nothing Limen predicts reaches past it.
 2. **A failure asks.** `FailClosed` turns an error or a timeout into a
    prediction of `ask`; `verdict.OnFailure` is never more permissive than
    `ask`.
 3. **The review probability is the decision point's, drawn once.** It is
-   recorded with the decision, never inferred by Cribrum, never supplied by
+   recorded with the decision, never inferred by Limen, never supplied by
    the person answering, and a decision is recorded once per key.
-4. **An unknown action is an ask.** A subject Cribrum knows nothing about
-   has approval probability one half, and every cost profile Cribrum
+4. **An unknown action is an ask.** A subject Limen knows nothing about
+   has approval probability one half, and every cost profile Limen
    accepts puts one half inside the ask band.
 5. **Input is never stored.** Extractors read `Action.Input` at
    prediction time; the features are kept, the input is dropped, and no
-   language model inside Cribrum reads it.
+   language model inside Limen reads it.
 6. **An answer's role follows from the decision.** The first answer to
    an action a person was shown is its review; every other answer trains
    and never enters an estimate.
@@ -189,18 +189,18 @@ that a `cribrum.Service` can show:
 
 ### Identity
 
-The repository's identity role is `core`: `cribrumd` verifies a caller's
+The repository's identity role is `core`: `limend` verifies a caller's
 token, asks one authorizer through `latere.ai/x/pkg/authz` for the route's
 action before it acts, with the resource fields [[003-http-api]] names,
 and decides nothing about a person. A token is read by the family's shared
-verifier, `latere.ai/x/pkg/authkit/jwt`, and by nothing of Cribrum's own.
+verifier, `latere.ai/x/pkg/authkit/jwt`, and by nothing of Limen's own.
 
-`cribrumd` today serves one person: one bearer, `CRIBRUM_TOKEN`, is that
-person's subject, and the shared owner policy decides. A hosted `cribrumd`
+`limend` today serves one person: one bearer, `LIMEN_TOKEN`, is that
+person's subject, and the shared owner policy decides. A hosted `limend`
 verifies tokens from the issuers its operator lists and asks the
 installation's authorization endpoint, configured as Topos configures
-them: `CRIBRUM_OIDC_ISSUERS`, `CRIBRUM_OIDC_AUDIENCE` and
-`CRIBRUM_AUTHORIZER_URL`. The server's `JWT` authenticator is that path;
+them: `LIMEN_OIDC_ISSUERS`, `LIMEN_OIDC_AUDIENCE` and
+`LIMEN_AUTHORIZER_URL`. The server's `JWT` authenticator is that path;
 the daemon reads those variables when a hosted deployment exists to run
 it.
 
@@ -213,7 +213,7 @@ engine's numerical dependency (gonum) lives under `engine/` alone.
 
 ### Non-goals
 
-Cribrum does not execute actions, hold the approval inbox, route an
+Limen does not execute actions, hold the approval inbox, route an
 escalation to a particular reviewer, issue identities, or read the
 transcript of an agent. It does not choose which actions to show a
 person for the sake of learning (value of information) beyond the random
@@ -226,5 +226,5 @@ review the decision point draws.
 | 1 | The root package imports only the standard library and `latere.ai/x/pkg/verdict` | `TestRootImports` and the `depcheck` gate |
 | 2 | Every package named in the table exists with the role given, or its spec is still open | review against the tree at each spec's completion |
 | 3 | `verdict.Decide` never returns a verdict more permissive than its ceiling, and its probability is positive exactly for shown verdicts drawn or forced | the `verdict` package's tests and fuzz targets |
-| 4 | Each invariant a `cribrum.Service` can show has a case in the conformance suite | [[006-conformance]] |
-| 5 | The engine and the client both satisfy `cribrum.Service` and pass the conformance suite | `conformance.Run` in `engine/` and in an e2e test against `cribrumd` |
+| 4 | Each invariant a `limen.Service` can show has a case in the conformance suite | [[006-conformance]] |
+| 5 | The engine and the client both satisfy `limen.Service` and pass the conformance suite | `conformance.Run` in `engine/` and in an e2e test against `limend` |

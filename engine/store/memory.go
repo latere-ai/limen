@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	"latere.ai/x/cribrum"
+	"latere.ai/x/limen"
 )
 
 type subjectKey struct{ org, subject string }
@@ -21,20 +21,20 @@ type snapshotKey struct{ org, subject, version string }
 // never reach it.
 type Memory struct {
 	mu        sync.Mutex
-	cases     map[cribrum.Key][]byte
-	order     map[subjectKey][]cribrum.Key
+	cases     map[limen.Key][]byte
+	order     map[subjectKey][]limen.Key
 	next      map[subjectKey]int64
-	profiles  map[cribrum.Scope]cribrum.Profile
+	profiles  map[limen.Scope]limen.Profile
 	snapshots map[snapshotKey][]byte
 }
 
 // NewMemory returns an empty in-memory store.
 func NewMemory() *Memory {
 	return &Memory{
-		cases:     map[cribrum.Key][]byte{},
-		order:     map[subjectKey][]cribrum.Key{},
+		cases:     map[limen.Key][]byte{},
+		order:     map[subjectKey][]limen.Key{},
 		next:      map[subjectKey]int64{},
-		profiles:  map[cribrum.Scope]cribrum.Profile{},
+		profiles:  map[limen.Scope]limen.Profile{},
 		snapshots: map[snapshotKey][]byte{},
 	}
 }
@@ -42,7 +42,7 @@ func NewMemory() *Memory {
 var _ Store = (*Memory)(nil)
 
 // Case implements [Store].
-func (m *Memory) Case(ctx context.Context, k cribrum.Key) (Case, bool, error) {
+func (m *Memory) Case(ctx context.Context, k limen.Key) (Case, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return Case{}, false, err
 	}
@@ -113,9 +113,9 @@ func (m *Memory) Cases(ctx context.Context, org, subject string) ([]Case, error)
 }
 
 // Profile implements [Store].
-func (m *Memory) Profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile, bool, error) {
+func (m *Memory) Profile(ctx context.Context, s limen.Scope) (limen.Profile, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return cribrum.Profile{}, false, err
+		return limen.Profile{}, false, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -124,7 +124,7 @@ func (m *Memory) Profile(ctx context.Context, s cribrum.Scope) (cribrum.Profile,
 }
 
 // PutProfile implements [Store].
-func (m *Memory) PutProfile(ctx context.Context, p cribrum.Profile) error {
+func (m *Memory) PutProfile(ctx context.Context, p limen.Profile) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

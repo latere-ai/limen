@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package gp is Cribrum's Gaussian-process probit classifier: the posterior
+// Package gp is Limen's Gaussian-process probit classifier: the posterior
 // over a person's latent tolerance f, learned from their approve and deny
 // answers, and the approval probability it predicts for a new action.
 //
@@ -38,7 +38,7 @@ import (
 
 	"gonum.org/v1/gonum/mat"
 
-	"latere.ai/x/cribrum/engine/kernel"
+	"latere.ai/x/limen/engine/kernel"
 )
 
 // DefaultMaxLabels is the number of most recent answers [Fit] keeps when
