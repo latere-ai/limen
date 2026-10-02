@@ -80,3 +80,36 @@ depcheck:
         (specs/004-engine.md)
       allow:
         gonum.org/v1/gonum: dense Cholesky factorization, symmetric matrices, and the BLAS and LAPACK routines under them
+    latere.ai/x/limen/engine:
+      decision: >-
+        the service over the model: the featurizer, the posterior, the
+        store interface and the estimators, so it reaches gonum through gp
+        and the shared verdict vocabulary through the contract
+        (specs/004-engine.md)
+      allow:
+        gonum.org/v1/gonum: through engine/gp, the dense linear algebra of the posterior
+        latere.ai/x/pkg: latere.ai/x/pkg/verdict, through the contract
+    latere.ai/x/limen/engine/store/file:
+      decision: >-
+        a store in a directory writes snapshots and profiles whole and
+        atomically, which latere.ai/x/pkg/atomicfile already does with the
+        directory fsync it needs (specs/004-engine.md)
+      allow:
+        latere.ai/x/pkg: atomicfile, and verdict through the contract
+    latere.ai/x/limen/importer/topos:
+      decision: >-
+        reads Topos session logs through Topos's own session store, not a
+        copy of its log format, and the declared effects of Topos's built-in
+        tools, so the importer follows the format as Topos changes it
+      allow:
+        latere.ai/x/topos: session, session/dir, harness/tools and what they import (machine, models, prompts)
+        latere.ai/x/pkg: verdict, and llmdialect through Topos's session package
+    latere.ai/x/limen/cmd/limen:
+      decision: >-
+        the command line over the engine, its file store and the Topos
+        importer, and nothing they do not already reach
+      allow:
+        latere.ai/x/topos: through importer/topos
+        latere.ai/x/pkg: verdict, atomicfile, errwriter, and llmdialect through Topos's session package; authz, authkit and httpjson through server
+        gonum.org/v1/gonum: the engine's linear algebra
+        github.com/google/uuid: reached through server's latere.ai/x/pkg/authz and httpjson, which parse UUID path parameters with it

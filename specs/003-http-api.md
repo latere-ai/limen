@@ -43,9 +43,11 @@ server is told its public base so the links it writes carry it.
 | POST | `/v1/subjects/forget` | `{"org", "subject"}` | 204 | `subject.forget` | `Admin.Forget` |
 
 Every route answers the errors of [[002-contract]] that its contract
-method can return, plus `unauthenticated`, `forbidden`, `rate_limited`,
-`internal` and `authorizer_unavailable`; the OpenAPI document lists them
-per operation.
+method can return, plus `unauthenticated`, `forbidden`, `body_too_large`
+for a body past its limit, `internal` and `authorizer_unavailable`; the
+OpenAPI document lists them per operation. `rate_limited` is reserved for
+an installation that puts a rate limit in front of `limend`, which itself
+limits nothing.
 
 ### The authorizer
 
@@ -57,8 +59,8 @@ it acts, about a resource whose kind and fields are fixed per action:
 |---|---|---|
 | `case.predict`, `case.decide`, `case.answer`, `case.list` | `Case` | `org`, `subject` |
 | `reliability.read` | `Reliability` | `org`, `subject` |
-| `profile.read`, `profile.write` | `Profile` | `org`, `kind`, `agent` (empty when unscoped) |
-| `replay.create` | `Replay` | `org` |
+| `profile.read`, `profile.write` | `Profile` | `org`, `action_kind`, `agent` (empty when unscoped). The field is `action_kind`, not `kind`, because the shared authorizer's flat wire object reserves `kind` for the resource kind |
+| `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own |
 | `subject.forget` | `Subject` | `org`, `subject` |
 
 With no endpoint configured, `limend` applies the shared owner policy: a

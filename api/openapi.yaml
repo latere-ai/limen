@@ -143,6 +143,8 @@ paths:
             schema:
               $ref: "#/components/schemas/Answer"
       responses:
+        "413":
+          $ref: "#/components/responses/body_too_large"
         "204":
           description: The answer is recorded.
         "400":
@@ -287,7 +289,7 @@ paths:
       x-limen-action: profile.read
       x-limen-resource:
         kind: Profile
-        fields: [org, kind, agent]
+        fields: [org, action_kind, agent]
       parameters:
       - $ref: "#/components/parameters/org"
       - name: kind
@@ -327,7 +329,7 @@ paths:
       x-limen-action: profile.write
       x-limen-resource:
         kind: Profile
-        fields: [org, kind, agent]
+        fields: [org, action_kind, agent]
       requestBody:
         required: true
         content:
@@ -335,6 +337,8 @@ paths:
             schema:
               $ref: "#/components/schemas/Profile"
       responses:
+        "413":
+          $ref: "#/components/responses/body_too_large"
         "200":
           description: The saved profile with its derived thresholds.
           content:
@@ -421,6 +425,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ForgetRequest"
       responses:
+        "413":
+          $ref: "#/components/responses/body_too_large"
         "204":
           description: Nothing about the subject remains in the organization.
         "400":

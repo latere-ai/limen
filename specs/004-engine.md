@@ -233,7 +233,7 @@ tier), file (a self-hosted single process), Postgres (hosted).
 | Table | Key | Columns |
 |---|---|---|
 | `subjects` | org, subject | `next_t` |
-| `cases` | org, subject, action_id | `t`, `received_at`, `digest` (SHA-256 of the canonical JSON of the action as sent), `action` (without input), `features` (by featurizer version), `prediction`, `decision`, `decided_at` |
+| `cases` | org, subject, action_id | `t`, `received_at`, `digest` (SHA-256 of the JSON of the action without its input, which is never kept and so cannot tell two actions apart later), `action` (without input), `features` (by featurizer version), `prediction`, `decision`, `decided_at` |
 | `answers` | org, subject, action_id, seq | `approve`, `by`, `at`, `review` |
 | `profiles` | org, kind, agent (empty when unscoped) | `costs`, `audit_rate`, `certify`, `updated_at` |
 | `snapshots` | org, subject, version | `fitted_through_t`, `blob`, `created_at` |
