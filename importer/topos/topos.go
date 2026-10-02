@@ -20,9 +20,12 @@
 //     holds the person's own credentials, a Cella sandbox as not; the
 //     recorded risk score is a signal from its source, such as rules/1;
 //   - the verdict is the one Topos recorded, from the source
-//     "topos/<mode>"; its review probability is one for ask and for flag,
-//     which Topos's rules force, and zero for allow and block, because
-//     Topos draws no random reviews;
+//     "topos/<mode>", with the review probability Topos recorded for the
+//     call: in auto mode a share of automatic verdicts is drawn for review,
+//     and the probability is that share. A log written before Topos
+//     recorded it (before v0.11.0) carries none, and a call there was shown
+//     to a person exactly when its verdict was ask or flag, so the
+//     probability is one for those and zero otherwise;
 //   - the answer is the first user.tool_confirmation for the call.
 //
 // A call is skipped, with the reason reported through [Options.Skipped],
@@ -235,7 +238,10 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []c
 			source += "/" + u.Mode
 		}
 		r := cribrum.ReplayRecord{At: e.Time, Action: a, Verdict: v, Source: source}
-		if v.Shown() {
+		switch {
+		case u.ReviewProbability != nil:
+			r.ReviewProbability = *u.ReviewProbability
+		case v.Shown():
 			r.ReviewProbability = 1
 		}
 		if approve, ok := answers[u.ToolUseID]; ok {

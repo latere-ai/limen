@@ -8,7 +8,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	gonum.org/v1/gonum v0.17.0
 	latere.ai/x/pkg v0.91.0
-	latere.ai/x/topos v0.10.1
+	latere.ai/x/topos v0.11.0
 )
 
 require (

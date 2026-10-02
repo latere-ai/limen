@@ -31,6 +31,9 @@ type Call struct {
 	// none.
 	Answer   string
 	Remember string
+	// ReviewProbability is the probability the call recorded, as Topos
+	// v0.11.0 and later record it; nil writes a call from an older log.
+	ReviewProbability *float64
 	// Redact redacts the call's event after it is written.
 	Redact bool
 }
@@ -119,7 +122,7 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 			}
 			eid := add(session.TypeAgentToolUse, mustJSON(session.AgentToolUse{
 				ToolUseID: c.ToolUseID, Name: c.Name, Input: json.RawMessage(in),
-				Risk: c.Risk, Verdict: c.Verdict, Mode: c.Mode,
+				Risk: c.Risk, Verdict: c.Verdict, Mode: c.Mode, ReviewProbability: c.ReviewProbability,
 			}))
 			if c.Redact {
 				redact = append(redact, eid)

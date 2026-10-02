@@ -284,3 +284,28 @@ func TestEffectOf(t *testing.T) {
 		}
 	}
 }
+
+// An auto-mode session recorded each call's review probability, and the
+// importer keeps it: an automatic allow drawn for review at a rate of 0.05
+// weighs twenty, not one, in an error estimate.
+func TestRecordedReviewProbability(t *testing.T) {
+	data := t.TempDir()
+	rate, one, zero := 0.05, 1.0, 0.0
+	topostest.Write(t, data, topostest.Session{Initiator: "u", Calls: []topostest.Call{
+		{ToolUseID: "drawn", Name: "bash", Verdict: "flag", Mode: "progressive", Answer: "deny", ReviewProbability: &rate},
+		{ToolUseID: "missed", Name: "bash", Verdict: "allow", Mode: "progressive", ReviewProbability: &rate},
+		{ToolUseID: "asked", Name: "bash", Verdict: "ask", Mode: "progressive", ReviewProbability: &one},
+		{ToolUseID: "ruled", Name: "bash", Verdict: "allow", Mode: "confirm", ReviewProbability: &zero},
+		{ToolUseID: "old", Name: "bash", Verdict: "flag", Mode: "progressive"},
+	}})
+	rs, err := collect(t, data, topos.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := byID(rs)
+	for id, want := range map[string]float64{"drawn": 0.05, "missed": 0.05, "asked": 1, "ruled": 0, "old": 1} {
+		if r, ok := got[id]; !ok || r.ReviewProbability != want {
+			t.Errorf("%s: review probability %v, want %v", id, r.ReviewProbability, want)
+		}
+	}
+}
