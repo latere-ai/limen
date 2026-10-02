@@ -54,10 +54,11 @@ depcheck:
   packages:
     latere.ai/x/limen:
       decision: >-
-        the contract is imported into every harness's hot path, so it
-        reaches the standard library only; an engine dependency lives in
-        engine/, never here
-      allow: {}
+        the contract is imported into every decision point's hot path, so
+        it reaches the standard library and the shared decision vocabulary
+        alone; an engine dependency lives in engine/, never here
+      allow:
+        latere.ai/x/pkg: latere.ai/x/pkg/verdict alone, the decision vocabulary every decision point shares, itself standard library only
     latere.ai/x/limen/authorizer:
       decision: >-
         the vocabulary is data for the shared authorizer contract and
@@ -65,3 +66,17 @@ depcheck:
       allow:
         latere.ai/x/pkg: the shared authorizer contract, latere.ai/x/pkg/authz
         github.com/google/uuid: reached through latere.ai/x/pkg/authz and its httpjson, which parses UUID path parameters with it
+    latere.ai/x/limen/engine/kernel:
+      decision: >-
+        the covariance functions are arithmetic over feature vectors and
+        reach the standard library alone (specs/004-engine.md)
+      allow: {}
+    latere.ai/x/limen/engine/gp:
+      decision: >-
+        the Laplace posterior needs a dense Cholesky factorization and
+        matrix-vector products at n of a few hundred; gonum is the library
+        the research implementation it is ported from uses, it is pure Go,
+        and its results reproduce the reference's fixtures to rounding
+        (specs/004-engine.md)
+      allow:
+        gonum.org/v1/gonum: dense Cholesky factorization, symmetric matrices, and the BLAS and LAPACK routines under them
