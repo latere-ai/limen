@@ -5,3 +5,6 @@ coverage.out
 
 # A bare `go build ./cmd/cribrum` writes the binary here rather than out/.
 /cribrum
+
+# A bare `go build ./cmd/cribrumd` writes the daemon here too.
+/cribrumd

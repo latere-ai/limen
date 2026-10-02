@@ -110,6 +110,13 @@ depcheck:
         importer, and nothing they do not already reach
       allow:
         latere.ai/x/topos: through importer/topos
-        latere.ai/x/pkg: verdict, atomicfile, errwriter, and llmdialect through Topos's session package; authz, authkit and httpjson through server
+        latere.ai/x/pkg: verdict, atomicfile, errwriter, and llmdialect through Topos's session package
         gonum.org/v1/gonum: the engine's linear algebra
-        github.com/google/uuid: reached through server's latere.ai/x/pkg/authz and httpjson, which parse UUID path parameters with it
+    latere.ai/x/cribrum/cmd/cribrumd:
+      decision: >-
+        the server over the engine and its file store, and nothing they do
+        not already reach
+      allow:
+        latere.ai/x/pkg: verdict, atomicfile, errwriter, and authz, bearer and httpjson through server
+        gonum.org/v1/gonum: the engine's linear algebra
+        github.com/google/uuid: reached through latere.ai/x/pkg/authz and httpjson, which parse UUID path parameters with it
