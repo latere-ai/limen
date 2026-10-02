@@ -1,14 +1,12 @@
 ---
-title: "Engine: featurizers, the GP-probit posterior, the cost-derived rule, audits, estimates"
+title: "Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store"
 status: drafted
 track: core
-depends_on:
-  - specs/001-architecture.md
-  - specs/002-contract.md
-affects: [engine/, engine/featurize/, engine/gp/, engine/store/, engine/testdata/]
+depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
+affects: [engine/, engine/kernel/, engine/gp/, engine/featurize/, engine/store/]
 effort: large
 created: 2026-09-28
-updated: 2026-09-28
+updated: 2026-10-02
 author: changkun
 ---
 
@@ -16,214 +14,275 @@ author: changkun
 
 ## Overview
 
-`engine/` is the in-process implementation of `Gate`, `Reviews` and
-`Admin` ([[002-contract]]): it turns an `Action` into features, keeps a
-Gaussian-process posterior over each subject's latent tolerance, derives
-the verdict from the organization's costs, samples audits, records every
-answer with the probability it had of arriving, and estimates error
-rates from those answers. `limend` serves it over HTTP ([[003-http-api]]);
-a harness written in Go may embed it instead.
+The engine is the in-process `limen.Service`: it predicts, keeps the
+ledger, and fits each subject's model. It is what a local decision point
+embeds and what `limend` serves. Its model is the one the research
+validated in simulation: a Gaussian-process prior over a subject's
+latent tolerance, observed through a probit likelihood on approve and
+deny answers, with an additive kernel that forgets the subject's
+tolerance and keeps what it learned about how risky an action is (paper,
+Propositions 1 and 4). Its numerics are ported from the research's Go
+code and held to the research's golden fixtures.
 
-The design is the gateway of *Learning When to Ask*
-([arXiv:2605.19151](https://arxiv.org/abs/2605.19151)). Its Python
-reference (`experiment/` in
-[github.com/changkun/trustcalib](https://github.com/changkun/trustcalib))
-is the numerical authority, and its Go port (`go/` in the same
-repository, Apache-2.0) is the starting point for the code: `kernel`,
-`gp`, `gateway` (costs, audits, estimates), `featurizer` (the tool
-taxonomy, the judge featurizer, the shell command map) and `persist`.
-This spec says what is ported, what changes on the way in, and what is
-deliberately left out.
+What the research did not need, and this spec adds, is the operation of
+the model for real decision points: actions from an open set of tools
+and domains, time measured the way the model assumes, fitting that never
+blocks a prediction, bounded memory, versions that can change without
+corrupting a model, and a store that never holds an action's input.
 
 ## Design
 
+### Time
+
+The kernel's time axis counts cases, not seconds: the research's
+forgetting scale, lambda = 90, is ninety decisions of that subject.
+Limen assigns `t`, the ordinal of a case in its subject's history, when
+it first sees the case's key (a prediction, or a decision that carries
+the action), from a counter per (org, subject) incremented in one store
+transaction. Two cases of one subject never share a `t`. Limen also
+stamps the wall-clock receive time; it serves report windows and the
+order of the review queue and never enters the model. A caller supplies
+no time, except `ReplayRecord.at`, by which a replay orders history.
+
+### The featurizer `features/1`
+
+An action becomes two vectors: `phi_a`, what the action is (the kernel's
+action block), and `phi_c`, where and how it runs (the context block).
+Every group is scaled so that two actions that differ only in that group
+are at squared distance at most 2, the distance of two one-hot vectors,
+so no group dominates by its width. Strings are hashed with FNV-1a 32 bit
+over their lowercase UTF-8 bytes, into the group's number of buckets.
+Nothing in an action is an error for the featurizer: an unknown kind, an
+unknown tool, a missing target or environment has a defined encoding.
+
+`phi_a`, 56 dimensions:
+
+| Group | Dims | Encoding |
+|---|---|---|
+| effect | 4 | one-hot over none, read, write, external |
+| irreversibility | 1 | `reversible` false is 1, true is 0, absent is 0.5 |
+| kind | 8 | one-hot of `hash(kind) mod 8` |
+| name tokens | 32 | the tokens of `name`, and for a shell action the program of each command; a token is a maximal run of `[a-z0-9]` of length two or more; counts per `hash(token) mod 32`, scaled to unit length; zero when there is no token |
+| program class | 8 | for a shell action, multi-hot over read, vcs_local, vcs_remote, network, delete, package, build_test, infra; zero otherwise |
+| actor kind | 3 | one-hot over agent, service, person; zero when absent or another kind |
+
+`phi_c`, 56 dimensions:
+
+| Group | Dims | Encoding |
+|---|---|---|
+| target sensitivity | 1 | `target.sensitivity`; 0.5 when absent |
+| target kind | 8 | one-hot of `hash(target.kind) mod 8`; zero when absent |
+| environment | 4 | one-hot over host, sandbox, service, other; zero when absent |
+| credentialed | 1 | `environment.credentialed` as 0 or 1; 0.5 when absent |
+| destructive | 1 | 1 when an extractor finds a destructive pattern, else 0 |
+| outside the workspace | 1 | 1 when a write or delete names a system or home path, else 0 |
+| attributes | 16 | per attribute, bucket `hash(key) mod 16`: a boolean adds 1 or -1, a number `x` adds `x / (1 + abs(x))`, a string adds 1 to bucket `hash(key "=" value) mod 16` instead; each bucket clipped to [-1, 1] |
+| signals | 24 | eight buckets by `hash(source) mod 8`, three slots each: the verdict's level (allow 0, flag 1/3, ask 2/3, block 1), 1 when a verdict is present, and the score; within a bucket the maximum of each slot |
+
+**The shell extractor.** It applies to kind `tool` with a name, compared
+case-insensitively, in `bash`, `shell`, `sh`, `exec_command`,
+`run_shell_command`, `local_shell`, and reads the input's `command` (a
+string, or an array of strings joined by spaces) or `cmd`. It splits the
+command into segments on `&&`, `||`, `;`, `|` and newlines; in each
+segment it skips leading `NAME=value` assignments and the wrappers
+`sudo`, `env`, `time`, `nohup` and `command`, and takes the program's
+base name and its first argument. It is a static, worst-case reading
+before execution, not a parser: a chain is as dangerous as its most
+dangerous segment, and an unrecognized program contributes its name
+token and no class. Its rules seed from the research's `bashmap`
+heuristics.
+
+| Class | Programs (and subcommands) |
+|---|---|
+| read | `ls`, `cat`, `head`, `tail`, `less`, `more`, `grep`, `rg`, `find`, `fd`, `stat`, `wc`, `pwd`, `echo`, `printf`, `which`, `file`, `tree`; `git status`, `log`, `diff`, `show`, `blame` |
+| vcs_local | `git add`, `commit`, `checkout`, `switch`, `restore`, `stash`, `merge`, `rebase`, `reset`, `tag`, `cherry-pick`, `branch` |
+| vcs_remote | `git push`, `pull`, `fetch`, `clone`; `gh` |
+| network | `curl`, `wget`, `ssh`, `scp`, `rsync`, `nc`, `ncat`, `telnet`, `ftp`, `sftp`, `http`, `https` |
+| delete | `rm`, `rmdir`, `unlink`, `shred`, `truncate`; `git clean`; `find` with `-delete` |
+| package | `apt`, `apt-get`, `yum`, `dnf`, `apk`, `brew`, `pip`, `pip3`, `pipx`, `npm`, `pnpm`, `yarn`, `bun` with `install`, `add` or `i`; `go install`, `go get`; `cargo install`, `cargo add`; `gem install` |
+| build_test | `make`; `go build`, `test`, `vet`, `run`; `cargo build`, `test`, `run`; `npm test`, `npm run`; `pytest`, `jest`, `tox`, `mvn`, `gradle` |
+| infra | `terraform`, `kubectl`, `helm`, `docker`, `podman`, `aws`, `gcloud`, `az`, `psql`, `mysql`, `mongo`, `mongosh`, `sqlite3`, `redis-cli` |
+
+Destructive patterns, in any segment: `rm` with `-r`, `-R`,
+`--recursive`, `-f` or `--force`; `git push` with `-f`, `--force`,
+`--force-with-lease`, `--delete` or a `:ref` deletion; `git reset
+--hard`; `git clean` with `-f`; `git branch -D`; `--no-verify`; `DROP
+TABLE`, `DROP DATABASE`, `TRUNCATE`, `DELETE FROM` in any case; `mkfs`;
+`dd` with `of=/dev/`; `chmod -R`, `chown -R`; a redirection to
+`/dev/sd`; `kubectl delete`; `terraform destroy`; `docker rm -f`,
+`docker system prune`.
+
+Outside the workspace: an argument of `rm`, `mv`, `cp`, `tee`, `chmod`,
+`chown`, `ln`, `sed -i` or a redirection target that is an absolute path
+under `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/boot`, `/var`,
+`/System` or `/Library`, or begins with `~` or `$HOME`, or contains
+`..`.
+
+Other kinds have no input extractor in `features/1`; their decision
+points describe the action through `target`, `environment` and
+`attributes`, and a later featurizer version adds extractors per kind.
+The input is read once, at prediction time, and dropped; only the
+vectors are kept.
+
 ### The model
 
-A subject approves a call `x` at time `t` with probability `Phi(f(x, t))`,
-where the latent tolerance decomposes as `f(x, t) = tau(t) - r(x) +
-h(x, t)`: a static risk `r` of the action, a tolerance `tau` of the
-person that drifts, and a small interaction `h` (Definition 1 of the
-paper). The prior is a zero-mean Gaussian process with the additive
-kernel
+The kernel is the research's additive kernel over `(phi_a, phi_c, t)`:
 
 ```
-k((x,t),(x',t')) = s_static k_x(x,x') + s_global k_time(t,t') + s_inter k_x(x,x') k_time(t,t')
-k_x = k_tool * k_ctx      (squared exponential, lengthscales l_tool, l_ctx)
-k_time(t,t') = exp(-|t - t'| / lambda)
+k = s_static k_a k_c + s_global k_t + s_inter k_a k_c k_t
+k_a = exp(-|phi_a - phi_a'|^2 / (2 l_a^2)),  k_c likewise with l_c,
+k_t = exp(-|t - t'| / lambda)
 ```
 
-with the paper's pre-specified values `s_static = 1.6`, `s_global = 1.0`,
-`s_inter = 0.6`, `l_tool = 1.1`, `l_ctx = 1.2`, `lambda = 90` (in
-decisions of the subject's own stream). The first term remembers what an
-action risks, the second tracks the person's tolerance and moves with
-every answer about any action, and the third lets tolerance drift
-differently for different actions.
+with `s_static` 1.6, `s_global` 1.0, `s_inter` 0.6, `l_a` 1.1, `l_c` 1.2
+and `lambda` 90 cases. The static term keeps what was learned about an
+action's risk; the global term is the subject's shared tolerance, which
+every answer moves; the interaction lets one kind of action drift on its
+own. The separable product kernel is kept only as the research baseline
+and never serves. The hyperparameters are fixed per version and are not
+selected by marginal likelihood, which in the research preferred
+memories too long for rare risky actions; a change is a new version and
+earns its way through [[007-evidence-gates]].
 
-The separable product kernel `sigma^2 k_x k_time` is ported only as a
-baseline and is never a default. It forgets static risk with its time
-factor, so every action the model stops asking about decays back into
-the ask band on a fixed clock (Proposition 4, `Forgetting.eventually_ask`
-and `Forgetting.reentry_bound`), which in the paper's simulation doubled
-the labels per action (13.5% against 28.4%) and made a demanding
-threshold unreachable (99% of actions escalated under the safety
-profile).
+The posterior is the Laplace approximation of the GP-probit (Rasmussen
+and Williams, Algorithms 3.1 and 3.2), with jitter 1e-6, at most 100
+Newton steps and tolerance 1e-6. A prediction at `(phi, t)` has latent
+mean `mu` and variance `s2`, and
 
-`lambda` is configuration, not learned. The paper found that selecting
-it by marginal likelihood prefers long memories that improve calibration
-on average and double the allows inside a trust reset's veto window;
-the evidence optimizes average fit, not the rare region that matters.
+```
+approve = Phi(mu / sqrt(1 + s2)),   uncertainty = sqrt(s2)
+```
 
-### Inference
+A subject with no answers has `mu = 0`, so `approve` is one half and,
+under every profile Limen accepts, the suggestion is `ask`.
 
-The posterior is the Laplace approximation of GP classification with a
-probit likelihood (Rasmussen and Williams, Algorithms 3.1 and 3.2), as
-`gp.LaplaceGPC` implements it. The predictive approval probability is
-`approve = Phi(mu / sqrt(1 + sigma^2))`, the posterior mean of
-`Phi(f)`; `uncertainty` is `sigma`. Proposition 2(a) is why the verdict
-may depend on `approve` alone (`Chow.expectedLoss_allow`,
-`Chow.expectedLoss_block`).
+The training set of a model is, for each answered case of the subject,
+the case's features, its `t`, and its latest answer, keeping the 512
+cases with the highest `t`. Answers are not weighted in the fit: under a
+correctly specified model the posterior is not biased by the adaptive
+choice of which actions a person saw (paper, Section 3.7). Weights belong
+to error estimates, not to the posterior ([[008-ledger-and-estimation]]).
 
-A model is kept per organization, subject and featurizer
-([[001-architecture]]). It refits after every 8 new answers and on the
-first assessment after a restart, from a training set bounded to the
-2000 most recent labels, the research port's defaults. A refit that
-fails keeps the previous posterior and is reported; an assessment with
-no posterior yet is the prior's, `approve = 0.5`, which is inside every
-non-empty ask band, so a new subject is asked.
+### Predicting
 
-### Featurizers
+1. Look up the key. With the same digest, return the stored prediction;
+   with a different one, `action_conflict`.
+2. Assign `t` and the receive time.
+3. Featurize, then drop the input.
+4. Resolve the effective profile ([[002-contract]]).
+5. Read the model's snapshot; with none, use the prior.
+6. Compute `approve` and `uncertainty`, suggest
+   `thresholds.Verdict(approve)`, and store the case with its digest,
+   features and prediction in one transaction.
 
-A featurizer maps an `Action` to the two feature vectors the kernel
-reads. Two are ported and one is new.
+A prediction never fits. Against a snapshot of `n` training cases it
+costs one kernel row, `O(n d)`, a dot product for the mean, and one
+triangular solve for the variance, `O(n^2)`: about a quarter of a
+million multiply-adds at `n` = 512. The budget is a 99th percentile of
+5 milliseconds in process for a subject whose snapshot is in memory,
+excluding store latency, and 50 milliseconds through `limend` with
+Postgres.
 
-| Featurizer | For | Features |
-|---|---|---|
-| `tools` | a harness with a known tool set | the tool's reversibility, base sensitivity, blast radius and category one-hot; the target's sensitivity, a destructive-argument flag and the task one-hot (the research taxonomy, `featurizer/trustcalib`) |
-| `judge` | a shell-centric harness whose calls reach an LLM judge | the judge's verdict or score from `Action.Signals` and a command category one-hot over read, search, vcs, exec, write, db, network, deploy and other (`featurizer/judge`, with `bashmap.CategoryFromBash`) |
-| `patterns` | either, as an addition | deterministic argument patterns read from `Action.Input`: a recursive delete, a force push, a pipe into a shell, a write outside the working directory |
+### Fitting off the hot path
 
-The featurizer is chosen per installation and recorded in every model
-key, so changing it starts new models rather than reading old features
-through a new map. A judge's verdict is a feature and never a decision:
-the static term learns how this subject's approvals relate to the
-judge's output in each category. The `patterns` featurizer is the
-remedy the paper names for a judge's blind spot, which calibration on
-the judge's verdict alone cannot repair (the simulated blind spot let 23
-of 29 dangerous calls through). No featurizer passes `Action.Input` to a
-model; it is read by regular expressions and parsers only
-([[001-architecture]], invariant 8).
+A snapshot is immutable: the training features and times, `alpha` (the
+gradient of the log likelihood at the mode, so `mu = k* . alpha`), the
+square roots of the likelihood curvature, and the Cholesky factor of
+`B = I + W^(1/2) K W^(1/2)`. Predictions read it through an atomic
+pointer and never wait for a fit.
 
-### The rule
+A model is due when it has answers newer than its snapshot. A fitter
+pool (default half the processors) fits due models, oldest first, at
+most one fit in flight per model, after a one second debounce that
+gathers answers arriving together. A fit at `n` = 512 is about a billion
+floating-point operations, under a second on one core. The new snapshot
+is written to the store and then swapped in. The target is a model no
+more than five seconds behind its newest answer.
 
-The thresholds are `Costs.Thresholds` of the most specific profile (a
-profile saved without a certification claim carries `DefaultCertify`): the
-agent's when the action names an agent that has one, else the
-organization's; none is `unknown_profile`. The verdict is
-`Thresholds.Verdict(score)` with `score = 1 - approve`, narrowed by the
-ceiling. There is no tuning of thresholds on answers: the research port's
-`gateway.TuneThresholds` and its tuning history are not ported, because
-tuning needs labels on the automatic verdicts the engine never receives
-and because the costs already determine the optimum.
+Snapshots are cached in memory under a least-recently-used budget,
+1 GiB by default, about two and a half megabytes per model at the label
+cap. An evicted model's next prediction loads its stored snapshot
+(a single read, not a fit). Replicas share the store and fit the same
+labels with the same arithmetic, so their snapshots agree once each has
+fitted the same answers; until then two replicas may differ by the
+answers one has not fitted, which the five-second target bounds.
 
-Proposition 3 bounds what the rule can achieve: even with a perfect
-posterior, every call whose true approval probability lies inside the
-band is asked (`Floor.escalation_floor`). A replay report and a shadow
-cohort ([[007-evidence-gates]]) compare burden against that floor, not
-against zero.
+### Versions
 
-### Audits
+A prediction's source is `learned/<N>`. A version fixes the featurizer,
+the kernel, its hyperparameters and the label cap; models are keyed by
+(org, subject, version) and never mix versions.
 
-After the rule, an automatic verdict (an allow or a block the ceiling
-permits) is sampled for review with the profile's `audit_rate`, from a
-source of randomness the engine owns. A sampled allow becomes `flag`
-and a sampled block becomes `ask`, both with `audit: {of, probability}`,
-and the probability is stored with the assessment before the assessment
-is returned. A draw happens once per subject and call id; a repeat
-returns the stored result. When the ceiling already holds the call for a
-person the engine draws nothing, because the answer arrives with
-probability one. The research port recorded the probability at decision
-time in its hook for the same reason (`persist.PendingAudit.Propensity`);
-here it is a column of the assessment row.
+| N | Featurizer | Kernel | Hyperparameters | Label cap |
+|---|---|---|---|---|
+| 1 | `features/1` | additive | 1.6, 1.0, 0.6; 1.1, 1.2; lambda 90 | 512 |
 
-### Answers and provenance
-
-Each answer is stored with its kind and the probability it had of
-arriving: one for a decision on a call the rule or the ceiling held for
-a person, the audit probability for a decision on an audited call, and
-none for a contest. Every decision and every contest is a training label
-(a contest's label is its `approve`). Only the first two enter an
-estimate.
-
-### Estimates
-
-For a window, a subject, and a source (`learned` for Limen's own
-automatic verdicts, or a signal source for a judge's), the false-allow
-estimate is the Horvitz-Thompson sum over answered calls the source
-allowed, `sum(deny_i / p_i) / N_allowed`, and the false-block estimate is
-the same over blocked calls with approvals (Propositions 5(a) and 8,
-`Audit.audit_unbiased`, `Judge.ht_unbiased`). `N_allowed` counts every
-call the source allowed in the window, answered or not. The 95% interval
-is the Jeffreys interval on the audited fraction, as in the research
-simulation. When no call in the window has a positive probability of an
-answer the value is `nil`: an audit rate of zero makes the rate
-unknowable, and the report says so. `unanswered` counts the calls in the
-window sampled for review that nobody has answered yet. The estimate
-treats them as missing at random, which holds when whether a person
-answers a review does not depend on whether they would deny the call; a
-count that is large next to `audits` weakens that assumption, and the
-report carries it so the reader can see it. The certificate counts the most
-recent run of consecutive clean audits of allows and holds when the run
-reaches `CertificationSize(alpha, delta)`, 300 for 1% at 95%
-(`Audit.certify_sample_size`). A judge's rate is per subject and per
-window because it depends on whose decisions it stands in for
-(Proposition 7, `Judge.judgeFA_mono`) and cannot be read off its
-verdicts alone (Proposition 6, `Judge.judge_unidentified`).
+A new version re-featurizes stored cases from their stored actions. An
+action's input is not stored, so for cases that predate the new version
+the input-derived groups (program class, destructive, outside the
+workspace, and the program tokens) take their absent encodings. During a
+change the old version keeps serving while the new one fits beside it,
+and the operator switches after a replay comparison
+([[007-evidence-gates]]).
 
 ### The store
 
-One interface, two implementations ([[001-architecture]]). The file
-store writes each subject's records under one directory, atomically
-(temporary file and rename, as `persist.Save` does), and serves one
-`limend` replica. The Postgres store serves several replicas; the
-idempotency of assess is a unique key on subject and call id, so two
-replicas racing on one call keep one assessment and one audit draw.
-Neither stores a fitted posterior.
+One interface with three implementations: memory (tests and the stub's
+tier), file (a self-hosted single process), Postgres (hosted).
 
-### Numerical parity
+| Table | Key | Columns |
+|---|---|---|
+| `subjects` | org, subject | `next_t` |
+| `cases` | org, subject, action_id | `t`, `received_at`, `digest` (SHA-256 of the canonical JSON of the action as sent), `action` (without input), `features` (by featurizer version), `prediction`, `decision`, `decided_at` |
+| `answers` | org, subject, action_id, seq | `approve`, `by`, `at`, `review` |
+| `profiles` | org, kind, agent (empty when unscoped) | `costs`, `audit_rate`, `certify`, `updated_at` |
+| `snapshots` | org, subject, version | `fitted_through_t`, `blob`, `created_at` |
 
-The engine's kernel, Laplace fit and predictions agree with the Python
-reference to 1e-9 on the golden fixtures the research repository exports
-(`go/testdata/fixtures`: `kernel_additive.json`,
-`laplace_fit_additive.json`, `predict_additive.json` and their product
-kernel counterparts), copied into `engine/testdata/` with the commit
-they came from. A change that moves a number regenerates the fixtures
-from the reference, not from the engine.
+An index on (org, subject, t) serves fitting and windows; a partial
+index on cases whose decision is shown and that have no review serves the
+review queue. The file store keeps an append-only, fsynced NDJSON log of
+cases, decisions and answers per subject directory, a snapshot file per
+version, and one profiles file per organization. `Forget` removes a
+subject's rows from every table in one transaction, or its directory.
 
-### Not in this engine
+### What is ported and what is rewritten
 
-- Value-of-information acquisition. The rule is one step: it values an
-  answer for the call at hand only (the paper's Remark on escalation
-  versus acquisition). A sequential rule is future work, not a knob.
-- BALD or any other acquisition sampler. With the additive kernel the
-  ask band already beats random querying at a matched budget, and a
-  stream-based BALD sampler did not improve on it under either kernel.
-- Learning `lambda` or the costs from answers, for the reasons above.
-- An LLM of its own. A judge is an input.
+From `github.com/changkun/trustcalib/go`:
+
+- **Ported:** `kernel` (both kernels, the RBF blocks, the time block),
+  `gp` (`LaplaceGPC` fit and predict, the probit derivatives with the
+  stable log CDF), and the golden fixtures `kernel_full`,
+  `kernel_additive`, `laplace_fit`, `laplace_fit_additive`, `predict`,
+  `predict_additive` and `logcdf`, into `engine/kernel` and `engine/gp`
+  with their testdata.
+- **Rewritten:** the gateway (it decides, and in Limen the decision
+  point decides), the featurizers (the research's taxonomy refuses any
+  tool outside eighteen synthetic ones), persistence (one subject's JSON
+  state), and the audit counters (replaced by the ledger and
+  `estimate/`). The `bashmap` rules seed the shell extractor. The
+  gateway's `trajectory` fixture is not ported.
+
+### Non-goals
+
+Choosing which actions to show a person for the sake of learning (value
+of information, or BALD, which the research found does not help);
+selecting hyperparameters by marginal likelihood; sharing what one
+person's answers taught with another person's model, which would need
+its own spec and its own consent; routing an escalation to a particular
+reviewer.
 
 ## Acceptance criteria
 
 | # | Criterion | Proved by |
 |---|---|---|
-| 1 | The kernel, the Laplace fit and the predictive probabilities match the golden fixtures to 1e-9 | parity tests in `engine/gp` |
-| 2 | With a fixed training set, the product kernel's prediction for a benign action tends to 0.5 as time since the last label grows and the additive kernel's to its static part | a test reproducing the paper's forgetting curve |
-| 3 | A new subject's first assessment has `approve = 0.5` and is `ask` under both paper profiles | an engine test |
-| 4 | The verdict equals `Thresholds.Verdict(score)` narrowed by the ceiling for every unaudited assessment, and the thresholds equal `Costs.Thresholds` of the most specific profile | an engine test over a stream, and [[006-conformance]] |
-| 5 | Over a long stream the audited share of automatic verdicts is within three standard errors of `audit_rate`, no call is drawn twice, and no audit is drawn under an ask or block ceiling | an engine test with a seeded source |
-| 6 | The false-allow estimate is unbiased: over many seeded streams its mean is within three standard errors of the realized rate | a Monte Carlo test, as the research repository's `test_audit.py` |
-| 7 | A window with audit rate zero and no asks on allowed calls reports `value: null` | an engine test |
-| 8 | A call sampled for review and never answered is counted in `unanswered` and in no other field | an engine test |
-| 9 | The certificate holds after `CertificationSize` consecutive clean audits and not one before, and a denied audit resets it | an engine test |
-| 10 | A contest changes the model and changes no estimate | an engine test comparing reports with and without the contest |
-| 11 | Two replicas on one Postgres store racing on one call id keep one assessment | a store-tier test |
-| 12 | Changing the featurizer starts a new model for the subject | a store test |
-| 13 | The engine passes [[006-conformance]] | the conformance tier |
+| 1 | `engine/kernel` and `engine/gp` reproduce each ported fixture within 1e-9 | parity tests over the fixtures |
+| 2 | `features/1` produces a 56 and a 56 dimension vector for every valid action, including unknown kinds, unknown tools and missing parts, and never errors | table and fuzz tests in `engine/featurize` |
+| 3 | The shell extractor assigns each class and each destructive pattern in the tables, judges a chain by its worst segment, and finds outside-workspace paths | a table test with one command per row |
+| 4 | A subject with no answers predicts `approve` 0.5 and `ask` under the default profile and every accepted profile | the conformance suite and an engine test |
+| 5 | `t` increases by one per new case of a subject, and no time a caller sends reaches the model | an engine test with a fake clock |
+| 6 | A prediction never fits, and its 99th percentile at `n` = 512 with a warm snapshot is under 5 milliseconds on the reference runner | a test that counts fits and a benchmark |
+| 7 | A model with new answers is refitted within five seconds and the new snapshot is used by the next prediction | an engine test with a fake clock |
+| 8 | Memory for snapshots stays within the budget, and an evicted model reloads its snapshot without fitting | an engine test with a small budget |
+| 9 | No store holds an action's input after the prediction returns | a store test that greps every row and file for a marker in the input |
+| 10 | Models of different versions never share training data, and a version change leaves the old version serving | an engine test |
+| 11 | `engine.Engine` passes `conformance.Run` with each store | [[006-conformance]] |

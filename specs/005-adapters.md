@@ -1,14 +1,12 @@
 ---
-title: "Adapters: Claude Code and Codex hooks, Topos in process, a generic HTTP caller"
+title: "Adapters: decision points for Claude Code and Codex hooks, Topos, and any harness over HTTP"
 status: drafted
 track: core
-depends_on:
-  - specs/002-contract.md
-  - specs/003-http-api.md
-affects: [cmd/limen-hook/, docs/integrating.md]
+depends_on: [001-architecture.md, 002-contract.md, 003-http-api.md]
+affects: [cmd/limen-hook/, client/]
 effort: medium
 created: 2026-09-28
-updated: 2026-09-28
+updated: 2026-10-02
 author: changkun
 ---
 
@@ -16,132 +14,134 @@ author: changkun
 
 ## Overview
 
-Limen is useful only where a harness asks it. An adapter is the code
-that sits at a harness's permission decision, builds an `Action` from
-what the harness knows about a call, sets the ceiling from the harness's
-own deterministic layers, applies the verdict, and sends the person's
-answer back. This spec defines four: a command a hook runs, for Claude
-Code and for Codex; the in-process integration a Go harness such as
-[Topos](https://github.com/latere-ai/topos) uses; and the HTTP sequence
-any other harness follows.
+Limen is useful only where a decision point asks it. An adapter is a
+decision point, or the part of one, that builds an `Action` from what a
+harness knows about a proposed action, takes the harness's deterministic
+rules as the ceiling, composes the prediction with `verdict.Decide`,
+applies the verdict, records the decision, and sends the person's answer
+back. This spec defines the shared mapping, `limen-hook` for harnesses
+that call a command at their permission point (Claude Code and Codex),
+and the sequence any other harness follows over HTTP. The integration
+of [Topos](https://github.com/latere-ai/topos), whose harness embeds the
+engine as a `Decider`, is specified in the Topos repository's own specs;
+this spec states only what it relies on from Limen.
 
-Every adapter holds the same three rules, because they are what make
-Limen safe to put in front of a harness at all: the ceiling comes from
-the harness's deterministic layers and not from Limen; a failure to
-reach Limen is an ask, never an allow (`FailClosed`); and a `flag`
-verdict runs the call and leaves a review, never a silent allow.
+Every adapter holds the three rules that make Limen safe in front of a
+harness: the ceiling comes from the harness's deterministic rules and not
+from Limen; a failure to reach Limen is an ask (`FailClosed`); and the
+review draw happens once per action, in the adapter, with the probability
+recorded.
 
 ## Design
 
 ### The shared mapping
 
-| Harness fact | `Action` field |
+| Harness fact | Field |
 |---|---|
-| the person the agent acts for | `subject` (issuer and sub of their credential, joined by a pipe) |
+| the person the agent works for | `subject`, their credential's issuer and sub joined by a pipe |
 | their organization | `org` |
-| the harness's id for the call | `call_id`; where a harness has none, a digest of the session id, the tool name, the input and the time |
-| the tool name and its input | `tool`, `input` |
-| read-only, writes inside the working tree, or reaches outside | `effect` |
-| the file, ref or host the call acts on, when the harness can tell | `target` |
-| a sandbox or the person's machine, and whether it holds a credential | `machine` |
-| a rule score or a judge's verdict the harness already computed | `signals` |
-| the harness's deny list, always-confirm list, plan mode | `ceiling`: `block`, `ask`, or `block` for any write in plan mode; `allow` otherwise |
-
-The verdict maps back the same way everywhere:
+| the harness's id for the action | `action_id`: the session id and the tool call id, joined by a slash |
+| the domain and the tool | `kind` (`tool`), `name` |
+| what the tool can do | `effect`, and `reversible` when the harness knows |
+| the input | `input`, read by the extractors and never stored |
+| the file, ref or host acted on | `target` |
+| the machine | `environment`: `host` or `sandbox`, and `credentialed` |
+| the agent and its session | `actor` |
+| a rule score or a judge's verdict the harness already has | `signals` |
+| the harness's deny list, always-confirm list, plan mode | the ceiling, never sent to Limen |
 
 | Verdict | Harness action |
 |---|---|
-| `allow` | run the call |
-| `flag` | run the call and put it on the person's review list ([[003-http-api]], `pending=true`) |
-| `ask` | hold the call for the person; send their answer to `Answer` |
-| `block` | refuse the call with the assessment's `reason` as the result the agent reads |
+| `allow` | run it |
+| `flag` | run it, and put it on the person's review list |
+| `ask` | hold it for the person, and send their answer |
+| `block` | refuse it, with the harness's own refusal text; a prediction's `reason` is for the person reading the record and is never shown to the agent |
 
 ### `limen-hook` for Claude Code
 
-Claude Code runs a command for a `PreToolUse` hook with the event as JSON
-on standard input and reads a permission decision from standard output
-(`allow`, `ask` or `deny`, with a reason). `limen-hook claude-code`
-reads the event, builds the action, calls a running `limend` through
-`client/` wrapped in `FailClosed` with a 2 second timeout, and writes
-the decision: `allow` for `allow` and for `flag` (with a review entry),
-`ask` for `ask`, `deny` for `block`. Claude Code's own permission rules
-run beside the hook and keep their denies, so the ceiling for its hook
-is `allow` unless the adapter's configuration names deny or confirm
-patterns of its own.
+Claude Code runs a command for a `PreToolUse` event with the event as
+JSON on standard input and reads a permission decision from standard
+output: `allow`, `ask` or `deny`, with a reason. `limen-hook claude-code`
+reads the event, builds the action, calls `limend` through `client/`
+wrapped in `FailClosed` with a two second timeout, composes with
+`verdict.Decide` using its configured ceiling and the prediction's audit
+rate, records the decision, and writes `allow` for `allow` and `flag`
+(with a review entry), `ask` for `ask`, and `deny` for `block`.
 
-A hook returning `allow` removes Claude Code's prompt for that call.
-This is the one harness here where an adapter can raise a verdict, and
-it is why the adapter never returns `allow` for anything but an `allow`
-or `flag` assessment and returns `ask` on every failure.
+**The ceiling gap.** Claude Code applies its own permission rules beside
+the hook and keeps their denies and asks over a hook's allow. The hook
+does not see those rules, so a call it records as `allow` may in fact be
+held by Claude Code, and the recorded verdict is then not the one
+applied. The adapter therefore reads the user's and the project's
+permission settings, takes their deny and ask patterns as its ceiling,
+and records what Claude Code will do; where it cannot tell, it records
+`ask` with probability one, which is never wrong about what a person
+saw, only conservative.
 
-**Open question: the answer.** A `PostToolUse` event for the same tool
-use id means the call ran, so after an `ask` it is an approval. How a
-denial of Claude Code's prompt reaches a hook has to be confirmed against
-the Claude Code release this adapter is built for; until it is, the
-adapter records a denial only when the harness reports one, and an ask
-with no answer stays pending rather than being guessed. Whether Claude
-Code exposes its own auto-mode classifier's verdict to a hook is the
-second question; when it does not, the adapter sends no judge signal
-and the `tools` or `patterns` featurizer applies ([[004-engine]]).
+**Open question: the answer.** After an `ask`, a `PostToolUse` event for
+the same call means the person approved. A denial does not reach a hook
+as an event; it appears in the session transcript as the tool call's
+result. The adapter reads the transcript at the next hook invocation and
+at `Stop` and sends each answer it can establish, approvals and denials
+alike, and never sends approvals alone: an adapter that reported only
+the approvals it saw would bias every estimate toward allowing. Whether
+the transcript format holds for a given Claude Code release is checked
+when this spec is validated, and recorded in its Outcome.
+
+**Open question: identifiers.** The hook event's tool call id, where the
+release provides one, is the `action_id`'s second half; otherwise a
+digest of the tool name, the input and a per-session counter.
 
 ### `limen-hook` for Codex
 
-Codex's approval policy and sandbox decide when a command needs the
-person, and its reviewer sub-agent can decide instead of the person. The
-adapter belongs at the point where Codex would ask: Limen assesses the
-command with Codex's sandbox and policy as the ceiling and the
-reviewer's verdict, when the adapter can read it, as a judge signal.
-Which extension point Codex offers for this (a hook, an approval
-callback, or wrapping the command the reviewer runs) is decided when
-this spec is validated against the Codex release it targets; this spec
-does not assume one.
+Codex decides through its sandbox and approval policy, and its auto
+review can stand in for the person. Its `PreToolUse` hook answers allow
+or deny and does not yet support ask; its permission request hook answers
+allow or deny. The adapter therefore maps `ask` to leaving the decision
+to Codex's own approval prompt and records `ask` only when the active
+policy prompts for the command; `allow` and `block` map to allow and
+deny. The reviewer's verdict, when the adapter can read it, is a signal
+from `classifier/codex-auto-review`. The exact extension point is fixed
+when this spec is validated against the Codex release it targets.
 
-### Topos, in process
+### Topos
 
-Topos's permission design records a risk score with its source for
-every tool call and reserves the source `learned/<version>`; its
-`progressive` mode maps the score to a verdict with thresholds that a
-learned source may set per person and per agent. The integration is:
-
-1. Topos imports `engine/` and wraps it in `FailClosed` with a timeout
-   of 200 milliseconds, because the engine runs in the harness's hot
-   path.
-2. Topos evaluates its hard boundary, its always-confirm list and its
-   mode as it does today and passes the result as the ceiling.
-3. In `progressive` mode with a `learned/*` source, Topos takes the
-   assessment's verdict as the mode's verdict and records the
-   assessment's score, source and thresholds on the call's event. Its
-   deterministic `flag` band is empty (`flag_at` equals `ask_at`): a flag
-   from Limen is an audit, and a flag band on top of it would add
-   reviews that carry no known probability.
-4. Topos's hooks still run after the mode and may lower the verdict.
-5. A person's confirmation of a call is sent to `Answer`.
-
-Limen is a score source here and not a hook, because a Topos hook may
-only make a verdict stricter: a learned tolerance that could never turn
-an ask into an allow would add cost and remove nothing.
+The Topos harness embeds the engine through its own `Decider` interface
+at the point where it scores and decides a tool call, and calls `limend`
+over HTTP from hosted runners. It relies on Limen for: `Predict` and the
+`FailClosed` fallback; `verdict.Decide` from `latere.ai/x/pkg/verdict`;
+`Record` with its own source names (`topos/confirm`,
+`topos/progressive`, `topos/plan`); `Answer` from its confirmation
+events; and `Cases` with `pending` for its review list. Its shadow and
+confirm modes record their own verdicts while Limen predicts, which the
+ledger weights correctly because the probability comes from the
+recorded decision ([[007-evidence-gates]]).
 
 ### Any other harness, over HTTP
 
 ```
-POST /v1/assessments                 {action, ceiling from the harness's rules}
-  -> apply the verdict; on any error or after the timeout, ask
-POST /v1/assessments/{id}/answer     {approve, at}   when the person decides
-GET  /v1/assessments?subject=...&pending=true         for a review list
+POST /v1/predictions     the action
+  -> on any error or after the timeout, treat the suggestion as ask
+  -> verdict.Decide(suggestion, ceiling, audit_rate, u), u drawn once
+POST /v1/decisions       the verdict, its review probability, the source,
+                         and the action when the prediction failed
+POST /v1/answers         when the person answers
+GET  /v1/cases?pending=true   for a review list
 ```
 
-A caller in Go uses `client/` and `FailClosed`; a caller in another
-language implements the same fallback: an error, a timeout, or a
-verdict more permissive than its own ceiling is treated as `ask`
-narrowed by the ceiling.
+A harness in another language implements `verdict.Decide` exactly: a
+`block` ceiling is final with probability zero, a shown verdict has
+probability one unless the draw made it so, and an automatic verdict
+under review sampling carries the audit rate whether or not it was
+drawn.
 
 ## Acceptance criteria
 
 | # | Criterion | Proved by |
 |---|---|---|
-| 1 | For each verdict, `limen-hook claude-code` writes the decision the table above names, and writes `ask` when `limend` is unreachable, slow, or answers an error | tests feeding recorded hook events to the command against a stub `limend` |
-| 2 | `limen-hook` never writes `allow` for an assessment whose verdict is `ask` or `block` | the same tests, with a stub that returns each verdict |
-| 3 | A `flag` assessment appears in the subject's pending list after the hook allows the call | an e2e test against `limend` |
-| 4 | A `PostToolUse` event after an `ask` records an approval for the same assessment | an e2e test |
-| 5 | The two open questions (how a denial reaches the hook, whether the classifier's verdict does) are answered in this spec's Outcome with the harness release they were checked against | review at validation |
-| 6 | In the Topos integration, an always-confirm call is `ask` whatever Limen assesses, a hard-boundary call is `block`, and an engine that times out yields `ask` | tests in the Topos repository that embed the engine |
+| 1 | For each suggestion and ceiling, `limen-hook claude-code` writes the decision the tables name, and `ask` when `limend` is unreachable, slow, or answers an error | tests feeding recorded hook events to the command against a stub `limend` |
+| 2 | The decision `limen-hook` records matches the verdict it writes and the probability `verdict.Decide` returned | the same tests, reading the stub's ledger |
+| 3 | A deny or ask pattern in Claude Code's settings is the hook's ceiling | a test with a settings fixture |
+| 4 | The hook sends an answer only when both an approval and a denial are observable for the release it targets | review at validation, recorded in the Outcome |
+| 5 | A `flag` appears in the subject's pending cases after the hook allows the action | an e2e test against `limend` |
+| 6 | A harness that implements `verdict.Decide` in another language agrees with the Go function on a shared table of cases | a published table in `docs/` and the `verdict` package's tests |

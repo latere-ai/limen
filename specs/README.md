@@ -1,16 +1,18 @@
 # Specs
 
-Design specs for Limen, the learned input to an agent harness's allow,
-ask, or block decision. One spec covers one module. Each spec states the
+Design specs for Limen, the oversight layer for automated actions: a
+shared verdict vocabulary, a ledger that measures how often any source
+of decisions is wrong, and a predictor that learns when a person needs
+to see an action. One spec covers one module. Each spec states the
 problem, the design with enough precision to build from, and acceptance
 criteria that are testable statements. Spec 001 fixes the architecture
 every other spec assumes; read it first. Spec 002 is the Go contract a
-harness codes against and spec 003 the same contract over HTTP; together
-they are the documents an integration needs, and spec 006 is the suite
-that proves an implementation serves them. Spec 004 is the engine that
-computes an assessment, spec 005 the adapters that put Limen in front of
-a harness, and spec 007 the evidence each step of a rollout must produce
-before the next one starts.
+decision point codes against and spec 003 the same contract over HTTP;
+spec 008 is the ledger's estimation arithmetic, and spec 006 the suite
+that proves an implementation serves all three. Spec 004 is the engine
+that predicts, spec 005 the adapters that put Limen behind a harness's
+decision point, and spec 007 the evidence each step of a rollout must
+produce before the next one starts.
 
 The design follows the research in Changkun Ou, *Learning When to Ask:
 Trust Calibration for Agentic Tool Use, from Known Tools to Opaque LLM
@@ -20,8 +22,8 @@ Go port of the gateway are at
 [github.com/changkun/trustcalib](https://github.com/changkun/trustcalib);
 a spec that cites a proposition cites that paper.
 
-The tree holds the contract only. Specs 001 and 002 describe code that
-exists; every other spec describes code that does not yet.
+Specs 001 and 002 describe code that exists; every other spec describes
+code that is being built.
 
 ## Layout
 
@@ -59,13 +61,14 @@ validated spec is dispatched when every spec in its `depends_on` is at
 
 | Spec | Title | Status |
 |---|---|---|
-| [001](001-architecture.md) | Architecture: the contract, the engine, the service, and where Limen sits in a harness | drafted |
-| [002](002-contract.md) | Contract: the Go types, the gate interfaces, the verdict order, the error table, fail-closed | drafted |
-| [003](003-http-api.md) | HTTP API: routes, bodies, the error envelope, pagination, idempotency, the authorizer action per route | drafted |
-| [004](004-engine.md) | Engine: featurizers, the GP-probit posterior, the cost-derived rule, audits, estimates | drafted |
-| [005](005-adapters.md) | Adapters: Claude Code and Codex hooks, Topos in process, a generic HTTP caller | drafted |
-| [006](006-conformance.md) | Conformance suite: the invariants every gate must hold, as an importable test package | drafted |
-| [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned thresholds, judge signals, and what stops a rollout | drafted |
+| [001](001-architecture.md) | Architecture: the shared vocabulary, the ledger, the predictor, and the decision point that composes them | drafted |
+| [002](002-contract.md) | Contract: the Go types, the Predictor, Ledger and Admin interfaces, the error table, fail-closed | drafted |
+| [003](003-http-api.md) | HTTP API: routes, bodies, statuses, the authorizer action and resource fields per route, subject binding, limits | drafted |
+| [004](004-engine.md) | Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store | drafted |
+| [005](005-adapters.md) | Adapters: decision points for Claude Code and Codex hooks, Topos, and any harness over HTTP | drafted |
+| [006](006-conformance.md) | Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests | drafted |
+| [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
+| [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | drafted |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not built; it is the rule every
