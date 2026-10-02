@@ -6,7 +6,8 @@ tool latere.ai/x/ci-gate/cmd/lateregate
 
 require (
 	github.com/goccy/go-yaml v1.19.2
-	latere.ai/x/pkg v0.90.2
+	gonum.org/v1/gonum v0.17.0
+	latere.ai/x/pkg v0.91.0
 )
 
 require (

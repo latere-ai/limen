@@ -5,15 +5,23 @@ package limen
 
 import "time"
 
-// OfLearned is the [ReliabilityQuery.Of] that asks about Limen's own
-// automatic verdicts rather than a signal source's.
-const OfLearned = "learned"
+// The two sources a reliability query names besides the sources of
+// signals and decisions.
+const (
+	// OfLearned asks about Limen's own suggestions.
+	OfLearned = "learned"
+	// OfApplied asks about the verdicts decision points applied, whatever
+	// decided them.
+	OfApplied = "applied"
+)
 
 // ReliabilityQuery names whose error rates to report, for which person,
 // over which window.
 type ReliabilityQuery struct {
+	Org     string `json:"org"`
 	Subject string `json:"subject"`
-	// Of is [OfLearned] or a [Signal.Source], e.g. "judge/claude-auto-mode".
+	// Of is [OfLearned], [OfApplied], a [Decision.Source] such as
+	// "rules/1", or a [Signal.Source] such as "classifier/claude-auto-mode".
 	Of   string    `json:"of"`
 	From time.Time `json:"from"`
 	To   time.Time `json:"to"`
@@ -23,6 +31,9 @@ type ReliabilityQuery struct {
 // [*Error] with [CodeInvalidQuery], or nil.
 func (q ReliabilityQuery) Validate() error {
 	var p problems
+	if q.Org == "" {
+		p.add("org", "is empty")
+	}
 	if q.Subject == "" {
 		p.add("subject", "is empty")
 	}
@@ -40,52 +51,59 @@ func (q ReliabilityQuery) Validate() error {
 	return p.err(CodeInvalidQuery)
 }
 
-// Reliability reports how often the automatic verdicts of Limen, or of
-// one signal source, disagree with one person over one window. The rates
-// are for that person and that window only: the same judge is more or less
-// reliable depending on whose decisions it stands in for and when.
+// Reliability reports how often one source's verdicts disagree with one
+// person over one window. A source allowed an action when its verdict was
+// [Allow] or [Flag]: the action ran with no one's prior approval. It
+// blocked an action when its verdict was [Block], or, for a decision, an
+// [Ask] with a review probability below one, which is an automatic block
+// the review draw held for a person. Counting those drawn actions is what
+// puts the reviews inside the source's allows and blocks. The rates are
+// for that person and that window only: the same source is more or less
+// reliable depending on whose decisions it stands in for, and when.
 type Reliability struct {
-	Subject string    `json:"subject"`
-	Of      string    `json:"of"`
-	From    time.Time `json:"from"`
-	To      time.Time `json:"to"`
-	// FalseAllow estimates the share of allowed calls the person would
-	// have denied; FalseBlock the share of blocked calls they would have
+	ReliabilityQuery
+	// FalseAllow estimates the share of the source's allows the person
+	// would have denied; FalseBlock the share of its blocks they would have
 	// approved.
 	FalseAllow  Estimate    `json:"false_allow"`
 	FalseBlock  Estimate    `json:"false_block"`
 	Certificate Certificate `json:"certificate"`
 }
 
-// Estimate is one error rate. Each answered call counts with weight
-// 1/probability, the probability with which it was going to receive an
-// answer: one for a call a person had to decide, the audit rate for an
-// audited automatic verdict (Horvitz-Thompson). The estimate is unbiased,
-// and it is noisy when the window holds few labels.
+// Estimate is one error rate. Each review counts with weight one over its
+// decision's review probability (Horvitz-Thompson), so the estimate is
+// unbiased over the actions it covers, and noisy when the window holds few
+// reviews. Shown actions not yet answered are treated as missing at
+// random: the reviews' weights are scaled by the weighted share of shown
+// actions that have one.
 type Estimate struct {
-	// Value is nil when no answer in the window has a known probability,
-	// which means the rate cannot be estimated, not that it is zero.
+	// Value is nil when no action in the window had a positive review
+	// probability: the rate cannot be estimated, which is not zero.
 	Value *float64 `json:"value"`
 	// Interval is a 95% interval for the rate, present with Value.
 	Interval *[2]float64 `json:"interval,omitempty"`
-	// Labels counts the answered calls the estimate rests on; Audits
-	// counts those among them that were sampled for review.
-	Labels int `json:"labels"`
-	Audits int `json:"audits"`
-	// Unanswered counts calls in the window sampled for review that nobody
-	// has answered. The estimate treats them as missing at random; a count
-	// that is large next to Audits weakens it, and answering them is the
-	// remedy.
+	// Covered is the share of the source's allows (or blocks) in the window
+	// whose review probability was positive. The estimate speaks for that
+	// share only.
+	Covered float64 `json:"covered"`
+	// Reviews counts the reviews the estimate rests on, and Audits those
+	// among them whose review probability was below one.
+	Reviews int `json:"reviews"`
+	Audits  int `json:"audits"`
+	// Unanswered counts actions in the window a decision showed a person
+	// that have no review yet. The estimate treats them as missing at
+	// random; a count that is large next to Reviews weakens it.
 	Unanswered int `json:"unanswered"`
 }
 
-// Certificate tests the profile's claim, a false-allow rate below Alpha at
-// confidence 1 - Delta, against the most recent run of clean audits.
+// Certificate tests a profile's claim, a false-allow rate below Alpha at
+// confidence 1 - Delta, against the source's most recent run of clean
+// audited allows inside the window.
 type Certificate struct {
 	Alpha float64 `json:"alpha"`
 	Delta float64 `json:"delta"`
 	// Clean counts consecutive audited allows, most recent first, that the
-	// person approved. A denied audit ends the run.
+	// person approved. A denied one ends the run.
 	Clean int `json:"clean"`
 	// Needed is [CertificationSize] of Alpha and Delta.
 	Needed int  `json:"needed"`

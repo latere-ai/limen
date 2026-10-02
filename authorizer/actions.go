@@ -13,9 +13,11 @@ import "latere.ai/x/pkg/authz"
 // Core is the name the shared contract carries this vocabulary under.
 const Core = "limen"
 
-// The resource kinds of Limen's API.
+// The resource kinds of Limen's API. A Case carries the org and subject
+// it belongs to; a Profile its org, and its kind and agent when it is
+// scoped to them; a Replay and a Subject the org.
 const (
-	KindAssessment  = "Assessment"
+	KindCase        = "Case"
 	KindReliability = "Reliability"
 	KindProfile     = "Profile"
 	KindReplay      = "Replay"
@@ -26,10 +28,15 @@ const (
 // never disappears; a new action is a new row in the API spec first and a
 // constant here second.
 const (
-	ActionAssessmentCreate = "assessment.create"
-	ActionAssessmentRead   = "assessment.read"
-	ActionAssessmentAnswer = "assessment.answer"
-	ActionAssessmentList   = "assessment.list"
+	// ActionCasePredict asks for a prediction about an action whose subject
+	// is not, in general, the caller: a harness predicts for the person it
+	// runs for.
+	ActionCasePredict = "case.predict"
+	ActionCaseDecide  = "case.decide"
+	// ActionCaseAnswer is also the permission to relay an answer for the
+	// subject, which [limen.Answer.By] attributes.
+	ActionCaseAnswer = "case.answer"
+	ActionCaseList   = "case.list"
 
 	ActionReliabilityRead = "reliability.read"
 
@@ -44,10 +51,10 @@ const (
 // table is the one place an action is paired with its kind, in the order
 // the API spec lists them.
 var table = []authz.Action{
-	{Name: ActionAssessmentCreate, Kind: KindAssessment},
-	{Name: ActionAssessmentRead, Kind: KindAssessment},
-	{Name: ActionAssessmentAnswer, Kind: KindAssessment},
-	{Name: ActionAssessmentList, Kind: KindAssessment},
+	{Name: ActionCasePredict, Kind: KindCase},
+	{Name: ActionCaseDecide, Kind: KindCase},
+	{Name: ActionCaseAnswer, Kind: KindCase},
+	{Name: ActionCaseList, Kind: KindCase},
 	{Name: ActionReliabilityRead, Kind: KindReliability},
 	{Name: ActionProfileRead, Kind: KindProfile},
 	{Name: ActionProfileWrite, Kind: KindProfile},
@@ -57,7 +64,7 @@ var table = []authz.Action{
 
 // labels are the names a person reads for each kind, for a grant picker.
 var labels = map[string]string{
-	KindAssessment:  "Assessments",
+	KindCase:        "Cases",
 	KindReliability: "Reliability reports",
 	KindProfile:     "Cost profiles",
 	KindReplay:      "Replays",

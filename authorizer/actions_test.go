@@ -30,7 +30,7 @@ func TestVocabulary(t *testing.T) {
 			t.Errorf("kind %s has no label", k)
 		}
 	}
-	if v.Known("assessment.delete") {
+	if v.Known("case.delete") {
 		t.Error("an action outside the table is known")
 	}
 }

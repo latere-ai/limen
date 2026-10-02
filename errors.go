@@ -18,15 +18,18 @@ type Code string
 // occurrences travels in [Error.Detail] and [Error.Fields].
 const (
 	CodeInvalidAction         Code = "invalid_action"
+	CodeInvalidDecision       Code = "invalid_decision"
 	CodeInvalidAnswer         Code = "invalid_answer"
 	CodeInvalidProfile        Code = "invalid_profile"
 	CodeInvalidQuery          Code = "invalid_query"
-	CodeEmptyAskBand          Code = "empty_ask_band"
-	CodeUnknownAssessment     Code = "unknown_assessment"
-	CodeUnknownProfile        Code = "unknown_profile"
-	CodeAlreadyAnswered       Code = "already_answered"
+	CodeInvalidReplay         Code = "invalid_replay"
+	CodeAskTooCostly          Code = "ask_too_costly"
+	CodeActionConflict        Code = "action_conflict"
+	CodeAlreadyDecided        Code = "already_decided"
+	CodeNoDecision            Code = "no_decision"
 	CodeUnauthenticated       Code = "unauthenticated"
 	CodeForbidden             Code = "forbidden"
+	CodeBodyTooLarge          Code = "body_too_large"
 	CodeRateLimited           Code = "rate_limited"
 	CodeInternal              Code = "internal"
 	CodeAuthorizerUnavailable Code = "authorizer_unavailable"
@@ -40,33 +43,37 @@ type row struct {
 
 // table is the one place a code's status and sentence are written. The
 // sentences are for the person reading an API response or a harness's
-// output, so they name what happened and what to do next, and never a
+// output, so they say what happened and what to do next, and never name a
 // package, a field path, or a value; those are the detail's.
 var table = map[Code]row{
 	CodeInvalidAction:         {400, "The action is missing a field or has a value out of range. Fix the fields listed in the details and send it again."},
-	CodeInvalidAnswer:         {400, "The answer is missing a field or has a value out of range. Fix the fields listed in the details and send it again."},
+	CodeInvalidDecision:       {400, "The decision is missing a field or has a value out of range. Fix the fields listed in the details and send it again."},
+	CodeInvalidAnswer:         {400, "The answer is missing a field. Fix the fields listed in the details and send it again."},
 	CodeInvalidProfile:        {400, "The cost profile is missing a field or has a value out of range. Fix the fields listed in the details and save it again."},
-	CodeInvalidQuery:          {400, "The report request is missing a field or has a value out of range. Fix the fields listed in the details and ask again."},
-	CodeEmptyAskBand:          {422, "With these costs, asking is never worth it, so Limen would never ask. Raise the cost of a wrong allow or a wrong block, or lower the cost of asking."},
-	CodeUnknownAssessment:     {404, "There is no assessment with this id. Assess the call first, then send the answer for the id it returned."},
-	CodeUnknownProfile:        {404, "There is no cost profile with this id. Create it first, or use the organization's default profile."},
-	CodeAlreadyAnswered:       {409, "This call already has an answer. Each call takes one answer; a later dispute is sent as a contest."},
+	CodeInvalidQuery:          {400, "The request is missing a field or has a value out of range. Fix the fields listed in the details and ask again."},
+	CodeInvalidReplay:         {400, "A replayed record is missing a field or has a value out of range. Fix the records listed in the details and replay again."},
+	CodeAskTooCostly:          {422, "With these costs, Limen would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."},
+	CodeActionConflict:        {409, "This action id was already used for a different action. Give each action its own id."},
+	CodeAlreadyDecided:        {409, "This action already has a decision. Each action is decided once."},
+	CodeNoDecision:            {409, "This action has no recorded decision. Record the decision first, then send the answer."},
 	CodeUnauthenticated:       {401, "The request carries no valid credential. Sign in again and retry."},
 	CodeForbidden:             {403, "You do not have permission for this. Ask an administrator of the organization for access."},
+	CodeBodyTooLarge:          {413, "The request is larger than Limen accepts. Send it in smaller parts."},
 	CodeRateLimited:           {429, "Too many requests. Wait a moment and try again."},
 	CodeInternal:              {500, "Something failed on Limen's side. Try again; if it keeps failing, report it with the request id."},
 	CodeAuthorizerUnavailable: {503, "The permission service is unavailable. Try again shortly."},
-	CodeUnavailable:           {503, "Limen is unavailable right now. Hold the call for a person and try again shortly."},
+	CodeUnavailable:           {503, "Limen is unavailable right now. Hold the action for a person and try again shortly."},
 }
 
 // Codes returns every code in the table, in the order the constants are
 // declared.
 func Codes() []Code {
 	return []Code{
-		CodeInvalidAction, CodeInvalidAnswer, CodeInvalidProfile, CodeInvalidQuery,
-		CodeEmptyAskBand, CodeUnknownAssessment, CodeUnknownProfile, CodeAlreadyAnswered,
-		CodeUnauthenticated, CodeForbidden, CodeRateLimited, CodeInternal,
-		CodeAuthorizerUnavailable, CodeUnavailable,
+		CodeInvalidAction, CodeInvalidDecision, CodeInvalidAnswer, CodeInvalidProfile,
+		CodeInvalidQuery, CodeInvalidReplay, CodeAskTooCostly, CodeActionConflict,
+		CodeAlreadyDecided, CodeNoDecision, CodeUnauthenticated, CodeForbidden,
+		CodeBodyTooLarge, CodeRateLimited, CodeInternal, CodeAuthorizerUnavailable,
+		CodeUnavailable,
 	}
 }
 
@@ -88,7 +95,7 @@ func (c Code) Status() int {
 // detail; a user surface shows [Code.Message] instead.
 type Error struct {
 	Code   Code
-	Fields []string // the JSON paths at fault, e.g. "machine.kind"
+	Fields []string // the JSON paths at fault, e.g. "environment.kind"
 	Detail string   // what was observed and what was expected
 }
 

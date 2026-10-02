@@ -4,37 +4,48 @@
 package limen
 
 import (
-	"errors"
 	"math"
+	"strconv"
 )
 
-// Profile is what an organization states about errors and interruptions.
-// The thresholds follow from it; nobody tunes them.
-//
-// A profile's id is the organization's id, optionally followed by
-// "/agents/" and an agent id for a profile that applies to one agent:
-// "org_7" and "org_7/agents/agt_ci". The most specific profile wins.
+// Scope is what a cost profile applies to: an organization, optionally
+// narrowed to one kind of action, one agent, or both. For an action, the
+// most specific saved profile applies, in the order kind and agent, agent,
+// kind, the organization, and then [DefaultProfile].
+type Scope struct {
+	Org   string `json:"org"`
+	Kind  string `json:"kind,omitempty"`
+	Agent string `json:"agent,omitempty"`
+}
+
+// Profile is what an organization states about errors and interruptions
+// for the actions in its scope. The thresholds follow from the costs;
+// nobody tunes them.
 type Profile struct {
-	ID    string `json:"id"`
-	Costs Costs  `json:"costs"`
-	// AuditRate is the share of automatic verdicts sampled for review. A
-	// rate of zero leaves the false-allow rate unknowable, which a
-	// reliability report says rather than reporting zero.
+	Scope
+	Costs Costs `json:"costs"`
+	// AuditRate is the share of automatic verdicts a person reviews at
+	// random. At zero, the false-allow rate of automatic verdicts cannot be
+	// estimated, and a reliability report says so rather than reporting
+	// zero.
 	AuditRate float64 `json:"audit_rate"`
 	// Certify is the claim reliability reports test. A zero value takes
 	// [DefaultCertify] when the profile is saved.
 	Certify Certify `json:"certify,omitzero"`
 	// Thresholds is derived from Costs when the profile is saved; a value
-	// sent by a caller is ignored.
+	// a caller sends is ignored.
 	Thresholds Thresholds `json:"thresholds"`
+	// Default is true for the built-in profile Limen applies to a scope
+	// with no saved profile. A caller cannot set it.
+	Default bool `json:"default,omitempty"`
 }
 
-// Costs are the three prices of the decision, in any one unit. Only their
+// Costs are the three prices of a decision, in any one unit. Only their
 // ratios matter.
 type Costs struct {
-	// FalseAllow is the cost of running a call the person would deny.
+	// FalseAllow is the cost of running an action the person would deny.
 	FalseAllow float64 `json:"false_allow"`
-	// FalseBlock is the cost of refusing a call the person would approve.
+	// FalseBlock is the cost of refusing an action the person would approve.
 	FalseBlock float64 `json:"false_block"`
 	// Ask is the cost of one interruption.
 	Ask float64 `json:"ask"`
@@ -47,27 +58,40 @@ type Certify struct {
 	Delta float64 `json:"delta"`
 }
 
-// DefaultCertify is the claim a profile that states none is tested
-// against: a false-allow rate below 1% at 95% confidence, which takes 300
-// consecutive clean audits.
-var DefaultCertify = Certify{Alpha: 0.01, Delta: 0.05}
+// The built-in profile: a wrong allow costs ten interruptions and a wrong
+// block four, so Limen suggests an allow only above a 90% chance of
+// approval and a block only below 25%; a twentieth of automatic verdicts
+// is reviewed; and the claim tested is a false-allow rate below 1% at 95%
+// confidence, which takes 300 clean reviews.
+var (
+	DefaultCosts     = Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}
+	DefaultAuditRate = 0.05
+	DefaultCertify   = Certify{Alpha: 0.01, Delta: 0.05}
+)
 
-// errEmptyBand is wrapped into the [CodeEmptyAskBand] error so a test can
-// match the reason without parsing text.
-var errEmptyBand = errors.New("c_ask(c_FA + c_FB) >= c_FA c_FB")
+// DefaultProfile is the profile Limen applies to a scope with no saved
+// profile.
+func DefaultProfile(s Scope) Profile {
+	t, _ := DefaultCosts.Thresholds()
+	return Profile{Scope: s, Costs: DefaultCosts, AuditRate: DefaultAuditRate, Certify: DefaultCertify, Thresholds: t, Default: true}
+}
 
-// Thresholds derives the verdict thresholds from the costs. With p the
-// probability of approval, allowing costs (1-p) FalseAllow, blocking costs
+// Thresholds derives the verdict thresholds from the costs. At approval
+// probability p, allowing costs (1-p) FalseAllow, blocking costs
 // p FalseBlock, and asking costs Ask, so the expected cost is least for
 // allow when p > 1 - Ask/FalseAllow and for block when p < Ask/FalseBlock
-// (Chow's reject option). In score units, score = 1 - p:
+// (Chow's reject option):
 //
-//	AskAt   = Ask / FalseAllow
-//	BlockAt = 1 - Ask / FalseBlock
+//	AllowAbove = 1 - Ask/FalseAllow
+//	BlockBelow = Ask/FalseBlock
 //
-// The ask band is non-empty exactly when Ask (FalseAllow + FalseBlock) <
-// FalseAllow FalseBlock. Otherwise an automatic verdict is never worse than
-// asking, and Thresholds refuses the costs with [CodeEmptyAskBand].
+// Limen also requires the ask band to contain one half, the probability it
+// assigns to an action it knows nothing about, so that no action is
+// allowed or blocked on no evidence. That holds exactly when each error
+// costs more than two interruptions: FalseAllow > 2 Ask and
+// FalseBlock > 2 Ask. Costs that break it are refused with
+// [CodeAskTooCostly]; costs that are not positive and finite with
+// [CodeInvalidProfile].
 func (c Costs) Thresholds() (Thresholds, error) {
 	var p problems
 	for _, f := range []struct {
@@ -81,19 +105,25 @@ func (c Costs) Thresholds() (Thresholds, error) {
 	if err := p.err(CodeInvalidProfile); err != nil {
 		return Thresholds{}, err
 	}
-	if c.Ask*(c.FalseAllow+c.FalseBlock) >= c.FalseAllow*c.FalseBlock {
-		return Thresholds{}, &Error{Code: CodeEmptyAskBand, Fields: []string{"costs"}, Detail: errEmptyBand.Error()}
+	if !(c.FalseAllow > 2*c.Ask) {
+		p.add("costs.false_allow", "is not more than twice costs.ask")
 	}
-	return Thresholds{AskAt: c.Ask / c.FalseAllow, BlockAt: 1 - c.Ask/c.FalseBlock}, nil
+	if !(c.FalseBlock > 2*c.Ask) {
+		p.add("costs.false_block", "is not more than twice costs.ask")
+	}
+	if err := p.err(CodeAskTooCostly); err != nil {
+		return Thresholds{}, err
+	}
+	return Thresholds{AllowAbove: 1 - c.Ask/c.FalseAllow, BlockBelow: c.Ask / c.FalseBlock}, nil
 }
 
-// Validate reports every field of p that breaks the contract, or nil. A
-// profile whose costs leave no ask band fails with [CodeEmptyAskBand];
-// every other problem is [CodeInvalidProfile].
+// Validate reports every field of p that breaks the contract, or nil.
+// Costs that would let Limen decide on no evidence fail with
+// [CodeAskTooCostly]; every other problem is [CodeInvalidProfile].
 func (p Profile) Validate() error {
 	var q problems
-	if p.ID == "" {
-		q.add("id", "is empty")
+	if p.Org == "" {
+		q.add("org", "is empty")
 	}
 	if !unit(p.AuditRate) {
 		q.add("audit_rate", "is outside [0, 1]")
@@ -110,14 +140,15 @@ func (p Profile) Validate() error {
 	return err
 }
 
-// CertificationSize is the number of consecutive clean audits that
+// CertificationSize is the number of consecutive clean reviews that
 // certify a false-allow rate below alpha at confidence 1 - delta: if the
-// rate were at least alpha, n independent audits would all be clean with
+// rate were at least alpha, n independent reviews would all be clean with
 // probability at most (1-alpha)^n <= exp(-alpha n), which is at most delta
 // once n >= ln(1/delta)/alpha. For alpha = 0.01 and delta = 0.05 it is 300.
 func CertificationSize(alpha, delta float64) (int, error) {
 	if !(alpha > 0 && alpha <= 1 && delta > 0 && delta < 1) {
-		return 0, &Error{Code: CodeInvalidProfile, Fields: []string{"certify"}, Detail: "need 0 < alpha <= 1 and 0 < delta < 1"}
+		return 0, &Error{Code: CodeInvalidProfile, Fields: []string{"certify"},
+			Detail: "alpha " + strconv.FormatFloat(alpha, 'g', -1, 64) + ", delta " + strconv.FormatFloat(delta, 'g', -1, 64) + ": need 0 < alpha <= 1 and 0 < delta < 1"}
 	}
 	return int(math.Ceil(math.Log(1/delta) / alpha)), nil
 }

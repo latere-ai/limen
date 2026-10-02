@@ -1,32 +1,42 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package limen is the contract of Limen, the learned input to an agent
-// harness's allow, ask, or block decision.
+// Package limen is the contract of Limen, the oversight layer for automated
+// actions: which actions may run on their own, which a person should see,
+// and how often each source of those decisions is wrong.
 //
-// A harness describes one proposed tool call as an [Action] and asks a
-// [Gate] to [Gate.Assess] it. The [Assessment] carries the probability that
-// the person the agent acts for would approve the call, the verdict that
-// probability implies under the organization's stated [Costs], and, when
-// the call was sampled for review, the [Audit] probability that makes the
-// person's answer usable for an unbiased error estimate. The person's
-// answer comes back through [Gate.Answer], and [Gate.Reliability] reports
-// how often Limen, or any judge whose verdict arrived as a [Signal], allows
-// what that person would deny.
+// An automated actor, an agent most often, proposes an [Action]: a tool
+// call, a network request, a push, a payment. A decision point, the code
+// that lets the action run or not, owns the decision. Limen serves it in
+// three orthogonal parts:
 //
-// The package holds the types, the interfaces, the error codes, and the
-// pure functions that define the contract's arithmetic: the verdict order
-// ([Least]), the thresholds a cost profile implies ([Costs.Thresholds]),
-// the verdict a score implies ([Thresholds.Verdict]), the number of clean
-// audits a certificate needs ([CertificationSize]), and the fail-closed
-// wrapper every caller should put around a gate ([FailClosed]). The engine
-// that computes an assessment, the HTTP client, the stub and the
-// conformance suite live in their own packages. The package imports the
-// standard library only, so any harness can depend on it.
+//   - The [Predictor] predicts, for the person on whose behalf the action
+//     runs, the probability that they would approve it, and suggests a
+//     verdict from the costs their organization states ([Prediction]).
+//   - The decision point decides. It composes the suggestion with the
+//     ceiling its deterministic rules leave open and with random review
+//     sampling (latere.ai/x/pkg/verdict.Decide), applies the verdict, and
+//     records it with the probability that a person sees the action
+//     ([Decision]).
+//   - The [Ledger] keeps every decision and the person's [Answer], learns
+//     from them, and reports how often any source of decisions allows
+//     what the person would deny ([Reliability]): Limen's own predictions,
+//     the decisions applied, a rule, or an LLM judge whose verdict arrived
+//     as a [Signal].
 //
-// Three rules hold for every implementation, and the conformance suite
-// checks each: a verdict is never more permissive than the [Action.Ceiling]
-// the deterministic layers set; a failure yields [Ask], never [Allow]; and
-// an audit's probability is fixed when the call is assessed and is never
-// supplied by a caller.
+// The ledger needs no predictor: a harness that decides by rules alone can
+// record its decisions and learn how often its rules, and the judge it
+// consults, are wrong. The predictor needs the ledger, because the ledger's
+// answers are what it learns from.
+//
+// Every record is keyed by the action's [Key]: the organization, the
+// subject (the person whose approvals are learned), and the decision
+// point's own id for the action. The package holds the types, the
+// interfaces, the error codes, and the pure functions that define the
+// contract's arithmetic: the thresholds a cost profile implies
+// ([Costs.Thresholds]), the verdict an approval probability implies
+// ([Thresholds.Verdict]), the number of clean reviews a certificate needs
+// ([CertificationSize]), and the fail-closed wrapper every decision point
+// should put around a predictor ([FailClosed]). It imports the standard
+// library and latere.ai/x/pkg/verdict only.
 package limen

@@ -7,12 +7,50 @@ import (
 	"encoding/json"
 	"math"
 	"strconv"
-	"time"
+
+	"latere.ai/x/pkg/verdict"
 )
 
-// Effect is what a call can do to the world, as the harness classifies
-// its tools: nothing, read, write inside the harness's boundary, or reach
-// outside it.
+// Verdict is the shared decision vocabulary, latere.ai/x/pkg/verdict.
+type Verdict = verdict.Verdict
+
+// The four verdicts, from most to least permissive.
+const (
+	Allow = verdict.Allow
+	Flag  = verdict.Flag
+	Ask   = verdict.Ask
+	Block = verdict.Block
+)
+
+// Key names one proposed action in every record Limen keeps. The decision
+// point chooses ActionID and keeps it unique within the organization and
+// subject; Topos, for example, uses the session id and the tool call's id.
+type Key struct {
+	// Org is the organization whose cost profile applies and whose records
+	// these are.
+	Org string `json:"org"`
+	// Subject is the person on whose behalf the action runs and whose
+	// approvals Limen learns, rendered as the issuer and the token's sub
+	// joined by a pipe. It may name a group whose members answer for it.
+	Subject  string `json:"subject"`
+	ActionID string `json:"action_id"`
+}
+
+func (k Key) check(p *problems, at string) {
+	if k.Org == "" {
+		p.add(at+"org", "is empty")
+	}
+	if k.Subject == "" {
+		p.add(at+"subject", "is empty")
+	}
+	if k.ActionID == "" {
+		p.add(at+"action_id", "is empty")
+	}
+}
+
+// Effect is what an action can do to the world: nothing, read, write
+// inside the boundary of the system that runs it, or reach outside it (a
+// network call, a message sent, money moved).
 type Effect string
 
 const (
@@ -31,145 +69,158 @@ func (e Effect) Valid() bool {
 	return false
 }
 
-// MachineKind is where a call runs.
-type MachineKind string
+// MaxAttributes bounds an action's attributes.
+const MaxAttributes = 64
 
-const (
-	// MachineHost is the person's own machine.
-	MachineHost MachineKind = "host"
-	// MachineSandbox is an isolated environment whose files are disposable.
-	MachineSandbox MachineKind = "sandbox"
-)
-
-// Action is one proposed call, described by what a harness can observe
-// before it runs. Limen learns from these fields and nothing else: the
-// person's tolerance is a function of them and of time.
+// Action is one proposed action, described by what the decision point can
+// observe before it runs. Limen learns from these fields and from time,
+// which it keeps itself; nothing else about the action reaches the model.
 type Action struct {
-	// Subject is the person whose approvals Limen learns from and predicts,
-	// rendered as the issuer and the token's sub joined by a pipe. It is
-	// the person the agent acts for, not the agent.
-	Subject string `json:"subject"`
-	// Org is the organization whose cost profile applies.
-	Org string `json:"org"`
-	// Agent and Session identify who proposed the call, for the record and
-	// for a cost profile scoped to one agent.
-	Agent   string `json:"agent,omitempty"`
-	Session string `json:"session,omitempty"`
-	// CallID is the harness's own id for the call. Assessing the same
-	// Subject and CallID again returns the first assessment unchanged, so
-	// a caller cannot draw a second audit sample by asking twice.
-	CallID string `json:"call_id"`
-	// Tool is the tool's name as the harness knows it: "bash", "write",
-	// "mcp__github__merge_pull_request".
-	Tool   string `json:"tool"`
+	Key
+	// Actor is who proposed the action, when the decision point knows.
+	Actor *Actor `json:"actor,omitempty"`
+	// Kind is the domain of the action and Name the operation within it:
+	// "tool" and "bash", "tool" and "mcp__github__merge_pull_request",
+	// "egress" and "https", "repo" and "ref.update", "spend" and "charge".
+	// A cost profile may be scoped to a kind.
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Effect is the widest effect the action can have.
 	Effect Effect `json:"effect"`
-	// Input is the tool's input. Only deterministic feature extractors read
-	// it, for example to recognize a recursive delete in a shell command;
-	// no language model ever sees it, so text an agent writes cannot
-	// instruct the gate.
-	Input   json.RawMessage `json:"input,omitempty"`
-	Target  *Target         `json:"target,omitempty"`
-	Machine Machine         `json:"machine"`
-	// Signals are other opinions about the call: a rule score, an LLM
+	// Reversible says whether the action can be undone, when known.
+	Reversible *bool `json:"reversible,omitempty"`
+	// Input is the action's input, such as a tool call's arguments. Only
+	// deterministic feature extractors read it, so text an agent writes
+	// never instructs a model inside Limen, and Limen never stores it.
+	Input       json.RawMessage `json:"input,omitempty"`
+	Target      *Target         `json:"target,omitempty"`
+	Environment *Environment    `json:"environment,omitempty"`
+	// Attributes are further observable facts the decision point's domain
+	// has, such as an amount or whether a branch is protected. Values are
+	// strings, numbers or booleans.
+	Attributes map[string]any `json:"attributes,omitempty"`
+	// Signals are other opinions about the action: a rule's score, an LLM
 	// judge's verdict. Limen treats them as evidence about the person's
-	// answer and never as a verdict of their own.
+	// answer, and reports the reliability of each source.
 	Signals []Signal `json:"signals,omitempty"`
-	// Ceiling is the most permissive verdict the deterministic layers leave
-	// open: [Allow] when they impose nothing, [Ask] for an action they
-	// always confirm, [Block] for one they deny. Limen's verdict is never
-	// more permissive, which is how a deterministic deny stays final.
-	Ceiling Verdict `json:"ceiling"`
-	// At is when the call was proposed. Tolerance drifts, so time is an
-	// input like any other.
-	At time.Time `json:"at"`
 }
 
-// Target is what the call acts on.
+// Actor is who proposed an action.
+type Actor struct {
+	// Kind is "agent", "service" or "person".
+	Kind string `json:"kind"`
+	ID   string `json:"id,omitempty"`
+	// Session is the run the action belongs to, when there is one.
+	Session string `json:"session,omitempty"`
+}
+
+// Target is what an action acts on.
 type Target struct {
-	// Kind is the harness's word for the target: "path", "ref", "host",
-	// "resource".
+	// Kind is the domain's word for the target: "path", "ref", "host",
+	// "account".
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
-	// Sensitivity runs from 0, a scratch directory, to 1, production. It is
-	// optional; without it the target's kind and id are the only evidence.
+	// Sensitivity runs from 0, a scratch directory, to 1, production.
 	Sensitivity *float64 `json:"sensitivity,omitempty"`
 }
 
-// Machine is where the call runs.
-type Machine struct {
-	Kind MachineKind `json:"kind"`
-	// Credentialed is true when the machine holds a credential that reaches
-	// outside it, so a command run there can act beyond its boundary.
+// Environment is where an action runs.
+type Environment struct {
+	// Kind is "host" (a person's own machine), "sandbox" (an isolated
+	// environment whose state is disposable) or "service".
+	Kind string `json:"kind"`
+	// Credentialed is true when the environment holds a credential that
+	// reaches outside it, so an action there can act beyond its boundary.
 	Credentialed bool `json:"credentialed"`
 }
 
-// Signal is one other opinion about a call. Source names who gave it, in
-// the form "<kind>/<name>": "rules/1", "judge/claude-auto-mode". A judge's
-// error rate for a person is reported per Source ([Gate.Reliability]).
+// Signal is one other opinion about an action. Source names who gave it,
+// in the form "<kind>/<name>": "rules/1", "classifier/claude-auto-mode".
 type Signal struct {
-	Source string `json:"source"`
-	// Verdict is set by a judge that returns allow or block.
-	Verdict Verdict `json:"verdict,omitempty"`
-	// Score is set by a source that returns a number in [0, 1], higher
-	// meaning riskier.
-	Score *float64 `json:"score,omitempty"`
+	Source  string   `json:"source"`
+	Verdict Verdict  `json:"verdict,omitempty"`
+	Score   *float64 `json:"score,omitempty"`
 }
 
 // Validate reports every field of a that breaks the contract, as one
 // [*Error] with [CodeInvalidAction], or nil.
 func (a Action) Validate() error {
 	var p problems
-	if a.Subject == "" {
-		p.add("subject", "is empty")
-	}
-	if a.Org == "" {
-		p.add("org", "is empty")
-	}
-	if a.CallID == "" {
-		p.add("call_id", "is empty")
-	}
-	if a.Tool == "" {
-		p.add("tool", "is empty")
-	}
-	if !a.Effect.Valid() {
-		p.add("effect", "is not one of none, read, write, external")
-	}
-	if len(a.Input) > 0 && !json.Valid(a.Input) {
-		p.add("input", "is not valid JSON")
-	}
-	if a.Target != nil {
-		if a.Target.Kind == "" {
-			p.add("target.kind", "is empty")
-		}
-		if s := a.Target.Sensitivity; s != nil && !unit(*s) {
-			p.add("target.sensitivity", "is outside [0, 1]")
-		}
-	}
-	if a.Machine.Kind != MachineHost && a.Machine.Kind != MachineSandbox {
-		p.add("machine.kind", "is not one of host, sandbox")
-	}
-	for i, s := range a.Signals {
-		at := "signals[" + strconv.Itoa(i) + "]"
-		if s.Source == "" {
-			p.add(at+".source", "is empty")
-		}
-		if s.Verdict != "" && s.Verdict != Allow && s.Verdict != Block {
-			p.add(at+".verdict", "is not one of allow, block")
-		}
-		if s.Score != nil && !unit(*s.Score) {
-			p.add(at+".score", "is outside [0, 1]")
-		}
-		if s.Verdict == "" && s.Score == nil {
-			p.add(at, "carries neither a verdict nor a score")
-		}
-	}
-	if !a.Ceiling.Valid() {
-		p.add("ceiling", "is not one of allow, flag, ask, block")
-	}
-	if a.At.IsZero() {
-		p.add("at", "is not set")
-	}
+	a.check(&p, "")
 	return p.err(CodeInvalidAction)
 }
 
+func (a Action) check(p *problems, at string) {
+	a.Key.check(p, at)
+	if a.Actor != nil && a.Actor.Kind == "" {
+		p.add(at+"actor.kind", "is empty")
+	}
+	if a.Kind == "" {
+		p.add(at+"kind", "is empty")
+	}
+	if a.Name == "" {
+		p.add(at+"name", "is empty")
+	}
+	if !a.Effect.Valid() {
+		p.add(at+"effect", "is not one of none, read, write, external")
+	}
+	if len(a.Input) > 0 && !json.Valid(a.Input) {
+		p.add(at+"input", "is not valid JSON")
+	}
+	if a.Target != nil {
+		if a.Target.Kind == "" {
+			p.add(at+"target.kind", "is empty")
+		}
+		if s := a.Target.Sensitivity; s != nil && !unit(*s) {
+			p.add(at+"target.sensitivity", "is outside [0, 1]")
+		}
+	}
+	if a.Environment != nil && a.Environment.Kind == "" {
+		p.add(at+"environment.kind", "is empty")
+	}
+	if len(a.Attributes) > MaxAttributes {
+		p.add(at+"attributes", "has more than "+strconv.Itoa(MaxAttributes)+" entries")
+	}
+	for k, v := range a.Attributes {
+		if k == "" {
+			p.add(at+"attributes", "has an empty key")
+		}
+		if !scalar(v) {
+			p.add(at+"attributes."+k, "is not a string, a finite number, or a boolean")
+		}
+	}
+	for i, s := range a.Signals {
+		si := at + "signals[" + strconv.Itoa(i) + "]"
+		if s.Source == "" {
+			p.add(si+".source", "is empty")
+		}
+		if s.Verdict != "" && !s.Verdict.Valid() {
+			p.add(si+".verdict", "is not one of allow, flag, ask, block")
+		}
+		if s.Score != nil && !unit(*s.Score) {
+			p.add(si+".score", "is outside [0, 1]")
+		}
+		if s.Verdict == "" && s.Score == nil {
+			p.add(si, "carries neither a verdict nor a score")
+		}
+	}
+}
+
 func unit(x float64) bool { return !math.IsNaN(x) && x >= 0 && x <= 1 }
+
+// scalar reports whether v is an attribute value: a string, a boolean, or
+// a finite number of any Go numeric type.
+func scalar(v any) bool {
+	switch x := v.(type) {
+	case string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	case float32:
+		return !math.IsNaN(float64(x)) && !math.IsInf(float64(x), 0)
+	case float64:
+		return !math.IsNaN(x) && !math.IsInf(x, 0)
+	case json.Number:
+		_, err := x.Float64()
+		return err == nil
+	}
+	return false
+}
