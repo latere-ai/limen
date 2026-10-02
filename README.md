@@ -1,161 +1,223 @@
 # Limen
 
-**Learned escalation for agent harnesses: which calls an agent may run on
-its own, which wait for a person, and which it may not run at all.**
-Limen learns from each person's own approve and deny answers, derives
-its thresholds from what your organization says errors and interruptions
-cost, and measures how often its automatic verdicts, or an LLM judge's,
-allow what that person would have denied.
+**The oversight layer for automated actions: which actions may run on
+their own, which a person should see, and how often each source of those
+decisions is wrong.**
 
-> **Status: pre-release, contract only.** This repository holds Limen's
-> contract (the Go types and interfaces, the HTTP API, the error codes),
-> its documentation, and its design specs. The engine that computes an
-> assessment, the server (`limend`), the HTTP client, the test stub, the
-> conformance suite, and the harness hooks are specified in
-> [`specs/`](specs/README.md) but not built yet. Nothing here decides a
-> live call today.
+Agents propose actions: a shell command, a merge, a network request, a
+deploy, a payment. Something decides whether each one runs. Limen learns,
+from each person's own approve and deny answers, when an action needs
+them; it derives its suggestions from what your organization says errors
+and interruptions cost; and it keeps a ledger of every decision, with the
+probability that a person saw the action, which makes the error rate of
+any decision source measurable: your rules, an LLM judge, Limen itself.
+
+> **Status: pre-release.** Built: the contract (the Go types and
+> interfaces, the HTTP API, the error codes); the shared verdict vocabulary,
+> `latere.ai/x/pkg/verdict`; the reliability estimators (`estimate/`); an
+> in-memory stub of the whole service for tests (`stub/`); the conformance
+> suite every implementation must pass (`conformance/`); and the model's
+> numerics, the kernels and the Laplace Gaussian-process classifier, ported
+> from the research code and tested against its fixtures (`engine/kernel`,
+> `engine/gp`). Not built yet: the engine that assembles them (feature
+> extraction, the store, background fitting), the server `limend`, the HTTP
+> client, and the harness hooks, which [`specs/`](specs/README.md)
+> describes. Nothing here decides a live action today.
 
 ## The problem
 
-Agent harnesses gate tool calls with a switch: run it, or refuse it. A
+Agent harnesses gate actions with a switch: run it, or refuse it. A
 refusal does not pause the run for a person. The agent reads it as a
-result and keeps going, often by routing around the obstacle in ways
-that are worse than asking would have been.
+result and keeps going, often by routing around the obstacle in ways that
+are worse than asking would have been.
 
-Where a harness can ask, the question of when to ask is usually a
-hand-written list or a threshold someone tuned once. It does not learn
-that a person has approved the same test command a hundred times, and it
-does not notice when that person moves to an unfamiliar production system
-and becomes stricter.
+Where a harness can ask, when to ask is usually a hand-written list or a
+threshold someone tuned once. It does not learn that a person has approved
+the same test command a hundred times, and it does not notice when that
+person moves to an unfamiliar production system and becomes stricter.
 
-Harnesses that route everything through a shell have no fixed tool list
-to write rules against, so they hand the decision to a second language
-model, a judge. The judge is opaque. Nobody can say how often it allows
-what a given person would deny, and in current designs the person only
-sees calls the judge blocked, so its allow errors are never observed.
+Harnesses that route everything through a shell have no fixed list of
+tools to write rules against, so they hand the decision to a second
+language model, a judge. The judge is opaque. Nobody can say how often it
+allows what a given person would deny, and in current designs the person
+only sees what the judge blocked, so its wrong allows are never observed.
+
+The same questions come back wherever software acts on someone's behalf: a
+sandbox reaching the network, a push to a protected branch, an agent
+spending money.
 
 ## How it works
 
-- **Escalate, don't refuse.** Every call gets one of four verdicts:
-  `allow`, `flag` (run it and ask afterwards), `ask`, or `block`. When
-  Limen is unsure, the call waits for a person instead of failing.
+Three parts, each usable on its own:
+
+```mermaid
+flowchart LR
+  A[proposed action] --> P[Limen predicts<br/>chance of approval,<br/>suggested verdict]
+  P --> D[your decision point decides<br/>ceiling from your rules,<br/>review drawn once]
+  D --> R{verdict}
+  R -->|allow, block| X[runs or not]
+  R -->|flag, ask| H[a person sees it]
+  D -->|decision and its<br/>review probability| L[(Limen's ledger)]
+  H -->|answer| L
+  L -->|learns| P
+  L --> Rel[error rate of any source:<br/>Limen, your rules, a judge]
+```
+
+- **Predict.** For the person on whose behalf an action runs, Limen
+  predicts the probability that they would approve it, says how uncertain
+  that is, and suggests allow, ask, or block.
+- **Decide.** Your decision point decides, not Limen. It composes the
+  suggestion with the ceiling its own rules leave open and with a random
+  review of a small share of automatic verdicts, using one shared function,
+  and records what it did.
+- **Ledger.** Limen keeps every decision and every answer, learns from
+  them, and reports how often any source of decisions allows what the
+  person would deny. A harness that decides by rules alone can use the
+  ledger without the predictor, to learn how often its rules and its judge
+  are wrong.
+
+What that buys, in rules every implementation keeps:
+
+- **Escalate, don't refuse.** When the evidence is unclear, the action
+  waits for a person instead of failing.
 - **Thresholds come from costs.** You state what a wrong allow, a wrong
-  block, and one interruption cost. The thresholds follow from those three
-  numbers by a closed formula; nobody tunes them.
-- **Learn the person, keep the risk.** A Gaussian-process model learns
-  each person's tolerance from their answers. It lets that tolerance
-  drift over time, but it keeps what it learned about how risky each kind
-  of action is, so it does not ask again about everything on a clock.
-- **Know its own error rate.** A call Limen allows on its own never gets
-  an answer. A small random share of those calls is shown to the person
-  anyway, with the sampling probability recorded when the call is
-  assessed, and only those answers estimate the false-allow rate without
-  bias. The same answers measure any judge whose verdict you pass in.
-- **Rules still win.** Your harness's deterministic rules set a ceiling
-  on every call. Limen's verdict is never more permissive, and when
-  Limen fails or times out, the call waits for a person.
+  block, and one interruption cost; the thresholds follow by a closed
+  formula. Nobody tunes them, and an action about someone Limen knows
+  nothing about is always an ask.
+- **Your rules win.** Your deterministic rules set a ceiling Limen's
+  suggestion cannot exceed, and when Limen fails or times out, the action
+  waits for a person.
+- **Learn the person, keep the risk.** A Gaussian-process model lets each
+  person's tolerance drift, but keeps what it learned about how risky each
+  kind of action is.
+- **Know every source's error rate.** Each decision is recorded with the
+  probability that a person saw the action, so each answer counts with the
+  right weight and error rates come out unbiased, for Limen, for your
+  rules, and for any judge whose verdict you pass in.
 
 [Principles](docs/principles.md) states each rule and why it holds;
 [Theory](docs/theory.md) is the mathematics in brief.
 
 ## At a glance
 
-A harness describes a proposed call as an `Action` and asks a `Gate`. The
-engine will implement `Gate` in process and the client over HTTP, so a
-harness codes against one interface either way. Wrap it with
-`FailClosed`, which turns any error or timeout into `ask`.
+A decision point predicts, decides, records, and later sends the answer.
+In Go:
 
 ```go
-import "latere.ai/x/limen"
+import (
+	"math/rand/v2"
 
-// g is the in-process engine or the HTTP client; both satisfy limen.Gate.
-gate := limen.FailClosed(g, 200*time.Millisecond, func(err error) { log.Print(err) })
+	"latere.ai/x/limen"
+	"latere.ai/x/pkg/verdict"
+)
 
-// FailClosed never returns an error from Assess: a failure is an ask.
-as, _ := gate.Assess(ctx, limen.Action{
-	Subject: "https://issuer.example|usr_42",
-	Org:     "org_7",
-	CallID:  "toolu_01",
-	Tool:    "bash",
-	Effect:  limen.EffectExternal,
-	Input:   json.RawMessage(`{"command":"git push origin main"}`),
-	Machine: limen.Machine{Kind: limen.MachineSandbox, Credentialed: true},
-	Ceiling: limen.Allow, // your deterministic rules impose nothing here
-	At:      time.Now(),
-})
+// svc is Limen: the in-process engine, or the HTTP client.
+predictor := limen.FailClosed(svc, 200*time.Millisecond, func(err error) { log.Print(err) })
 
-switch as.Verdict {
+a := limen.Action{
+	Key:         limen.Key{Org: "org_7", Subject: "https://issuer.example|usr_42", ActionID: "ses_9f/toolu_01"},
+	Actor:       &limen.Actor{Kind: "agent", ID: "agt_ci", Session: "ses_9f"},
+	Kind:        "tool",
+	Name:        "bash",
+	Effect:      limen.EffectExternal,
+	Input:       json.RawMessage(`{"command":"git push origin main"}`),
+	Target:      &limen.Target{Kind: "ref", ID: "refs/heads/main"},
+	Environment: &limen.Environment{Kind: "sandbox", Credentialed: true},
+	Signals:     []limen.Signal{{Source: "classifier/claude-auto-mode", Verdict: limen.Allow}},
+}
+
+// Never an error: a failure comes back as an ask.
+p, _ := predictor.Predict(ctx, a)
+
+// Your rules set the ceiling. The review is drawn once, here, for this action.
+v, prob := verdict.Decide(p.Verdict, ceiling(a), p.AuditRate, rand.Float64())
+
+d := limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
+if p.Source == limen.SourceUnavailable {
+	d.Action = &a // Limen holds no record of this action yet
+}
+svc.Record(ctx, d)
+
+switch v {
 case limen.Allow:
 	run()
 case limen.Flag:
 	run()
-	queueForReview(as.ID) // the person answers later
+	queueForReview(a.Key) // the person answers later
 case limen.Ask:
-	approved := holdForPerson(as.Reason)
-	gate.Answer(ctx, as.ID, limen.Answer{Approve: approved, At: time.Now()})
+	svc.Answer(ctx, limen.Answer{Key: a.Key, Approve: holdForPerson()})
 case limen.Block:
-	refuse(as.Reason)
+	refuse() // with your own words, never Limen's reason
 }
 ```
 
-The same call over HTTP:
+The same over HTTP:
 
 ```http
-POST /v1/assessments
+POST /v1/predictions
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "subject": "https://issuer.example|usr_42",
   "org": "org_7",
-  "call_id": "toolu_01",
-  "tool": "bash",
+  "subject": "https://issuer.example|usr_42",
+  "action_id": "ses_9f/toolu_01",
+  "actor": {"kind": "agent", "id": "agt_ci", "session": "ses_9f"},
+  "kind": "tool",
+  "name": "bash",
   "effect": "external",
   "input": {"command": "git push origin main"},
-  "target": {"kind": "ref", "id": "refs/heads/main", "sensitivity": 0.9},
-  "machine": {"kind": "sandbox", "credentialed": true},
-  "signals": [
-    {"source": "rules/1", "score": 0.4},
-    {"source": "judge/claude-auto-mode", "verdict": "allow"}
-  ],
-  "ceiling": "allow",
-  "at": "2026-09-28T10:02:11Z"
+  "target": {"kind": "ref", "id": "refs/heads/main"},
+  "environment": {"kind": "sandbox", "credentialed": true},
+  "signals": [{"source": "classifier/claude-auto-mode", "verdict": "allow"}]
 }
 ```
 
 ```json
 {
-  "id": "asm_01J8",
-  "call_id": "toolu_01",
+  "org": "org_7",
+  "subject": "https://issuer.example|usr_42",
+  "action_id": "ses_9f/toolu_01",
   "verdict": "ask",
   "approve": 0.58,
   "uncertainty": 0.71,
-  "score": 0.42,
-  "thresholds": {"ask_at": 0.1, "block_at": 0.75},
-  "profile": "org_7",
+  "thresholds": {"allow_above": 0.9, "block_below": 0.25},
+  "profile": {"org": "org_7"},
+  "audit_rate": 0.05,
   "source": "learned/3",
-  "reason": "The chance this person approves (0.58) is inside the ask band (0.25 to 0.90) of profile org_7."
+  "reason": "The chance this person approves (0.58) is inside the ask band (0.25 to 0.90)."
 }
 ```
 
-The judge said `allow`, but Limen does not know this person approves a
-push to `main` often enough to skip asking under this organization's
-costs, so the call waits. When the person answers, the harness sends
-`POST /v1/assessments/asm_01J8/answer` with `{"approve": true, "at": ...}`.
-The [API guide](docs/api.md) covers every route.
+The judge said allow, but Limen does not know this person approves a push
+to `main` often enough to skip asking under these costs. Your decision
+point asks, and records it:
+
+```http
+POST /v1/decisions
+
+{"org": "org_7", "subject": "https://issuer.example|usr_42", "action_id": "ses_9f/toolu_01",
+ "verdict": "ask", "review_probability": 1, "source": "myharness/learned"}
+```
+
+When the person answers, `POST /v1/answers` with the same key and
+`"approve": true`. A month later, `GET /v1/reliability?...&of=classifier/claude-auto-mode`
+says how often that judge allowed what this person would have denied.
 
 ## Documentation
 
 | Page | |
 |---|---|
-| [Integrating](docs/integrating.md) | using Limen from a harness: building an action, applying the verdict, sending answers, choosing a cost profile, reading reliability, rolling out |
+| [Integrating](docs/integrating.md) | for decision-point authors: the three calls, actions from several domains, composing with your rules, recording, answers, rolling out, notes for Topos, Claude Code, and Codex |
+| [The ledger](docs/ledger.md) | what is recorded, what a review probability means, and how the error rate of any source is computed |
 | [API](docs/api.md) | every HTTP route, its request and response, the errors, and the permission each asks |
 | [OpenAPI](api/openapi.yaml) | the same surface as an OpenAPI 3.1 document |
 | [Principles](docs/principles.md) | the rules every implementation keeps, and why |
-| [Theory](docs/theory.md) | the model, the decision rule, audits, and what can be known about a judge |
+| [Theory](docs/theory.md) | the model, the decision rule, forgetting, the estimators, and what can be known about a judge |
 | [Specs](specs/README.md) | the design records the implementation is built from |
 
-The Go reference is the package documentation of `latere.ai/x/limen`.
+The Go reference is the package documentation of `latere.ai/x/limen` and
+`latere.ai/x/pkg/verdict`.
 
 ## Research
 
