@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +24,9 @@ type faulty struct {
 	*store.Memory
 	fail  string
 	after int
+	// mu guards calls: the engine's background fitters call the store from
+	// their own goroutines.
+	mu    sync.Mutex
 	calls map[string]int
 }
 
@@ -31,11 +35,19 @@ func newFaulty(fail string, after int) *faulty {
 }
 
 func (f *faulty) hit(name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls[name]++
 	if name == f.fail && f.calls[name] > f.after {
 		return errStore
 	}
 	return nil
+}
+
+func (f *faulty) called(name string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls[name]
 }
 
 func (f *faulty) Case(ctx context.Context, k limen.Key) (store.Case, bool, error) {
@@ -126,7 +138,7 @@ func TestStoreFailuresSurface(t *testing.T) {
 			e := engine.New(engine.Options{Store: f, Inline: 1})
 			err := step(e)
 			e.Close()
-			if f.calls[method] > 0 && !errors.Is(err, errStore) {
+			if f.called(method) > 0 && !errors.Is(err, errStore) {
 				t.Errorf("%s failing, %s: %v", method, name, err)
 			}
 		}
