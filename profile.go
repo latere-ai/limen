@@ -5,6 +5,7 @@ package limen
 
 import (
 	"math"
+	"slices"
 	"strconv"
 )
 
@@ -16,6 +17,36 @@ type Scope struct {
 	Org   string `json:"org"`
 	Kind  string `json:"kind,omitempty"`
 	Agent string `json:"agent,omitempty"`
+}
+
+// ScopeOf is the most specific scope an action can match: its
+// organization, its kind, and its actor's id when the actor is an agent.
+func ScopeOf(a Action) Scope {
+	s := Scope{Org: a.Org, Kind: a.Kind}
+	if a.Actor != nil && a.Actor.Kind == "agent" {
+		s.Agent = a.Actor.ID
+	}
+	return s
+}
+
+// Candidates are the scopes whose saved profile applies within s, most
+// specific first: kind and agent, agent, kind, then the organization. The
+// first one with a saved profile applies, and [DefaultProfile] when none
+// has one. A candidate repeated because s leaves a field empty is listed
+// once.
+func (s Scope) Candidates() []Scope {
+	out := make([]Scope, 0, 4)
+	for _, c := range []Scope{
+		{Org: s.Org, Kind: s.Kind, Agent: s.Agent},
+		{Org: s.Org, Agent: s.Agent},
+		{Org: s.Org, Kind: s.Kind},
+		{Org: s.Org},
+	} {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // Profile is what an organization states about errors and interruptions

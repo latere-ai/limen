@@ -451,3 +451,25 @@ func TestRootImports(t *testing.T) {
 		}
 	}
 }
+
+func TestScopeOfAndCandidates(t *testing.T) {
+	a := validAction()
+	if got := ScopeOf(a); got != (Scope{Org: "org_7", Kind: "tool", Agent: "agt_ci"}) {
+		t.Errorf("ScopeOf = %+v", got)
+	}
+	a.Actor = &Actor{Kind: "person", ID: "usr_1"}
+	if got := ScopeOf(a); got.Agent != "" {
+		t.Errorf("a person is not an agent scope: %+v", got)
+	}
+	full := Scope{Org: "o", Kind: "tool", Agent: "x"}.Candidates()
+	want := []Scope{{Org: "o", Kind: "tool", Agent: "x"}, {Org: "o", Agent: "x"}, {Org: "o", Kind: "tool"}, {Org: "o"}}
+	if !slices.Equal(full, want) {
+		t.Errorf("Candidates = %+v", full)
+	}
+	if got := (Scope{Org: "o"}).Candidates(); !slices.Equal(got, []Scope{{Org: "o"}}) {
+		t.Errorf("org only = %+v", got)
+	}
+	if got := (Scope{Org: "o", Kind: "tool"}).Candidates(); !slices.Equal(got, []Scope{{Org: "o", Kind: "tool"}, {Org: "o"}}) {
+		t.Errorf("kind only = %+v", got)
+	}
+}

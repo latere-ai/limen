@@ -135,7 +135,7 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 	} else {
 		e = s.newEntry(a, d, at)
 	}
-	p := s.profileLocked(scopeOf(a))
+	p := s.profileLocked(limen.ScopeOf(a))
 	approve, uncertainty := s.predict(a)
 	v := p.Thresholds.Verdict(approve)
 	pr := limen.Prediction{
@@ -153,16 +153,6 @@ func (s *Service) newEntry(a limen.Action, d string, at time.Time) *entry {
 	e := &entry{seq: s.seq, at: at, action: a, digest: d}
 	s.cases[a.Key] = e
 	return e
-}
-
-// scopeOf is the most specific scope an action can match: its kind, and
-// its actor's id when the actor is an agent.
-func scopeOf(a limen.Action) limen.Scope {
-	sc := limen.Scope{Org: a.Org, Kind: a.Kind}
-	if a.Actor != nil && a.Actor.Kind == "agent" {
-		sc.Agent = a.Actor.ID
-	}
-	return sc
 }
 
 // Record implements [limen.Ledger].
@@ -231,24 +221,12 @@ func (s *Service) answerLocked(a limen.Answer, at time.Time) error {
 	if by == "" {
 		by = a.Subject
 	}
-	review := e.decision.Verdict.Shown() && reviewOf(e) == nil
+	review := estimate.Pending(caseOf(e))
 	e.answers = append(e.answers, limen.RecordedAnswer{Approve: a.Approve, By: by, At: at, Review: review})
 	return nil
 }
 
-// reviewOf is the action's review, or nil.
-func reviewOf(e *entry) *limen.RecordedAnswer {
-	for i := range e.answers {
-		if e.answers[i].Review {
-			return &e.answers[i]
-		}
-	}
-	return nil
-}
-
-func pending(e *entry) bool {
-	return e.decision != nil && e.decision.Verdict.Shown() && reviewOf(e) == nil
-}
+func pending(e *entry) bool { return estimate.Pending(caseOf(e)) }
 
 // Cases implements [limen.Ledger]. The cursor is the position of the next
 // case in the subject's list.
@@ -340,7 +318,7 @@ func (s *Service) Reliability(ctx context.Context, q limen.ReliabilityQuery) (li
 		if e.action.Org != q.Org || e.action.Subject != q.Subject || e.at.Before(q.From) || !e.at.Before(q.To) {
 			continue
 		}
-		if r, ok := rowOf(e, q.Of); ok {
+		if r, ok := estimate.RowOf(caseOf(e), q.Of); ok {
 			rows = append(rows, r)
 		}
 	}
@@ -350,42 +328,6 @@ func (s *Service) Reliability(ctx context.Context, q limen.ReliabilityQuery) (li
 		FalseBlock:       estimate.Rate(rows, estimate.FalseBlock),
 		Certificate:      estimate.Certificate(rows, s.profileLocked(limen.Scope{Org: q.Org}).Certify),
 	}, nil
-}
-
-// rowOf is the entry's row for the source of, and false when the source
-// gave no verdict on it.
-func rowOf(e *entry, of string) (estimate.Row, bool) {
-	var r estimate.Row
-	if e.decision != nil {
-		r.Review = e.decision.ReviewProbability
-		r.Shown = e.decision.Verdict.Shown()
-		if rv := reviewOf(e); rv != nil {
-			r.Reviewed, r.Approve = true, rv.Approve
-		}
-	}
-	switch {
-	case of == limen.OfLearned:
-		if e.prediction == nil || e.prediction.Source == limen.SourceUnavailable {
-			return r, false
-		}
-		r.Verdict = e.prediction.Verdict
-	case of == limen.OfApplied || (e.decision != nil && e.decision.Source == of):
-		if e.decision == nil {
-			return r, false
-		}
-		r.Verdict = estimate.Automatic(e.decision.Verdict, e.decision.ReviewProbability)
-	default:
-		for _, sg := range e.action.Signals {
-			if sg.Source == of && sg.Verdict != "" {
-				// A flag runs the action, so it is an allow.
-				r.Verdict = sg.Verdict
-				if r.Verdict == limen.Flag {
-					r.Verdict = limen.Allow
-				}
-			}
-		}
-	}
-	return r, r.Verdict != ""
 }
 
 // Profile implements [limen.Admin].
@@ -405,12 +347,7 @@ func (s *Service) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, e
 // one in the order kind and agent, agent, kind, the organization, or the
 // default.
 func (s *Service) profileLocked(sc limen.Scope) limen.Profile {
-	for _, c := range []limen.Scope{
-		{Org: sc.Org, Kind: sc.Kind, Agent: sc.Agent},
-		{Org: sc.Org, Agent: sc.Agent},
-		{Org: sc.Org, Kind: sc.Kind},
-		{Org: sc.Org},
-	} {
+	for _, c := range sc.Candidates() {
 		if p, ok := s.profiles[c]; ok {
 			return p
 		}
