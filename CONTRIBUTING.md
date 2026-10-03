@@ -1,109 +1,137 @@
 # Contributing
 
-Thanks for looking. This file is for people and agents changing Limen.
-Users read the [README](README.md) and [`docs/`](docs/README.md), and the
-design records with the reasoning behind each decision are in
-[`specs/`](specs/README.md).
+Thank you for your interest. This file is for the people and the agents
+that change Limen. Users read the [README](README.md) and
+[`docs/`](docs/README.md). The design records, with the reason for each
+decision, are in [`specs/`](specs/README.md).
 
-Limen is the oversight layer for automated actions: a shared verdict
-vocabulary (`latere.ai/x/pkg/verdict`), a ledger that records what
-decision points decided and how often each source of decisions is
-wrong, and a predictor that learns when a person needs to see an action.
-The tree holds the contract (the module root), the authorizer vocabulary
-(`authorizer/`), the HTTP surface as an OpenAPI document
-(`api/openapi.yaml`), and the specs. The estimators (`estimate/`), the
-in-memory service (`stub/`), the conformance suite (`conformance/`) and
-the engine (`engine/`) are being built from their specs; the HTTP client,
-the server and the hook command follow. A change that starts one of them
-starts from its spec.
+Limen has three parts: the shared verdict vocabulary
+(`latere.ai/x/pkg/verdict`), a ledger, and a predictor. The ledger records
+what decision points decided and measures how often each source of
+decisions is wrong. The predictor learns when a person must see an action.
 
-## Getting set up
+The tree has these parts:
 
-You need Go 1.27 or newer and `git`. Nothing else: the contract has no
-services to run.
+| Path | Contents |
+|---|---|
+| module root | The contract: the Go types and interfaces, and the error codes |
+| `authorizer/` | The authorizer vocabulary |
+| `api/openapi.yaml` | The HTTP API as an OpenAPI document |
+| `estimate/` | The estimates that each ledger uses |
+| `stub/` | A service in memory, for the tests of other projects |
+| `conformance/` | The tests that each implementation must pass |
+| `engine/` | The engine: the model, the stores, and the service |
+| `client/`, `server/` | The HTTP client and the HTTP server |
+| `cmd/limend`, `cmd/limen` | The server program and the replay command |
+| `importer/topos` | The reader of Topos session logs for replays |
+
+The hook command for Claude Code and Codex, and a store for a hosted
+installation, do not exist yet. Work on one of them starts from its spec.
+
+## Set up
+
+You need Go 1.27 or newer, and `git`. You do not need other services.
 
 ```sh
-make         # the quality gate: formatting, linting, the suite, coverage, the specs
-make hooks   # run the same gate before each commit and push
+make         # the quality gate: formatting, linting, the tests, coverage, the specs
+make hooks   # run the same gate before each commit and each push
 ```
 
-`make` needs only the Go toolchain and git. Everything it pins comes from
-public modules, so it runs the same on your machine as in CI.
+`make` needs only the Go toolchain and `git`. It gets each pinned tool
+from a public module. For this reason, it gives the same result on your
+computer and in CI.
 
-## The bar
+## The quality gate
 
-`make` runs the whole gate (`go tool lateregate`): formatting, the
-linter, modernization, a build without cgo, known vulnerabilities, the
-suite with and without the race detector, per-package coverage at 90% or
-more, the suite with only the toolchain on `PATH`, the suite against an
-empty temporary directory, the license notice, the dependency allow list,
-and the spec tree. `go tool lateregate list` names the gates and `go tool
-lateregate <name>` runs one.
+`make` runs all the gates of `go tool lateregate`:
 
-Two documents are checked against the code. `api/openapi.yaml` is held
-to the Go types, the error table and the authorizer vocabulary by a test
-([spec 003](specs/003-http-api.md)), and `specs/README.md`'s index is
-held to the specs' frontmatter by the spec gate.
+- The format, the linter, and modernization.
+- A build without cgo, and known vulnerabilities.
+- The tests, with and without the race detector.
+- Coverage of 90% or more in each package.
+- The tests with only the toolchain on `PATH`, and with an empty
+  temporary directory.
+- The license notice, the dependency allow list, and the spec tree.
 
-The root package reaches the standard library and the shared verdict
-vocabulary (`latere.ai/x/pkg/verdict`) and nothing else, because every
-decision point imports it into its hot path; `TestRootImports` and
-`.lateregate.yaml` both hold that. The engine's numerical dependency
-lives under `engine/` alone. A new import is a reviewed change to
-`.lateregate.yaml`, with its reason, not a line in a diff.
+`go tool lateregate list` names the gates. `go tool lateregate <name>`
+runs one gate.
 
-A bug fix carries a test that fails without it. A change that lowers a
-threshold or adds a waiver records the reason in `.lateregate.yaml`, so
-the exception is reviewable rather than invisible.
+Tests compare two documents with the code. A test compares
+`api/openapi.yaml` with the Go types, the error table, and the authorizer
+vocabulary ([spec 003](specs/003-http-api.md)). The spec gate compares the
+index in `specs/README.md` with the frontmatter of the specs.
 
-## Sending a change
+The root package imports only the standard library and the shared verdict
+vocabulary (`latere.ai/x/pkg/verdict`). Each decision point imports the
+root package and calls it while an action waits. `TestRootImports` and
+`.lateregate.yaml` both check this rule. The numerical dependency of the
+engine is only under `engine/`. To add an import, change
+`.lateregate.yaml` and give the reason there.
 
-Fork the repository, work on a branch, and open a pull request. Keep one
-logical change per commit, stage the files explicitly, and write the
-subject in the imperative, saying what changed for whoever reads the log.
-Maintainers push to `main` directly; the pipeline runs the gate on every
-push and pull request.
+A bug fix includes a test that fails without the fix. If a change lowers
+a threshold or adds a waiver, write the reason in `.lateregate.yaml`.
+Then a reviewer can see the exception.
 
-If you are planning something large, open an issue first. A design that
-lands without a spec is harder to review than one that arrives with the
-reasoning attached.
+## Send a change
+
+1. Fork the repository.
+2. Make a branch.
+3. Make one logical change in each commit. Stage the files by name.
+4. Write the commit subject as `scope: what changed`, in lowercase. For
+   example: `engine: a prediction reads a fixed copy of the model`.
+5. Open a pull request.
+
+Maintainers push to `main` directly. The pipeline runs the gate on each
+push and on each pull request.
+
+If you plan a large change, open an issue first. A reviewer can examine a
+design more easily if its spec gives the reasons.
 
 ## Specs first
 
-A feature starts as a spec with acceptance criteria that are testable
-sentences. The implementation follows the spec, and a divergence is
-recorded in the spec's Outcome section rather than left in the code.
-Names in a spec (Go identifiers, JSON fields, error codes, routes,
-authorizer actions) are the names the code uses.
+A feature starts as a spec. Its acceptance criteria are sentences that a
+test can check. The implementation follows the spec. If the
+implementation is different from the spec, record the difference in the
+Outcome section of the spec, not only in the code. The names in a spec are
+the names in the code: Go identifiers, JSON fields, error codes, routes,
+and authorizer actions.
 
-Small fixes do not need a spec. Anything that changes a type or a field
-of the contract, an error code, a route, an authorizer action, or one of
-the invariants of [spec 001](specs/001-architecture.md) does, and it
-updates the matching page under `docs/` in the same change. A field's
-JSON name never changes; a new field is optional; a breaking change is
-named in the CHANGELOG.
+A small fix does not need a spec. These changes need a spec, and they
+must change the related page in `docs/` in the same change:
 
-Eight invariants of [spec 001](specs/001-architecture.md) are not
-negotiable in a change: a deterministic deny is final; a failure asks;
-the review probability is the decision point's, drawn once and recorded
-with its decision; an action Limen knows nothing about is an ask; an
-action's input is never stored; an answer's role follows from the
-recorded decision; a key names one action; and forgetting a person
-removes everything of theirs in that organization.
+- A change to a type or a field of the contract.
+- A change to an error code, a route, or an authorizer action.
+- A change to an invariant of [spec 001](specs/001-architecture.md).
 
-The arithmetic in the contract (thresholds from costs, the band that
-contains one half, the certification size, the error estimate) comes
-from the research in
-[arXiv:2605.19151](https://arxiv.org/abs/2605.19151), whose propositions
-are machine-checked in Lean 4 at
+The JSON name of a field never changes. A new field is optional. The
+CHANGELOG names each incompatible change.
+
+A change must keep the eight invariants of
+[spec 001](specs/001-architecture.md):
+
+1. A deny from the rules of a decision point is final.
+2. If Limen fails, the action waits for a person.
+3. The decision point sets the review probability. It makes the random
+   selection one time and records the probability with the decision.
+4. For an action that Limen knows nothing about, the suggestion is `ask`.
+5. Limen never stores the input of an action.
+6. The recorded decision sets the role of an answer.
+7. A key identifies one action.
+8. `Forget` removes all the data of a person in that organization.
+
+The calculations in the contract come from the research in
+[arXiv:2605.19151](https://arxiv.org/abs/2605.19151). These are the
+thresholds from the costs, the ask range that contains one half, the
+size of a certificate, and the error estimate. Lean 4 checks the
+propositions of the paper at
 [github.com/changkun/trustcalib](https://github.com/changkun/trustcalib).
-A change to that arithmetic cites the proposition it follows or says why
-it departs from it.
+A change to these calculations names the proposition that it follows, or
+gives the reason why it is different.
 
 ## Three registers
 
-Every sentence is written for one reader, and the register follows the
-reader. The rule and the review checklist are in
+Each sentence has one reader, and the register follows the reader. The
+rule and the review checklist are in
 [`docs/writing/registers.md`](https://github.com/latere-ai/pkg/blob/main/docs/writing/registers.md).
 In this repository:
 
@@ -113,9 +141,9 @@ In this repository:
 | Contributor: someone changing Limen | `specs/`, this file, package documentation, source comments, commit messages |
 | Developer: someone debugging a running installation | an error's `details.detail` and `details.fields`, log lines, `Error.Error()` |
 
-An error code's sentence is fixed in `errors.go` beside the code and
-never interpolates; what varies goes in the details. Spell in American
-English, and write no em dashes.
+The sentence of each error code is in `errors.go`, next to the code. The
+sentence does not change from error to error. The details contain the
+values that change. Use American English. Do not use em dashes.
 
 ## Writing for users
 
@@ -149,6 +177,7 @@ Sentences and paragraphs:
 - Write a warning before the step that it applies to. Say what can go
   wrong and what to do.
 
-## Reporting a vulnerability
+## Report a vulnerability
 
-Do not open an issue. [`SECURITY.md`](SECURITY.md) says where to send it.
+Do not open an issue. [`SECURITY.md`](SECURITY.md) tells you where to send
+the report.
