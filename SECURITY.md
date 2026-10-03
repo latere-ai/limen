@@ -1,46 +1,63 @@
 # Security
 
-Report a vulnerability through a private security advisory on this
-repository's GitHub page, or to security@latere.ai. Do not open a public
-issue for one. You will hear back within three business days, and a fix
-for a high severity issue ships within thirty days. Credit in the release
-notes on request.
+## Report a vulnerability
 
-Limen has no release yet. The contract in the module root is pre-release
-and may change; once a release is cut, fixes go to the two most recent
-minor release series.
+Do not open a public issue for a vulnerability. Use one of these two
+channels:
 
-Limen informs whether an automated action runs and measures how often
-that decision is wrong, so the design commits to these properties, and a
-way to break any of them is a vulnerability whatever its other impact:
+- A private security advisory on the GitHub page of this repository.
+- An email to security@latere.ai.
 
-- **A deterministic deny is final, and a failure never allows.**
-  `verdict.Decide` returns `block` under a `block` ceiling, and
-  `FailClosed` turns an error or a timeout into `ask`. A path on which a
-  failure, or anything Limen returns, makes a decision point allow what
-  its ceiling forbids is in scope.
-- **The review probability is the decision point's.** Error estimates
-  weight each review by one over the probability, recorded with the
-  decision, that a person saw the action. A way for anyone but a caller
-  the authorizer allows `case.decide` to record or change a decision, to
-  record two decisions for one key, to draw a second prediction for one
-  action under a new body, or to have an answer counted as a review it
-  was not, corrupts every estimate built on it and is in scope.
-- **An action's input is never stored, and never reaches a model.**
-  Deterministic extractors read `Action.input` at prediction time and
-  drop it. A stored input, in any table, file, log or snapshot, and a
-  path by which input, a signal source name, or any other caller text
-  reaches a language model, are in scope.
-- **A subject's records are reached only with permission.** Predicting
-  for, answering for, listing or reporting on a subject without the
-  authorizer allowing the route's action on that subject is in scope.
-- **Organizations are separate.** Every record is keyed by organization,
-  subject and action id. A way to read, collide with, or influence
-  another organization's cases, models, profiles or reports through a
-  key is in scope.
-- **Forgetting is complete.** A record, answer, model snapshot or report
-  of a subject that survives `Forget` in that organization is in scope.
+We reply in three business days or less. For a vulnerability of high
+severity, we release a fix in thirty days or less. If you ask for credit,
+we give it in the release notes.
 
-What each property rests on is in [spec 001](specs/001-architecture.md),
-and the cases that check them are in
-[spec 006](specs/006-conformance.md).
+## Supported versions
+
+Limen has no release yet. The contract in the module root is a
+pre-release and can change. After the first release, we fix the two most
+recent minor release series.
+
+## What is a vulnerability
+
+Limen controls which automated actions run without a person, and it
+measures how often these decisions are wrong. For this reason, the design
+gives the properties below. A method that breaks one of these properties
+is a vulnerability, whatever its other effects are.
+
+- **A deny from your rules is final, and a failure never allows.** If the
+  ceiling is `block`, `verdict.Decide` returns `block`. If Limen fails or
+  does not answer in time, `FailClosed` returns `ask`. It is in scope if a
+  failure, or a result from Limen, makes a decision point allow an action
+  that its ceiling does not permit.
+- **Only the decision point sets the review probability.** Each error
+  rate gives each review the weight one divided by the review probability
+  of its decision. These are in scope:
+  - A caller without the permission `case.decide` records a decision or
+    changes a decision.
+  - A caller records two decisions for one action.
+  - A caller sends a changed action with the key of an earlier action, and
+    gets a new prediction.
+  - A caller makes Limen count an answer as a review when it is not a
+    review.
+- **Limen never keeps the input of an action, and never gives it to a
+  language model.** The feature extractors read the `input` of an action
+  during the prediction, and then discard it. These are in scope:
+  - Limen keeps an input in a table, a file, a log, or a snapshot.
+  - An input, the name of a signal source, or other text from a caller
+    gets to a language model.
+- **Only a caller with permission can get to the records of a person.**
+  It is in scope if a caller can predict, answer, list, or read a report
+  for a person without the permission for that route.
+- **Each organization is separate.** Each record has three key fields:
+  the organization, the person, and the action ID. It is in scope if a
+  caller can use a key to read or change the records of a different
+  organization. The records are the cases, the models, the cost profiles,
+  and the reports. It is also in scope if a key of one organization can
+  refer to a record of a different organization.
+- **`Forget` removes all the data of a person.** `Forget` applies to one
+  person in one organization. It is in scope if a record, an answer, a
+  model snapshot, or a report of that person stays after `Forget`.
+
+[Spec 001](specs/001-architecture.md) gives the basis of each property.
+[Spec 006](specs/006-conformance.md) gives the tests that check them.
