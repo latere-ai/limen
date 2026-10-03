@@ -10,6 +10,7 @@
 - Leftovers are cleaned up in follow-up commits.
 - Target a high quality outcome, >90% coverage, each feature verified via an e2e test.
 - Write in audience language: documents aim at user value and usage, the API surface aims at builder precision, code comments aim at technical precision. American English, no em dashes.
+- User surfaces (README, docs/, SECURITY.md, templates, API error messages, prediction reasons, CLI output) follow the ASD-STE100 writing rules in CONTRIBUTING.md "Writing for users", with the terms of docs/terms.md and no others.
 - This repository will be public. No Latere hostname, token, or internal reference anywhere but as a default or an example. A hosted platform that builds on it lives elsewhere and is one consumer among any.
 - The research behind the design is arXiv:2605.19151, with its reference code and Lean proofs at github.com/changkun/trustcalib; cite the proposition a change to the arithmetic follows.
 - Relevant latere projects and shared components (latere.ai/x/pkg/*) are in ../

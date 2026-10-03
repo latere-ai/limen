@@ -109,13 +109,45 @@ In this repository:
 
 | Reader | Surfaces |
 |---|---|
-| User: a person, or a harness that shows Limen's output to one | `README.md`, `docs/`, the `message` of an API error, a prediction's `reason` |
+| User: a person, or a harness that shows Limen's output to one | `README.md`, `docs/`, `SECURITY.md`, the issue and pull request templates, the `message` of an API error, a prediction's `reason`, the output of `limend` and `limen` |
 | Contributor: someone changing Limen | `specs/`, this file, package documentation, source comments, commit messages |
 | Developer: someone debugging a running installation | an error's `details.detail` and `details.fields`, log lines, `Error.Error()` |
 
 An error code's sentence is fixed in `errors.go` beside the code and
 never interpolates; what varies goes in the details. Spell in American
 English, and write no em dashes.
+
+## Writing for users
+
+Limen decides which actions run without a person. A reader who
+misunderstands a document can let a harmful action run. Write every user
+surface to the writing rules of ASD-STE100, Simplified Technical English,
+and use only the terms in [`docs/terms.md`](docs/terms.md). This is not
+certified STE. We apply its writing rules and keep our own term list. We
+do not check words against the STE dictionary.
+
+Words:
+
+- Use each term with the one meaning that `docs/terms.md` gives it. To
+  add a term, add it to that page in the same change.
+- Use `if` for a condition and `when` for a time. Use `must` for a
+  requirement and `can` for a possibility. Do not use `may` or `should`.
+- Do not use idioms, metaphors, or contractions. Write `for example`, not
+  `e.g.`. Write `because`, not `since` or `as`.
+- Write a verdict as code: `allow`, `flag`, `ask`, `block`.
+- Do not put more than three nouns in a row.
+
+Sentences and paragraphs:
+
+- Write one topic in a sentence. A sentence that describes has 25 words
+  or fewer. A step in a procedure has 20 words or fewer.
+- Use the active voice and the present tense. Write a procedure as
+  commands, with one command in each numbered step.
+- Do not join two sentences with a semicolon.
+- A paragraph has six sentences or fewer. Its first sentence gives its
+  topic.
+- Write a warning before the step that it applies to. Say what can go
+  wrong and what to do.
 
 ## Reporting a vulnerability
 
