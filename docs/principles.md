@@ -1,243 +1,285 @@
 # Principles
 
-Fourteen rules every implementation of Limen keeps. Each says what holds,
-why, and how it is checked. Most are checked by the conformance suite in
-`conformance/`, which runs against any implementation of the contract;
-the rest by the tests of the shared verdict package
-(`latere.ai/x/pkg/verdict`), of the contract itself, or of the engine. The
-reasoning behind the rules is in [Theory](theory.md) and in the paper it
-cites.
+This page gives fourteen rules that each implementation of Limen obeys.
+For each rule, the page gives what is true, the reason, and the check.
+The conformance suite in `conformance/` checks most rules. This suite runs
+against each implementation of the contract. The tests of the shared
+verdict package (`latere.ai/x/pkg/verdict`), of the contract, or of the
+engine check the other rules. [Theory](theory.md) and the paper that it
+cites give the reasons for the rules.
 
-## 1. Limen suggests; the decision point decides
+The [Terms](terms.md) page gives the meaning of each term on this page.
 
-Limen predicts and suggests. The decision point, the code that lets an
-action run, composes that suggestion with its own rules, applies the
-verdict, and records what it did.
+## 1. Limen suggests, and the decision point decides
 
-**Why.** Only the code that applies a verdict knows which verdict was
-applied: a rule that narrowed it, a hook, a person's earlier "always allow
-this", a rollout in which Limen is only watching. If Limen also decided,
-its records would describe what it would have done, and every error rate
-built on them would be wrong whenever the decision point did something
-else. Keeping the decision with the decision point makes the record true by
-construction, and it lets a harness use Limen's ledger with no predictor at
-all.
+Limen predicts and suggests a verdict. The decision point is the code that
+lets an action run. It combines the suggested verdict with its own rules,
+applies the verdict, and records what it did.
 
-**Checked by.** The contract: a prediction carries only a suggestion
-(allow, ask, or block), and a decision is a separate record the decision
-point sends.
+**Why.** Only the code that applies a verdict knows which verdict it
+applied. Many things can change the verdict. Examples are a rule that made
+the verdict stricter, a hook, and an earlier "always allow this" from the
+person. Another example is a trial period in which the decision point only
+records the suggestions of Limen.
 
-## 2. Escalate, don't refuse
+If Limen also decided, its records would describe what Limen would do.
+Each error rate from these records would then be wrong when the decision
+point did a different thing. Because the decision point keeps the
+decision, the record always shows what occurred. This also lets an agent
+harness use the ledger of Limen with no predictions at all.
 
-When the evidence about an action is unclear, the action waits for a
-person (`ask`). It is not refused.
+**Checked by.** The contract. A prediction has only a suggested verdict
+(`allow`, `ask`, or `block`). A decision is a separate record that the
+decision point sends.
 
-**Why.** An agent that is refused does not stop. It reads the refusal as a
-result and tries something else, which is often worse than the action it
-was denied. A person asked at the right moment costs one interruption; an
-agent routing around a block can cost much more. In the paper's simulation
-of an LLM judge, turning the judge's blocks into escalations instead of
-enforcing them cut cost-weighted regret from 0.296 to 0.088.
+## 2. An unclear action waits for a person
 
-**Checked by.** The conformance suite checks that an approval probability
-inside the ask band is suggested as `ask`, never `block`.
+If the evidence about an action is not clear, the action waits for a
+person. The verdict is `ask`. Limen does not refuse the action.
 
-## 3. Thresholds come from stated costs
+**Why.** An agent does not stop when it gets a refusal. It reads the
+refusal as a result and tries a different action. Frequently, that action
+is worse than the denied action. A question to a person at the correct
+time costs one `ask`. An agent that goes around a block can cost much
+more.
 
-You state three costs: running an action the person would deny, refusing
-an action the person would approve, and one interruption. The thresholds
-follow from them by a closed formula and are never tuned on data.
+The paper simulated an LLM judge. In one test, the blocks of the judge
+became `ask` verdicts, and the decision point did not apply them as
+blocks. This decreased the cost-weighted regret from 0.296 to 0.088.
+Cost-weighted regret is the mean cost of the decisions, minus the mean
+cost of an oracle that knows the true approval probability. Its unit is
+the cost of one `ask`.
 
-**Why.** With those three costs, allow, ask, and block is the choice with
-the least expected cost exactly when the thresholds are
-`allow_above = 1 - ask / false_allow` and `block_below = ask / false_block`
-(Chow's reject option). Tuning thresholds instead would need answers about
-actions decided automatically, and those actions never get answers. A cost
-profile also writes down an organization's appetite for risk where anyone
-can read it.
+**Checked by.** The conformance suite checks that Limen suggests `ask`,
+never `block`, for an approval probability in the ask range.
 
-**Checked by.** The contract's tests check the formula against the expected
-costs on a grid of probabilities; the conformance suite checks that every
-prediction's thresholds are the ones its profile's costs imply.
+## 3. The costs set the thresholds
 
-## 4. An action about someone unknown is an ask
+You state three costs: the cost of a false allow, the cost of a false
+block, and the cost of one `ask`. A closed formula calculates the
+thresholds from these costs. Nothing adjusts the thresholds to fit data.
 
-Limen refuses a cost profile under which it would allow or block an action
-about a person it knows nothing about. Each kind of error must cost more
-than two interruptions.
+**Why.** Limen suggests `allow` above the upper threshold, `ask` between
+the thresholds, and `block` below the lower threshold. With the three
+costs, this rule has the lowest expected cost if, and only if, the
+thresholds are `allow_above = 1 - ask / false_allow` and
+`block_below = ask / false_block`. This is the reject option of Chow.
 
-**Why.** With no answers from a person, Limen's probability that they
-approve is one half. The ask band contains one half exactly when
-`false_allow > 2 * ask` and `false_block > 2 * ask`. Under any other costs a
-new person's first action would be decided on no evidence at all. Saving
-such a profile fails with `ask_too_costly`.
+To adjust the thresholds to data, Limen would need answers for the
+actions that got an automatic verdict. These actions never get answers. A
+cost profile also records how much risk an organization accepts, in a
+form that all people can read.
 
-**Checked by.** The contract's tests, and the conformance suite, which
-checks that a subject's first prediction is `ask` under every accepted
-profile.
+**Checked by.** The tests of the contract compare the formula with the
+expected costs on a grid of probabilities. The conformance suite checks
+that the thresholds of each prediction are the thresholds that the costs
+of its profile give.
 
-## 5. A deterministic deny is final
+## 4. A person without answers gets `ask`
 
-Your decision point's rules set a ceiling: the most permissive verdict
-they leave open. Nothing Limen suggests can exceed it, and a ceiling of
-`block` is never reviewed or overturned.
+Limen refuses a cost profile that would let it allow or block an action
+for a person who has no answers. The cost of a false allow and the cost of
+a false block must each be more than two times the cost of one `ask`.
 
-**Why.** Rules you wrote down, such as "never push to a protected branch",
-are commitments, not evidence. A learned model operates inside the
-envelope they leave. `verdict.Decide` composes a suggestion with the
-ceiling by taking the less permissive of the two, and treats a `block`
-ceiling as final: verdict `block`, review probability zero.
+**Why.** If Limen has no answers from a person, the approval probability
+is one half. The ask range contains one half if, and only if,
+`false_allow > 2 * ask` and `false_block > 2 * ask`. With other costs,
+Limen would decide the first action of a new person with no evidence at
+all. If you try to save such a profile, Limen returns the error
+`ask_too_costly`.
 
-**Checked by.** The tests and fuzzing of `latere.ai/x/pkg/verdict`: no
-input yields a verdict more permissive than the ceiling.
+**Checked by.** The tests of the contract, and the conformance suite. The
+suite checks that the first prediction for a person is `ask` with each
+profile that Limen accepts.
 
-## 6. Failure means ask
+## 5. A `block` from your rules is final
 
-When Limen fails, is slow, or cannot be reached, the action waits for a
-person. It is never allowed by default.
+The rules of your decision point set a ceiling. The ceiling is the verdict
+that permits the most and that the rules accept. No suggested verdict can
+go above the ceiling. If the ceiling is `block`, the verdict is `block`.
+No person examines the action, and nothing changes the verdict.
 
-**Why.** A gate that fails open is not a gate. `FailClosed` bounds how long
-a decision point waits for a prediction and turns any error or timeout
-into a suggestion of `ask` with the source `learned/unavailable`, which the
-ceiling can only narrow. The decision point then records the decision with
-the action attached, so the person's answer still teaches the model.
+**Why.** Rules that you wrote, for example "never push to a protected
+branch", are commitments, not evidence. A learned model works only inside
+the limits that these rules leave open. `verdict.Decide` combines a
+suggested verdict with the ceiling and takes the one of the two that
+permits less. It treats a ceiling of `block` as final: the verdict is
+`block`, and the review probability is zero.
 
-**Checked by.** The contract's tests check `FailClosed`; the conformance
-suite checks that an implementation's failures reach the caller as errors,
-never as suggestions.
+**Checked by.** The tests and the fuzz tests of
+`latere.ai/x/pkg/verdict`. No input gives a verdict that permits more than
+the ceiling.
 
-## 7. Some asks never go away
+## 6. If Limen fails, the action waits for a person
 
-Where a person is genuinely undecided about a kind of action, Limen keeps
-suggesting to ask, however much it has learned.
+If Limen fails, is slow, or is not available, the action waits for a
+person. Nothing allows the action by default.
 
-**Why.** If a person approves a kind of action about half the time, no
-model can predict their answer, and under most costs asking is the
-cheapest choice. The share of actions that must be asked about, even with
-a perfect model, is set by the person and the costs, not by Limen. In the
-paper's simulation it was 10.3% of actions under symmetric costs and 31.3%
-under costs that weigh a wrong allow ten times an interruption. A promise
-of "95% automation" is a claim about the person, not the product.
+**Why.** A check that permits all actions when it fails is not a check.
+`FailClosed` sets a limit on the time that a decision point waits for a
+prediction. It changes each error or timeout into a suggested verdict of
+`ask`, with the source `learned/unavailable`. The ceiling can only make
+this verdict stricter. Then the decision point records the decision with
+the action attached, and the answer of the person still teaches the model.
 
-**Checked by.** This is a consequence rather than a rule to test: it holds
-because thresholds come only from the profile (rule 3).
+**Checked by.** The tests of the contract check `FailClosed`. The
+conformance suite checks that an implementation reports each failure to
+the caller as an error, never as a suggested verdict.
 
-## 8. Forget the person's tolerance, not the action's risk
+## 7. Some actions always need a person
 
-Limen's model lets a person's tolerance drift over time, but keeps what it
-learned about how risky each kind of action is.
+If a person is truly undecided about a kind of action, Limen continues to
+suggest `ask`. This does not change, however much Limen learns.
 
-**Why.** People change: trust grows over a project and drops on a new one.
-The risk of force-pushing to production does not. A model that forgets
-both, as the common time-decaying construction does, drifts every action
-back to "unsure" on a fixed clock and asks again about actions it already
-knew. In the paper's simulation, keeping the static part cut human answers
-per action from 28.4% to 13.5% and cost-weighted regret by 59%, at a
-false-allow rate of about 1%. Time is counted in decisions, per person,
-and Limen keeps the count itself.
+**Why.** If a person approves a kind of action about half of the time, no
+model can predict the answer. With most costs, `ask` is then the choice
+with the lowest cost. Because of this, some actions must go to the
+person, even with a perfect model. The person and the costs set the size
+of this part, not Limen.
 
-**Checked by.** The engine's tests, against fixtures exported from the
-research implementation.
+In the simulation of the paper, this part was 10.3% of the actions with
+symmetric costs. It was 31.3% with the default costs, which make a false
+allow ten times and a false block four times the cost of one `ask`. A promise of "95% automation" is a claim about the
+person, not about the product.
 
-## 9. An automatic verdict is not a label
+**Checked by.** This rule is a result, not a rule to test. It is true
+because only the cost profile sets the thresholds (rule 3).
 
-An action allowed or blocked automatically never gets an answer. To know
-the error rate of automatic verdicts, the decision point shows a small
-random share of them to the person anyway, fixes the probability of
-showing each action before it runs, draws once, and records the
-probability with the decision. Each answer then counts with weight one
-over that probability.
+## 8. Tolerance changes, risk does not
 
-**Why.** An error rate computed only from the actions a person was shown
-is biased: those are the actions that were already in doubt. Answers with
-known probabilities give an unbiased estimate (Horvitz-Thompson). When no
-action in a window could have been shown, a rate is reported as `null`,
-meaning "cannot be estimated", never as zero. An action shown to the
-person that nobody answers is counted as `unanswered` rather than dropped,
-because an estimate that silently skipped the hard reviews would look
-better than it is. Certifying a false-allow rate below 1% with 95%
-confidence takes 300 consecutive clean reviews.
+The model of Limen lets the tolerance of a person change with time. It
+does not let the risk of an action change with time. Because of this, it
+keeps what it learned about the risk of each kind of action.
 
-**Checked by.** The tests of `verdict.Decide` check that the probability it
-returns is the frequency with which an action is shown; the conformance
-suite checks that estimates use the recorded probabilities and that a rate
-with no reviewable action is `null`.
+**Why.** People change. Trust increases during a project and decreases on
+a new project. The risk of a force push to production does not change.
+The usual model with a decay in time forgets both. As time passes, that
+model moves each action back to "not sure", and it asks again about
+actions that it knew.
 
-## 10. No re-rolling
+In the simulation of the paper, the model with the static part was
+compared with the model that forgets both. The part of the actions that a
+person had to answer decreased from 28.4% to 13.5%. The cost-weighted
+regret decreased by 59%, at a false allow rate of about 1%. Limen counts time in decisions, for each person, and keeps the
+count itself.
 
-Every record is keyed by the organization, the person, and the decision
-point's own id for the action. Predicting the same action again returns the
-first prediction; predicting a different action under the same id is
-refused; an action takes one decision.
+**Checked by.** The tests of the engine. They compare the engine with
+fixtures from the research implementation.
 
-**Why.** If a decision point could predict again until it got the
-suggestion it wanted, or record a second decision until a review was
-avoided, the sample behind every estimate would no longer be random. The
-key makes both visible: `action_conflict` and `already_decided`.
+## 9. An automatic verdict is not an answer
 
-**Checked by.** The conformance suite checks that a repeated prediction is
-identical to the first, that a different action under the same id is
-refused, and that a second decision is refused.
+An action with an automatic verdict never gets an answer. To know the
+error rate of automatic verdicts, the decision point shows a small random
+part of them to the person. It sets the probability that a person sees
+each action before the action runs. It makes the random selection one
+time and records the probability with the decision. Each answer then
+counts with a weight of one divided by that probability.
 
-## 11. A judge is evidence, and its reliability is personal
+**Why.** An error rate from only the actions that a person saw has a bias,
+because these actions were already unclear. Answers with known
+probabilities give an estimate without bias (the Horvitz-Thompson
+estimator). If no action in a period of time could go to a person, the
+report gives the rate as `null`. `null` means that Limen cannot estimate
+the rate. It never means zero.
 
-An LLM judge's verdict, or any rule's score, enters as a `signal`: an
-input to Limen's prediction of what this person would say. Its error rate
-is reported per source, per person, and per window.
+If a person sees an action and nobody answers it, the report counts the
+action as `unanswered`. The report does not drop the action. An estimate
+that silently skipped the difficult reviews would look better than it is.
+A certificate that the false allow rate is below 1% with 95% confidence
+needs 300 consecutive audits without a denial.
 
-**Why.** A judge's error rate for a person cannot be read off its verdicts;
-it depends on the person's decisions too, and it changes when that
-person's tolerance changes, even though the judge does not. In the paper's
-simulation, the same unchanged judge allowed actions its supervisor would
-deny 2.9% of the time before a trust reset, 10.0% after it, and 3.4%
-later.
+**Checked by.** The tests of `verdict.Decide` check that the probability
+that it returns is the frequency with which a person sees an action. The
+conformance suite checks that the estimates use the recorded
+probabilities. It also checks that the rate is `null` if no action could
+go to a person.
 
-**Checked by.** The conformance suite checks that reliability is reported
-per source and per subject, and that a source's allows are only the
-actions on which it said allow.
+## 10. One prediction and one decision for each action
 
-## 12. Later answers train, never estimate
+The key of each record has three parts: the organization, the person, and
+the identifier that the decision point gives the action. A second
+prediction for the same action returns the first prediction. Limen refuses
+a prediction for a different action with the same identifier. Each action
+has one decision.
 
-The first answer to an action the decision showed a person is that
-action's review. Every other answer, such as a dispute of an action that
-ran without anyone being asked or a person changing their mind, teaches
-the model and never enters an error estimate.
+**Why.** Without this rule, a decision point could predict again until it
+got the suggested verdict that it wanted. It could also record a second
+decision to avoid a review. In both cases, the sample behind each estimate
+would not be random. The key makes both attempts visible, as the errors
+`action_conflict` and `already_decided`.
 
-**Why.** Nothing fixed the probability with which a later answer is given,
-so it cannot be weighted the way a review is. Counting it would bias the
-estimate toward whatever happens to get noticed. Limen derives each
-answer's role from the recorded decision; the caller does not declare it.
+**Checked by.** The conformance suite checks that a second prediction is
+the same as the first. It also checks that Limen refuses a different
+action with the same identifier, and that Limen refuses a second decision.
+
+## 11. A judge gives evidence, and its error rate is different for each person
+
+The verdict of an LLM judge, or the score of any rule, goes into Limen as
+a `signal`. A signal is an input to the prediction of what this person
+would answer. Limen reports the error rate of each source for each person
+and each period of time.
+
+**Why.** The verdicts of a judge alone do not give its error rate for a
+person. The error rate also depends on the decisions of the person. It
+changes when the tolerance of the person changes, even if the judge does
+not change.
+
+In the simulation of the paper, the same judge did not change. Before a
+sudden decrease in the trust of the person, it allowed actions that the
+person would deny in 2.9% of the cases. After the decrease, this rate was
+10.0%. Later, it was 3.4%.
+
+**Checked by.** The conformance suite checks that Limen reports the error
+rates for each source and for each person. It also checks that the allows
+of a source are only the actions for which the source said `allow`.
+
+## 12. Later answers teach the model and do not go into error rates
+
+The first answer to an action that the decision showed to a person is the
+review of that action. Each other answer teaches the model and never goes
+into an error estimate. Examples are a dispute about an action that ran
+without a question to anyone, and a person who changes their mind.
+
+**Why.** Nothing set the probability that a later answer occurs. Because
+of this, Limen cannot give a later answer a weight in the way that it
+weights a review. If Limen counted later answers, the estimate would move
+toward the actions that people happen to notice. Limen gets the role of
+each answer from the recorded decision. The caller does not state the
+role.
 
 **Checked by.** The conformance suite checks that a later answer changes
-no estimate and changes what the model learns.
+no estimate, and that it changes what the model learns.
 
-## 13. Text an agent writes never reaches a model, and Limen never keeps it
+## 13. No language model reads the input, and Limen does not keep it
 
-An action's input is read only by deterministic feature extractors, for
-example one that recognizes a recursive delete in a shell command. No
-language model inside Limen reads it, and Limen does not store it: it keeps
-the features and drops the input.
+The agent writes the input of an action. Only feature extractors read the
+input. A feature extractor is a fixed program that calculates features
+from the input. An example is an extractor that finds a recursive delete
+in a shell command. No language model in Limen reads the input. Limen does
+not store the input: it keeps the features and drops the input.
 
-**Why.** The agent writes the input. If a model inside the gate read it,
-the agent could write instructions to the gate. Judges that read the
-transcript have been attacked this way; Limen takes a judge's verdict as a
-signal and never the text the judge read. Not keeping the input also means
-a harness's redaction of a secret in a command is never undone by a copy in
-Limen.
+**Why.** If a model in Limen read the input, the agent could write
+instructions to Limen. Attackers have used this method against judges
+that read the transcript. Limen takes the verdict of a judge as a signal. It
+never takes the text that the judge read.
 
-**Checked by.** The engine's architecture test (no package that reads an
-action's input depends on a model client), and the conformance suite,
-which checks that a case read back carries no input.
+Because Limen does not keep the input, an agent harness can remove a
+secret from a command, and no copy in Limen keeps the secret.
 
-## 14. A person's data is theirs
+**Checked by.** The architecture test of the engine: no package that reads
+the input of an action depends on a model client. The conformance suite
+also checks that a case that Limen returns has no input.
 
-Limen learns from a person's answers only for that person, and forgets
-everything about them in an organization on request: cases, answers, and
-the model learned from them.
+## 14. The data of a person belongs to that person
 
-**Why.** A person's approve and deny history describes how they work.
-Using it is their choice, and deleting it must be complete and idempotent.
+Limen uses the answers of a person only for that person. On request, it
+forgets all data about the person in an organization: the cases, the
+answers, and the model that it learned from them.
 
-**Checked by.** The conformance suite checks that after forgetting a
-subject in an organization, no case, pending review, or reliability report
-for that subject remains there.
+**Why.** The history of approvals and denials of a person shows how that
+person works. The person chooses if Limen uses it. The deletion must be
+complete, and a repeated deletion must give the same result.
+
+**Checked by.** The conformance suite checks the state after Limen forgets
+a person in an organization. No case, no action that waits for a review,
+and no reliability report for that person remains in that organization.
