@@ -256,17 +256,40 @@ func reason(approve float64, t limen.Thresholds, answers int) string {
 	if answers == 0 {
 		return "Limen has no answers from this person yet. It suggests ask."
 	}
+	d := digits(approve, t.AllowAbove, t.BlockBelow)
 	switch t.Verdict(approve) {
 	case limen.Allow:
-		return fmt.Sprintf("The approval probability is %.2f, above the allow threshold (%.2f). Limen suggests allow.",
-			approve, t.AllowAbove)
+		return fmt.Sprintf("The approval probability is %.*f, above the allow threshold (%.*f). Limen suggests allow.",
+			d, approve, d, t.AllowAbove)
 	case limen.Block:
-		return fmt.Sprintf("The approval probability is %.2f, below the block threshold (%.2f). Limen suggests block.",
-			approve, t.BlockBelow)
+		return fmt.Sprintf("The approval probability is %.*f, below the block threshold (%.*f). Limen suggests block.",
+			d, approve, d, t.BlockBelow)
 	default:
-		return fmt.Sprintf("The approval probability is %.2f, between the block threshold (%.2f) and the allow threshold (%.2f). Limen suggests ask.",
-			approve, t.BlockBelow, t.AllowAbove)
+		return fmt.Sprintf("The approval probability is %.*f, between the block threshold (%.*f) and the allow threshold (%.*f). Limen suggests ask.",
+			d, approve, d, t.BlockBelow, d, t.AllowAbove)
 	}
+}
+
+// digits is the number of decimals, two or more, at which p and every
+// threshold print in the order they have, so a reason never reads "0.90,
+// above the allow threshold (0.90)".
+func digits(p float64, thresholds ...float64) int {
+	const most = 6
+	for d := 2; d < most; d++ {
+		rp, kept := rounded(p, d), true
+		for _, t := range thresholds {
+			kept = kept && cmp.Compare(p, t) == cmp.Compare(rp, rounded(t, d))
+		}
+		if kept {
+			return d
+		}
+	}
+	return most
+}
+
+func rounded(x float64, d int) float64 {
+	r, _ := strconv.ParseFloat(strconv.FormatFloat(x, 'f', d, 64), 64)
+	return r
 }
 
 // Record implements [limen.Ledger].
