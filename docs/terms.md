@@ -52,6 +52,7 @@ verdicts. The list starts with the verdict that permits the most.
 | tolerance | The amount of risk that a person accepts. The model gives each person a tolerance that changes with time. | |
 | risk | A property of an action. The model lets tolerance change with time. It does not let risk change with time. | |
 | features | Numbers that Limen calculates from an action. The model uses the features. Limen keeps the features. | |
+| feature extractor | A fixed program that calculates features from the input of an action. A feature extractor is not a language model. | |
 | input | The arguments of an action, for example the text of a shell command. Limen reads the input to calculate the features. Limen does not keep the input. | `input` |
 
 ## Costs and thresholds
@@ -72,6 +73,7 @@ verdicts. The list starts with the verdict that permits the most.
 | case | The record of one action in the ledger: the action, the prediction, the decision, and the answers. | `Case` |
 | decision | The record of what the decision point did with one action: the applied verdict, the review probability, and the source. | `Decision` |
 | answer | The approval or the denial that a person gives for one action. | `Answer`, `approve` in an answer |
+| review queue | The actions that a person saw and that have no answer yet. | `pending=true` in `GET /v1/cases` |
 | audit rate | The probability that the decision point shows an automatic verdict to a person. The default is 5%. | `audit_rate` |
 | review probability | The probability that a person sees the action. The decision point sets it before the action runs. | `review_probability` |
 | review | The first answer to an action that a person saw because of the decision (a `flag` or an `ask`). Only reviews go into error rates. | `reviews` |
@@ -80,3 +82,5 @@ verdicts. The list starts with the verdict that permits the most.
 | reliability report | The error rates of one source, for one person, in one period of time. | `Reliability` |
 | certificate | A test that the false allow rate of a source is below a limit, with a stated confidence. | `certificate` |
 | replay | A run of recorded decisions through Limen in time order. A replay shows what Limen would suggest. | `Replay` |
+| ledger directory | The directory where `limend` keeps the ledger on disk. Only one process can use a ledger directory at a time. | `LIMEN_DATA_DIR` |
+| regret | The mean cost of the decisions, minus the mean cost of the best possible decisions. The unit is the cost of one `ask`. The paper uses it to compare methods. | |
