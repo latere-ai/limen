@@ -1,64 +1,78 @@
-# Integrating a decision point
+# Integration
 
-How a decision point asks Limen about an action, decides, records what it
-did, and sends back what the person said. A decision point is the code
-that lets an automated action run or not: an agent harness deciding on a
-tool call, a proxy on a network request, a service on a push or a payment.
+This page is for the authors of a decision point. A decision point is the
+software that decides if an action runs. These are examples:
+
+- An agent harness that decides about a tool call.
+- A proxy that decides about a network request.
+- A service that decides about a push or a payment.
+
+This page tells you how a decision point gets a prediction from Limen,
+decides, records the decision, and sends the answer of the person.
+[Terms](terms.md) gives the meaning of each term.
 
 ## The three calls
 
 | Call | Go | HTTP | When |
 |---|---|---|---|
-| Predict | `Predictor.Predict` | `POST /v1/predictions` | before you decide, on the hot path |
-| Record | `Ledger.Record` | `POST /v1/decisions` | once per action, after you decide and before the action runs or anyone sees it |
-| Answer | `Ledger.Answer` | `POST /v1/answers` | whenever a person answers about an action |
+| Predict | `Predictor.Predict` | `POST /v1/predictions` | Before you decide, while the action waits |
+| Record | `Ledger.Record` | `POST /v1/decisions` | One time for each action, after you decide. Record before the action runs and before a person sees it. |
+| Answer | `Ledger.Answer` | `POST /v1/answers` | Each time a person gives an answer about an action |
 
-A Go decision point can embed the engine and call it in its own process,
-with no network in the path; any other, or one that runs in many places,
-calls the server over HTTP. Both are a `limen.Service`, so the choice is
-made at start-up and the rest of the code does not change. The engine and
-the server are specified but not built yet; until they are, the stub in
-`stub/` serves the same interfaces for tests.
+A decision point in Go that runs as one process can include the engine.
+Then the call does not go through a network. Other decision points call
+the server over HTTP. This includes a decision point in a different
+language, and a decision point that runs on many computers.
 
-Wrap the predictor with `FailClosed` and give it a timeout that fits your
-latency budget, such as 200 milliseconds in process or 2 seconds over
-HTTP:
+The engine and the HTTP client are both a `limen.Service`. You choose one
+of them at start-up, and the remaining code does not change. For tests,
+the stub in `stub/` supplies the same interfaces.
+
+Wrap the predictor with `FailClosed`. Give it a timeout that agrees with
+the time limit of your decision. For example, use 200 milliseconds in the
+same process or 2 seconds over HTTP:
 
 ```go
 predictor := limen.FailClosed(svc, 200*time.Millisecond, func(err error) {
-	log.Printf("limen: %v", err) // the action waits for a person
+	log.Printf("limen: %v", err) // The action waits for a person.
 })
 ```
 
-When Limen errors or runs past the timeout, `FailClosed` returns a
-suggestion of `ask` with the source `learned/unavailable` and no error.
-Limen holds no record of that action, so put the action in your decision
-(`Decision.Action`) and the person's answer still teaches the model.
+If Limen returns an error or does not answer before the timeout,
+`FailClosed` returns a prediction and no error. The suggested verdict of
+this prediction is `ask`, and its source is `learned/unavailable`. Limen
+has no record of this action. Put the action in your decision
+(`Decision.Action`). Then the answer of the person still teaches the
+model.
 
-## Building an action
+## The action
 
-An `Action` is the action as your decision point sees it before it runs.
-Every field is in the [API guide](api.md) and the
-[OpenAPI document](../api/openapi.yaml).
+An `Action` describes the action as your decision point sees it before it
+runs. The [API](api.md) page and the
+[OpenAPI document](../api/openapi.yaml) give all the fields.
 
-| Field | What to put there |
+| Field | What to put in it |
 |---|---|
-| `org` | the organization whose cost profile applies |
-| `subject` | the person on whose behalf the action runs, as the token's issuer and `sub` joined by a pipe: `https://issuer.example\|usr_42`. Limen learns one model per subject. For an agent acting for a person, the person, not the agent. |
-| `action_id` | your own id for the action, unique within the organization and subject, such as a session id and a tool call id |
-| `actor` | who proposed it: `kind` (`agent`, `service`, or `person`), `id`, `session` |
-| `kind`, `name` | the domain and the operation: `tool` and `bash`, `egress` and `https`, `repo` and `ref.update`, `spend` and `charge`. A cost profile can be scoped to a kind. |
-| `effect` | `none`, `read`, `write` (inside the boundary of the system that runs it), or `external` (anything that leaves it: the network, a message sent, money moved). When unsure, `external`. |
-| `reversible` | whether the action can be undone, when you know |
-| `input` | the action's input as JSON, such as a tool call's arguments. Only deterministic feature extractors read it, and Limen never stores it. |
-| `target` | what it acts on: `kind` (`path`, `ref`, `host`, `account`), `id`, and optionally `sensitivity` from 0 (scratch) to 1 (production) |
-| `environment` | where it runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`, whether a credential there reaches outside it |
-| `attributes` | further facts your domain has, as strings, numbers, or booleans: an amount, whether a branch is protected, a file count. At most 64. |
-| `signals` | other opinions: your rules' score as `{"source": "rules/1", "score": 0.4}`, a judge's verdict as `{"source": "classifier/claude-auto-mode", "verdict": "allow"}`. Each has a verdict, a score in [0, 1] (higher is riskier), or both. |
+| `org` | The organization. Limen uses the cost profile of this organization. |
+| `subject` | The person for whom the action runs. Write the issuer of the token and its `sub`, with a pipe between them: `https://issuer.example\|usr_42`. Limen keeps one model for each person. If an agent acts for a person, write the person, not the agent. |
+| `action_id` | Your identifier for the action. It must be unique for the person in the organization. An example is a session identifier and a tool call identifier together. |
+| `actor` | The proposer of the action: `kind` (`agent`, `service`, or `person`), `id`, and `session`. |
+| `kind`, `name` | The domain and the operation. Examples: `tool` and `bash`, `egress` and `https`, `repo` and `ref.update`, `spend` and `charge`. A cost profile can apply to one kind. |
+| `effect` | `none`, `read`, `write`, or `external`. Use `write` for a change inside the system that runs the action. Use `external` for an effect outside that system: the network, a sent message, a transfer of money. If you are not sure, use `external`. |
+| `reversible` | Whether somebody can undo the action. Set it only if you know. |
+| `input` | The input of the action as JSON, for example the arguments of a tool call. Only the feature extractors of Limen read it. These are fixed programs, not language models. Limen never stores the input. |
+| `target` | The object of the action: `kind` (`path`, `ref`, `host`, `account`) and `id`. Optionally, `sensitivity`, from 0 (scratch data) to 1 (production). |
+| `environment` | The place where the action runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`. Set `credentialed` if a credential in that place gives access outside it. |
+| `attributes` | Other facts from your domain, as strings, numbers, or booleans. Examples: an amount, whether a branch is protected, a count of files. The maximum is 64 attributes. |
+| `signals` | Verdicts or scores from other sources. Examples: the score of your rules, `{"source": "rules/1", "score": 0.4}`. The verdict of a judge, `{"source": "classifier/claude-auto-mode", "verdict": "allow"}`. |
 
-Predicting the same action again returns the first prediction. Predicting
-a different action under an `action_id` already used is refused with
-`action_conflict`, so give each action its own id.
+Each signal has a verdict, a score from 0 to 1, or both. A higher score
+means more risk.
+
+If you request a prediction for the same action again, Limen returns the
+first prediction. If you request a prediction for a different action with
+an `action_id` that you used before, Limen refuses it with
+`action_conflict`. Give each action its own identifier.
 
 ### Examples from four domains
 
@@ -76,7 +90,7 @@ A tool call in an agent harness:
 }
 ```
 
-A network request through a sandbox's egress proxy:
+A network request through the egress proxy of a sandbox:
 
 ```json
 {
@@ -113,47 +127,52 @@ A payment:
 }
 ```
 
-## Deciding
+## The decision
 
-Limen suggests; your decision point decides. Compose the suggestion with
-your own rules and the random review in one call to the shared verdict
-package:
+Limen suggests a verdict. Your decision point decides. Combine the
+suggested verdict with your rules and with the random selection for
+audit. Do this in one call to the shared verdict package:
 
 ```go
 v, prob := verdict.Decide(p.Verdict, ceiling, p.AuditRate, rand.Float64())
 ```
 
-- **`ceiling`** is the most permissive verdict your own rules leave open:
+- **`ceiling`** is the verdict that permits the most and that your rules
+  accept for this action:
 
   | Your rules say | `ceiling` |
   |---|---|
-  | nothing about this action | `allow` |
-  | run it, but review it afterwards | `flag` |
-  | always confirm this kind of action | `ask` |
-  | never run this action | `block` |
+  | Nothing about this action | `allow` |
+  | Run the action, and examine it after it runs | `flag` |
+  | Always ask a person about this type of action | `ask` |
+  | Never run this action | `block` |
 
-  The result is never more permissive than the ceiling, and a `block`
-  ceiling is final: never reviewed, never overturned.
-- **`p.AuditRate`** is the share of automatic verdicts the organization's
-  profile asks a person to review at random. Pass a rate of your own if
-  your policy differs; what matters is that the probability you record is
-  the one you used.
-- **The draw** is made once per action, here. Do not draw again.
+  The result never permits more than the ceiling. If the ceiling is
+  `block`, the result is `block`. No person reviews this result, and
+  nothing can change it.
+- **`p.AuditRate`** is the audit rate from the cost profile of the
+  organization. You can use a different rate if your policy is different.
+  Record the review probability that `verdict.Decide` returns for the rate
+  that you used.
+- **The random selection** occurs one time for each action, in this call.
+  Do not make a second random selection for the same action.
 
-`verdict.Decide` returns the verdict to apply and the probability that a
-person sees the action. An automatic allow picked for review becomes
-`flag`, and an automatic block picked for review becomes `ask`.
+`verdict.Decide` returns the verdict to apply and the review probability.
+The review probability is the probability that a person sees the action.
+If the random selection selects an automatic `allow`, the verdict becomes
+`flag`. If the random selection selects an automatic `block`, the verdict
+becomes `ask`.
 
 | Verdict | What the decision point does |
 |---|---|
-| `allow` | run the action |
-| `flag` | run it, then put it in the person's review queue; their answer comes later |
-| `ask` | hold it until the person answers. Do not time an ask out into a refusal: an agent that is refused routes around it. |
-| `block` | do not run it, and tell the agent why in your own words. A prediction's `reason` is written for the person's record and is never shown to an agent. |
+| `allow` | Run the action. |
+| `flag` | Run the action. Then put it in the review queue of the person, the list of actions that wait for an answer. The answer comes later. |
+| `ask` | Hold the action until the person answers. Do not change an `ask` to a refusal after a timeout. An agent that gets a refusal tries a different way to do the same thing. |
+| `block` | Do not run the action. Tell the agent the reason in your own words. The `reason` of a prediction is for the record of the person. Never show it to an agent. |
 
-## Recording
+## Record each decision
 
-Record every decision, before the action runs or anyone sees it:
+Record each decision before the action runs and before a person sees it:
 
 ```go
 d := limen.Decision{Key: a.Key, Verdict: v, ReviewProbability: prob, Source: "myharness/learned"}
@@ -163,77 +182,86 @@ if p.Source == limen.SourceUnavailable {
 err := svc.Record(ctx, d)
 ```
 
-`source` names the policy that decided, such as `rules/1` or
-`topos/progressive`, so the ledger can report each policy's error rate.
-An action takes one decision; a second is refused with `already_decided`.
-Recording asynchronously is fine as long as the record does not depend on
-how the action turned out. [The ledger](ledger.md) explains what the
-review probability means and the mistakes that bias the record.
+The `source` field names the policy that decided, for example `rules/1`
+or `topos/progressive`. With this field, the ledger can report the error
+rate of each policy. An action has one decision only. Limen refuses a
+second decision with `already_decided`.
+
+You can send the record and not wait for the response. But the content of
+the record must not depend on the result of the action.
+[The ledger](ledger.md) tells you what the review probability means. It
+also gives the mistakes that make the record biased.
 
 ## Answers
 
-Send the person's answer whenever they give it:
+Send the answer of the person each time the person gives one:
 
 ```json
 {"org": "org_7", "subject": "https://issuer.example|usr_42", "action_id": "ses_9f/toolu_01", "approve": true}
 ```
 
-- **At an ask**: whether the person approved.
-- **After the review of a flagged action**: whether they would have
-  approved it, even though it already ran (or, for a reviewed block, did
-  not).
-- **Later**: when an action that ran is disputed afterwards, for example
-  because a reviewer rejected its result, send `"approve": false`. It
-  teaches the model and never enters an error estimate.
+- **At an `ask`:** send whether the person approved the action.
+- **After the review of a `flag`:** send whether the person would approve
+  the action. The action ran before the review.
+- **Later:** a person can dispute an action that ran, for example because
+  a reviewer rejected its result. Then send `"approve": false`. This
+  answer teaches the model. It never goes into an error rate.
 
-Limen works out which answer is a review from the recorded decision, so an
-answer needs a recorded decision first (`no_decision` otherwise).
+Limen finds which answer is a review from the recorded decision. For this
+reason, an answer needs a recorded decision first. If there is no recorded
+decision, Limen refuses the answer with `no_decision`.
 
-The answer is attributed to the caller. A harness that relays a person's
-answer, such as a confirmation the person gave in its interface, names
-them in `by`; Limen honors it only when your authorization endpoint allows
-the harness to answer for that subject.
+Limen records the caller as the person who answered. An agent harness can
+relay the answer of a person, for example a confirmation in its user
+interface. To do this, the agent harness names the person in `by`. Limen
+accepts `by` only if your authorization endpoint permits the agent harness
+to answer for that person. If the caller is the person, Limen ignores `by`.
 
-`GET /v1/cases?org=...&subject=...&pending=true` lists the actions shown to
-the person that still need an answer, oldest first: the review queue.
+`GET /v1/cases?org=...&subject=...&pending=true` gives the review queue:
+the actions that the person saw and that have no answer yet. The oldest
+action is first.
 
-## Using the ledger alone
+## The ledger without predictions
 
-The ledger needs no predictor. A decision point that decides by rules can
-measure its rules and its judge:
+The ledger does not need the predictions of Limen. A decision point that
+decides with rules can measure its rules and its judge:
 
-1. For each action, compose your rules' verdict instead of Limen's:
-   `verdict.Decide(rulesVerdict, ceiling, rate, rand.Float64())`.
-2. Record the decision with `source` naming your rules, put the action in
-   it (Limen has no prediction to take it from), and pass your judge's
-   verdict as a signal on the action.
-3. Send the answers.
+1. For each action, use the verdict of your rules, not the suggested
+   verdict: `verdict.Decide(rulesVerdict, ceiling, rate, rand.Float64())`.
+2. Record the decision. Set `source` to the name of your rules.
+3. Put the action in the decision, because Limen has no prediction to
+   take it from.
+4. Attach the verdict of your judge to the action as a signal.
+5. Send the answers.
 
-Then `GET /v1/reliability?...&of=rules/1` is your rules' error rate for
-that person, and `of=classifier/<name>` your judge's. A rate of `null`
-means nothing your source allowed could have been seen: set a review rate
-above zero, and the allows become measurable.
+Then `GET /v1/reliability?...&of=rules/1` gives the error rate of your
+rules for that person. `of=classifier/<name>` gives the error rate of your
+judge. A rate of `null` means that a person could not see any action that
+your source allowed. Set an audit rate above zero. Then Limen can measure
+the allows.
 
-## Choosing a cost profile
+## The cost profile
 
-A profile states three costs, in any unit, since only their ratios matter:
+A cost profile states three costs. Use any unit, because only the ratios
+of the costs are important:
 
 | Cost | Meaning |
 |---|---|
-| `false_allow` | running an action the person would deny |
-| `false_block` | refusing an action the person would approve |
-| `ask` | one interruption |
+| `false_allow` | The cost of an action that runs and that the person would deny |
+| `false_block` | The cost of an action that the decision point refuses and that the person would approve |
+| `ask` | The cost of one `ask` |
 
-The thresholds follow: `allow_above = 1 - ask / false_allow` and
-`block_below = ask / false_block`. Each kind of error must cost more than
-two interruptions, so that an action about someone Limen knows nothing
-about (a 50% chance of approval) is always an ask; otherwise saving fails
-with `ask_too_costly`.
+The thresholds come from the costs: `allow_above = 1 - ask / false_allow`
+and `block_below = ask / false_block`. Each type of error must cost more
+than two times the cost of `ask`. Then Limen always suggests `ask` for a
+person that it has no answers from, with an approval probability of 0.5.
+If a cost is too small, Limen does not save the profile and returns
+`ask_too_costly`.
 
-| Profile | `false_allow` | `false_block` | `ask` | Asks when approval is between | `allow_above` | `block_below` |
+| Profile | `false_allow` | `false_block` | `ask` | Ask range | `allow_above` | `block_below` |
 |---|---|---|---|---|---|---|
-| Symmetric | 2.857 | 2.857 | 1 | 0.35 and 0.65 | 0.65 | 0.35 |
-| Safety-weighted (the default) | 10 | 4 | 1 | 0.25 and 0.90 | 0.90 | 0.25 |
+| Symmetric | 2.857 | 2.857 | 1 | 0.35 to 0.65 | 0.65 | 0.35 |
+| Safety-weighted (the default) | 10 | 4 | 1 | 0.25 to 0.90 | 0.90 | 0.25 |
 
 ```http
 PUT /v1/profiles
@@ -248,81 +276,116 @@ Content-Type: application/json
 }
 ```
 
-- **Scope.** A profile applies to an organization, optionally narrowed to
-  one kind of action, one agent, or both. For an action, the most specific
-  saved profile applies, in the order kind and agent, agent, kind,
-  organization; with none saved, the built-in default does, and
-  `GET /v1/profiles` says so with `"default": true`.
-- **`audit_rate`** is the share of automatic verdicts a person reviews at
-  random. The paper's simulation used 5%. At zero, the false-allow rate of
-  automatic verdicts cannot be estimated, and reports say so.
-- **`certify`** is the claim reliability reports test: a false-allow rate
-  below `alpha` at confidence `1 - delta`. It is optional; without it the
-  claim is 1% at 95%, which takes 300 consecutive clean reviews of
-  automatic allows. At a 5% review rate that is about 6,000 automatic
-  allows with no denied review among them; a denied review restarts the
-  count. Certifying 25% at 95% takes 12.
+- **Scope.** A cost profile applies to an organization. You can make it
+  apply only to one kind of action, to one agent, or to both. For each
+  action, the most specific saved profile applies. Limen uses this order:
+  kind and agent, agent, kind, organization. If there is no saved profile,
+  the built-in default applies, and `GET /v1/profiles` returns
+  `"default": true`.
+- **`audit_rate`** is the audit rate. The simulation of the paper used 5%.
+  If the audit rate is zero, Limen cannot estimate the false allow rate of
+  automatic verdicts. The reports tell you this.
+- **`certify`** is the claim that the reliability reports test: a false
+  allow rate below `alpha`, with a confidence of `1 - delta`. It is
+  optional. Without it, the claim is a rate below 1% with 95% confidence.
 
-## Reading a reliability report
+The default claim needs 300 audits of automatic allows in a row with no
+denial. At an audit rate of 5%, this is approximately 6,000 automatic
+allows. A denial in an audit starts the count again. A claim of 25% with
+95% confidence needs 12 audits.
 
-`GET /v1/reliability?org=...&subject=...&of=...&from=...&to=...` reports
-one source's error rates for one person over one window: `learned` for
-Limen's suggestions, `applied` for the verdicts you applied, a policy's
-`source`, or a signal's. [The ledger](ledger.md#reading-a-report) explains
-every field; in short, read the `interval` before the `value`, read
-`covered` to know what the value speaks for, and keep `unanswered` small.
+## The reliability report
 
-## Rolling out
+`GET /v1/reliability?org=...&subject=...&of=...&from=...&to=...` gives
+the error rates of one source, for one person, in one period of time. The
+value of `of` is one of these sources:
 
-Limen's usefulness has to be shown on your own history before it decides
-anything. Four steps, each needing the previous step's evidence:
+- `learned`: the suggested verdicts of Limen.
+- `applied`: the verdicts that you applied.
+- The `source` of a policy.
+- The `source` of a signal.
 
-1. **Replay.** Send your recorded history to `POST /v1/replays` as
-   newline-delimited JSON, one record per line: when the action was
-   proposed (`at`), the `action`, the `verdict` you applied with its
-   `review_probability` and `source`, and `approve` when the person
-   answered. Without an explicit review policy, an ask, and a flag your
-   rules forced, were answered with probability one, and an allow or a
-   block with probability zero. Limen predicts the records in time order,
-   each before learning its own answer, and reports what it would have
-   suggested (`would`), how often it would have allowed what the person
-   denied (`allowed_denied`) or blocked what they approved
-   (`blocked_approved`), and a false-allow estimate whose `covered` share
-   says how much of that your history can speak to. With `keep=true` the
-   records also seed the live models and the ledger.
-2. **Shadow.** Your rules keep deciding. For every action, ask Limen for a
-   prediction, compose your rules' verdict (not Limen's) with
-   `verdict.Decide` and a review rate above zero, and record the decision
-   with your rules' source. Limen learns from the answers, and its
-   reliability report (`of=learned`) measures its suggestions on the
-   actions your decisions made reviewable; `covered` says how many of
-   Limen's would-be allows your reviews reach.
-3. **Learn inside the ceiling.** Compose Limen's suggestion instead, still
-   under your rules' ceiling, first where an automatic allow can do the
-   least harm, such as inside a sandbox.
-4. **Judge signals.** Pass your judge's verdicts in as signals, and watch
-   the judge's own reliability report per person.
+[The ledger](ledger.md#reading-a-report) explains each field. In summary:
 
-## Notes by harness
+- Read the `interval` before the `value`.
+- Read `covered` to know which part of the actions the `value` applies to.
+- Keep `unanswered` small.
+
+## A safe start
+
+Before Limen decides anything, show that it is useful on your own
+history. There are four steps. Each step needs the evidence from the step
+before it.
+
+1. **Replay.** Send your recorded history to `POST /v1/replays`.
+
+   Use newline-delimited JSON, with one record on each line. Each record
+   has these fields:
+
+   - `at`: the time when the agent proposed the action.
+   - `action`: the action.
+   - `verdict`, `review_probability`, and `source`: the decision that you
+     applied.
+   - `approve`: the answer of the person, if there was one.
+
+   If you had no explicit audit policy, use these review probabilities: 1
+   for an `ask`, and 1 for a `flag` that your rules forced. Use 0 for an
+   `allow` or a `block`.
+
+   Limen predicts the records in time order. It predicts each record
+   before it learns the answer of that record. The report gives:
+
+   - `would`: the suggested verdicts of Limen.
+   - `allowed_denied`: how often Limen would allow an action that the
+     person denied.
+   - `blocked_approved`: how often Limen would block an action that the
+     person approved.
+   - An estimate of the false allow rate. Its `covered` value tells you
+     how much of the estimate your history can support.
+
+   With `keep=true`, the records also go into the live models and the
+   ledger.
+
+2. **Shadow mode.** Your rules continue to decide. For each action, get a
+   prediction from Limen. Use `verdict.Decide` with the verdict of your
+   rules, not the suggested verdict, and an audit rate above zero. Record
+   the decision with the source of your rules.
+
+   Limen learns from the answers. Its reliability report (`of=learned`)
+   measures its suggestions on the actions that your decisions showed to
+   a person. `covered` tells you how many of the possible allows of Limen
+   your reviews reach.
+
+3. **Learn under the ceiling.** Use the suggested verdict of Limen with
+   `verdict.Decide`, under the ceiling of your rules. Start where an
+   automatic `allow` can do the least damage, for example in a sandbox.
+
+4. **Signals from a judge.** Attach the verdicts of your judge to the
+   actions as signals. Monitor the reliability report of the judge for
+   each person.
+
+## Notes for each agent harness
 
 **Topos** ([github.com/latere-ai/topos](https://github.com/latere-ai/topos))
-is the first decision point, and it works today, from Topos v0.11.0 on.
-Topos speaks to any decision service with this API: its rules set the
-ceiling, `verdict.Decide` composes, every decision is recorded with the
-session's tool call, and a person's confirmations are forwarded as
-answers. Two modes are all you need:
+is the first decision point. It works now, from Topos v0.11.0. Topos can
+use any decision service that has this API.
 
-- **Manual mode** (`topos run --mode manual`, Topos's `confirm`). Every
-  call that is not read-only asks you, as it always did, and every answer
-  teaches Limen. Each prediction is recorded beside the call, so you can
-  see what Limen would have done.
-- **Auto mode** (`topos run --mode auto`, Topos's `progressive`). Limen's
-  suggestion decides inside Topos's rules: a familiar safe call runs, a
-  call you would deny is blocked, and anything Limen is unsure about asks
-  you. A share of automatic verdicts is still shown to you for review, so
-  the ledger keeps measuring how often auto mode is wrong.
+The rules of Topos give the ceiling, and `verdict.Decide` combines the
+verdicts. Topos records each decision with the tool call of the session.
+It sends the confirmations of the person as answers. Topos has two modes:
 
-Start Limen's server, then point Topos at it:
+- **Manual mode** (`topos run --mode manual`, the `confirm` mode of
+  Topos). Topos asks you about each call that is not read-only, as
+  before. Each answer teaches Limen. Topos records each prediction with
+  the call. You can see what Limen would do.
+- **Auto mode** (`topos run --mode auto`, the `progressive` mode of
+  Topos). The suggested verdict of Limen decides, under the rules of
+  Topos. A familiar safe call runs, and Topos blocks a call that you would
+  deny. If Limen is not sure, Topos asks you. Topos still shows a part of
+  the automatic verdicts to you for audit. With these audits, the ledger
+  can measure how often auto mode is wrong.
+
+Start the server of Limen. Then give Topos its address and the token:
 
 ```sh
 export LIMEN_TOKEN=$(openssl rand -hex 16)
@@ -330,35 +393,43 @@ limend &                                        # http://127.0.0.1:7720
 
 export TOPOS_DECISIONS_URL=http://127.0.0.1:7720
 export TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
-topos run --mode manual "Fix the failing test."  # for a while: Limen learns
-topos run --mode auto   "Fix the failing test."  # then: Limen decides inside the rules
+topos run --mode manual "Fix the failing test."  # First, for some time: Limen learns.
+topos run --mode auto   "Fix the failing test."  # Then: Limen decides under the rules.
 ```
 
-To see what Limen would have done on sessions you already ran, without
-serving anything, replay Topos's data directory:
+To see what Limen would do on sessions that you ran before, replay the
+data directory of Topos. A replay does not need the server:
 
 ```sh
 limen replay topos
 ```
 
-A person who knows nothing yet gets asks: Limen suggests allow or block
-only once their answers say so. A few dozen answers per kind of call is
-typical before auto mode stops asking about it.
+For a new person, Limen suggests `ask`. It suggests `allow` or `block`
+only after the answers of the person support it. Usually, auto mode asks
+about a type of call until it has approximately 30 or more answers for
+that type.
 
-The adapters below are planned, not built.
+We plan to build the adapters below. They do not exist yet.
 
 **Claude Code** calls the server from a command hook. A `PreToolUse` hook
-answers allow, ask, or deny: apply `allow` as allow, `flag` as allow plus
-an entry in your review queue, `ask` as ask, and `block` as deny. Claude
-Code's own permission rules can still ask about or deny an action the hook
-allowed, which the hook cannot see, so the recorded review probability can
-understate how often a person saw such actions. How a person's answer to
-an ask surfaces in Claude Code's hook events has not been checked yet; the
-adapter's design depends on it.
+returns allow, ask, or deny. Apply the verdicts as follows:
+
+- `allow`: return allow.
+- `flag`: return allow, and add the action to your review queue.
+- `ask`: return ask.
+- `block`: return deny.
+
+The permission rules of Claude Code can still ask about an action or deny
+it after the hook allowed it. The hook cannot see this. Because of this,
+the recorded review probability can be lower than the real frequency with
+which a person saw such actions. We did not yet examine how the answer of
+a person to an `ask` appears in the hook events of Claude Code. The
+design of the adapter depends on it.
 
 **Codex** ([github.com/openai/codex](https://github.com/openai/codex))
-consults its auto-review reviewer only when its static rules would
-otherwise ask, and returns a denial to the agent; a person sees an action
-only after repeated denials. Its reviewer-allowed actions are never
-answered, so the reviewer's false-allow rate for a person is `null` until a
-share of those actions is reviewed at random.
+uses its auto-review reviewer only if its static rules would otherwise
+ask. The reviewer returns a denial to the agent. A person sees an action
+only after repeated denials. Nobody answers the actions that the reviewer
+allowed. Because of this, the false allow rate of the reviewer for a
+person is `null`. It stays `null` until a person examines a part of those
+actions, selected at random for audit.
