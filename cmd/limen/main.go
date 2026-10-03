@@ -33,14 +33,14 @@ const (
 	exitUsage = 2
 )
 
-const usage = `Limen learns when an automated action needs a person.
+const usage = `Limen learns which automated actions need a person.
 
 Usage:
   limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
   limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
   limen version
 
-Run "limen replay topos -h" for the options of a command.
+To see the options of a command, run "limen replay topos -h".
 `
 
 // run is the command line, with its environment passed in so a test can

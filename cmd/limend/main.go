@@ -72,7 +72,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	fs.SetOutput(errOut)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		errOut.Print("Usage: limend [-version]\n\nConfigured by LIMEN_TOKEN, LIMEN_ADDR, LIMEN_DATA_DIR and LIMEN_SUBJECT.\n")
+		errOut.Print("Usage: limend [-version]\n\nThe environment variables LIMEN_TOKEN, LIMEN_ADDR, LIMEN_DATA_DIR, and LIMEN_SUBJECT configure limend.\n")
 	}
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -90,7 +90,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	}
 	token := strings.TrimSpace(getenv("LIMEN_TOKEN"))
 	if token == "" {
-		errOut.Println("limend: set LIMEN_TOKEN to a secret first. Decision points send it as their bearer token.")
+		errOut.Println("limend: set LIMEN_TOKEN to a secret, then start limend again. Decision points send this secret as their bearer token.")
 		return exitConfig
 	}
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
@@ -102,17 +102,17 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	}
 	st, err := file.Open(dir)
 	if err != nil {
-		errOut.Printf("limend: could not open the ledger in %s: %v\n", dir, err)
+		errOut.Printf("limend: cannot open the ledger in %s: %v\n", dir, err)
 		return exitFail
 	}
 	defer func() {
 		if err := st.Close(); err != nil {
-			errOut.Printf("limend: closing the ledger: %v\n", err)
+			errOut.Printf("limend: cannot close the ledger: %v\n", err)
 		}
 	}()
 	ln, err := listen(addr)
 	if err != nil {
-		errOut.Printf("limend: could not listen on %s: %v\n", addr, err)
+		errOut.Printf("limend: cannot listen on %s: %v\n", addr, err)
 		return exitFail
 	}
 	ctx, stop := signalContext()
@@ -128,7 +128,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	out.Printf("Limen is serving http://%s with its ledger in %s. Stop it with Ctrl-C.\n", ln.Addr(), dir)
+	out.Printf("Limen is available at http://%s. The ledger is in %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir)
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	select {
@@ -140,12 +140,12 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdown); err != nil {
-		errOut.Printf("limend: stopping: %v\n", err)
+		errOut.Printf("limend: cannot stop the server correctly: %v\n", err)
 		return exitFail
 	}
 	// Fit what arrived since the last fit, so a restart predicts from it.
 	if err := eng.Flush(shutdown); err != nil {
-		errOut.Printf("limend: fitting before stopping: %v\n", err)
+		errOut.Printf("limend: cannot update the models before it stops: %v\n", err)
 		return exitFail
 	}
 	out.Println("Limen stopped.")

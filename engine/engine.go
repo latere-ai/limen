@@ -254,10 +254,19 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 
 func reason(approve float64, t limen.Thresholds, answers int) string {
 	if answers == 0 {
-		return "Limen has no answers from this person yet, so it asks."
+		return "Limen has no answers from this person yet. It suggests ask."
 	}
-	return fmt.Sprintf("The chance this person approves is %.2f. Limen suggests allowing above %.2f and blocking below %.2f, and asks in between.",
-		approve, t.AllowAbove, t.BlockBelow)
+	switch t.Verdict(approve) {
+	case limen.Allow:
+		return fmt.Sprintf("The approval probability is %.2f, above the allow threshold (%.2f). Limen suggests allow.",
+			approve, t.AllowAbove)
+	case limen.Block:
+		return fmt.Sprintf("The approval probability is %.2f, below the block threshold (%.2f). Limen suggests block.",
+			approve, t.BlockBelow)
+	default:
+		return fmt.Sprintf("The approval probability is %.2f, between the block threshold (%.2f) and the allow threshold (%.2f). Limen suggests ask.",
+			approve, t.BlockBelow, t.AllowAbove)
+	}
 }
 
 // Record implements [limen.Ledger].

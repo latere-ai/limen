@@ -46,7 +46,7 @@ type source struct {
 
 func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, getenv func(string) string) int {
 	if len(args) == 0 {
-		errOut.Print("limen replay: name what to replay: topos or file.\n\n" + usage)
+		errOut.Print("limen replay: give the source to replay: topos or file.\n\n" + usage)
 		return exitUsage
 	}
 	var (
@@ -73,7 +73,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			dir = toposDataDir(getenv)
 		}
 		if dir == "" {
-			errOut.Println("limen replay topos: no Topos data directory. Pass --data, or set TOPOS_DATA_DIR or HOME.")
+			errOut.Println("limen replay topos: there is no Topos data directory. Use --data, or set TOPOS_DATA_DIR or HOME.")
 			return exitUsage
 		}
 		skipped := map[string]int{}
@@ -89,7 +89,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			return code
 		}
 		if fs.NArg() != 1 {
-			errOut.Println("limen replay file: name one file of records, or - for standard input.")
+			errOut.Println("limen replay file: give one file of records, or - for standard input.")
 			return exitUsage
 		}
 		path := fs.Arg(0)
@@ -105,11 +105,11 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		}
 		src = &source{records: ndjson(r), skipped: map[string]int{}, describe: path}
 	default:
-		errOut.Printf("limen replay: unknown source %q; use topos or file.\n", args[0])
+		errOut.Printf("limen replay: %q is not a known source. Use topos or file.\n", args[0])
 		return exitUsage
 	}
 	if o.keep && o.store == "" {
-		errOut.Println("limen replay: --keep needs --store, the directory where the learned models are kept.")
+		errOut.Println("limen replay: --keep needs --store, the directory that keeps the ledger.")
 		return exitUsage
 	}
 
@@ -127,7 +127,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		// wrote, which the person must hear about if it fails.
 		_ = e.Close()
 		if err := st.Close(); err != nil {
-			errOut.Printf("limen replay: closing the ledger: %v\n", err)
+			errOut.Printf("limen replay: cannot close the ledger: %v\n", err)
 		}
 	}()
 
@@ -215,7 +215,7 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 // printError explains a failed replay to the person who ran it.
 func printError(w *errwriter.Writer, src *source, err error) {
 	if errors.Is(err, topos.ErrNoSessions) {
-		w.Printf("limen replay: there are no Topos sessions in %s. Use Topos for a while, or pass --data.\n", src.describe)
+		w.Printf("limen replay: there are no Topos sessions in %s. Use Topos for some time, or use --data to give a different directory.\n", src.describe)
 		return
 	}
 	var le *limen.Error

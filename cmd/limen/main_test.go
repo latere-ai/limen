@@ -19,6 +19,7 @@ import (
 	"latere.ai/x/topos/session"
 
 	"latere.ai/x/limen"
+	"latere.ai/x/limen/importer/topos"
 	"latere.ai/x/limen/importer/topos/topostest"
 )
 
@@ -64,21 +65,21 @@ func TestReplayTopos(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
 	for _, want := range []string{
-		"Replayed 160 actions; 160 of them have your answer.",
-		"Skipped 1 action:",
-		"the log predates recorded verdicts",
-		"What Limen would have suggested:",
+		"Limen replayed 160 actions. You answered 160 of them.",
+		"Limen skipped 1 action for these reasons:",
+		"the log comes from a Topos version that did not record verdicts",
+		"The verdicts that Limen would suggest:",
 		"allow", "ask", "block",
-		"would have allowed, and you denied:",
-		"How often Limen's allows would be wrong:",
-		"under Limen:",
-		"in this history: 100.0% of actions had your answer",
+		"Limen would allow, and you denied:",
+		"The false allow rate of Limen:",
+		"With Limen:",
+		"In this history: 100.0% of the actions have your answer",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the report lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "Only ") {
+	if strings.Contains(out, "Limen has only ") {
 		t.Errorf("warned about too few answers with 160:\n%s", out)
 	}
 }
@@ -96,7 +97,7 @@ func TestReplayToposJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("%v:\n%s", err, out)
 	}
-	if got.Report.Records != 80 || got.Report.Answered != 80 || got.Skipped["the log predates recorded verdicts"] != 1 {
+	if got.Report.Records != 80 || got.Report.Answered != 80 || got.Skipped[topos.ReasonNoVerdict] != 1 {
 		t.Errorf("report %+v, skipped %v", got.Report, got.Skipped)
 	}
 	if got.Report.Would[limen.Allow] == 0 || got.Report.Would[limen.Block] == 0 {
@@ -111,7 +112,7 @@ func TestFewAnswersWarns(t *testing.T) {
 		{ToolUseID: "b", Name: "read", Verdict: "allow", Mode: "confirm"},
 	}})
 	code, out, _ := runCLI(t, "", env(nil), "replay", "topos", "--data", data)
-	if code != exitOK || !strings.Contains(out, "Only 1 answer:") || !strings.Contains(out, "Not measurable") {
+	if code != exitOK || !strings.Contains(out, "Limen has only 1 answer from you.") || !strings.Contains(out, "Limen cannot measure it") {
 		t.Errorf("exit %d:\n%s", code, out)
 	}
 }
@@ -149,7 +150,7 @@ func TestReplayFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errOut := runCLI(t, "", env(nil), "replay", "file", path)
-	if code != exitOK || !strings.Contains(out, "Replayed 40 actions; 40 of them have your answer.") {
+	if code != exitOK || !strings.Contains(out, "Limen replayed 40 actions. You answered 40 of them.") {
 		t.Errorf("exit %d: %s\n%s", code, errOut, out)
 	}
 	code, out, errOut = runCLI(t, strings.Join(lines, "\n"), env(nil), "replay", "file", "--json", "-")
@@ -168,7 +169,7 @@ func TestReplayFileErrors(t *testing.T) {
 		t.Errorf("bad line: exit %d: %s", code, errOut)
 	}
 	code, _, errOut = runCLI(t, `{"at":"2026-09-01T00:00:00Z","action":{},"verdict":"ask","review_probability":1,"source":"x"}`+"\n", env(nil), "replay", "file", "-")
-	if code != exitFail || !strings.Contains(errOut, "A replayed record is missing a field") || !strings.Contains(errOut, "records[0].action.org") {
+	if code != exitFail || !strings.Contains(errOut, "A replayed record has a missing field") || !strings.Contains(errOut, "records[0].action.org") {
 		t.Errorf("invalid record: exit %d: %s", code, errOut)
 	}
 	long := `{"at":"` + strings.Repeat("x", 17*1024*1024) + `"}`
@@ -187,15 +188,15 @@ func TestUsage(t *testing.T) {
 	}{
 		{nil, exitUsage, "Usage:"},
 		{[]string{"nope"}, exitUsage, `unknown command "nope"`},
-		{[]string{"replay"}, exitUsage, "name what to replay"},
-		{[]string{"replay", "slack"}, exitUsage, `unknown source "slack"`},
+		{[]string{"replay"}, exitUsage, "give the source to replay"},
+		{[]string{"replay", "slack"}, exitUsage, `"slack" is not a known source`},
 		{[]string{"replay", "topos", "--data", data, "extra"}, exitUsage, `unexpected argument "extra"`},
 		{[]string{"replay", "topos", "--bogus"}, exitUsage, "flag provided but not defined"},
 		{[]string{"replay", "topos", "--data", data, "--keep"}, exitUsage, "--keep needs --store"},
 		{[]string{"replay", "topos", "--data", filepath.Join(t.TempDir(), "none")}, exitFail, "there are no Topos sessions"},
-		{[]string{"replay", "file"}, exitUsage, "name one file"},
+		{[]string{"replay", "file"}, exitUsage, "give one file of records"},
 		{[]string{"replay", "file", "--bogus"}, exitUsage, "flag provided but not defined"},
-		{[]string{"replay", "topos"}, exitUsage, "no Topos data directory"},
+		{[]string{"replay", "topos"}, exitUsage, "there is no Topos data directory"},
 	}
 	for _, c := range cases {
 		code, out, errOut := runCLI(t, "", env(nil), c.args...)
@@ -240,7 +241,7 @@ func TestReportPieces(t *testing.T) {
 	writeReport(errwriter.New(&buf), limen.ReplayReport{Records: 10, Answered: 40, Would: map[limen.Verdict]int{limen.Allow: 10},
 		FalseAllow: limen.Estimate{Value: &v, Covered: 0.5, Reviews: 9}, Kept: true}, nil)
 	out := buf.String()
-	for _, want := range []string{"2.0% of its allows (95% interval 0.0% to 100.0%)", "50.0% of its allows", "now part of Limen's ledger"} {
+	for _, want := range []string{"2.0% of its allows (95% interval: 0.0% to 100.0%)", "50.0% of its allows", "Limen added this history to its ledger"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}

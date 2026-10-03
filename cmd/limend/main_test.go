@@ -131,8 +131,8 @@ func TestConfiguration(t *testing.T) {
 		{[]string{"-h"}, nil, exitOK, "Usage: limend"},
 		{[]string{"-version"}, nil, exitOK, "limend dev"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x"}, exitConfig, "no directory for the ledger"},
-		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "could not open the ledger"},
-		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "could not listen"},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}
 	for _, c := range cases {
 		e := map[string]string{}

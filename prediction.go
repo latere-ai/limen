@@ -21,8 +21,8 @@ type Prediction struct {
 	// approves the action, given every answer Limen has from them.
 	Approve float64 `json:"approve"`
 	// Uncertainty is the posterior standard deviation of the latent
-	// tolerance behind Approve: two actions with the same Approve can
-	// differ here, one well known and one never seen.
+	// value behind Approve: two actions with the same Approve can differ
+	// here, one well known and one never seen.
 	Uncertainty float64 `json:"uncertainty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a

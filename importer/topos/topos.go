@@ -82,11 +82,11 @@ type Skip struct {
 
 // The reasons a call is skipped.
 const (
-	ReasonRedacted       = "the call was redacted"
-	ReasonNoVerdict      = "the log predates recorded verdicts"
-	ReasonUnknownVerdict = "the recorded verdict is not one Limen knows"
-	ReasonUndecodable    = "the call's event could not be read"
-	ReasonInvalid        = "the call does not make a valid record"
+	ReasonRedacted       = "Topos removed the content of the call from the log"
+	ReasonNoVerdict      = "the log comes from a Topos version that did not record verdicts"
+	ReasonUnknownVerdict = "Limen does not know the recorded verdict"
+	ReasonUndecodable    = "Limen cannot read the event of the call"
+	ReasonInvalid        = "the call does not give a valid record"
 )
 
 // effects are the declared effects of Topos's built-in tools.

@@ -940,103 +940,103 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_action:
-      description: "400 invalid_action: The action is missing a field or has a value out of range. Fix the fields listed in the details and send it again."
+      description: "400 invalid_action: The action has a missing field or a value that is not permitted. Correct the fields that the details list, then send the action again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_decision:
-      description: "400 invalid_decision: The decision is missing a field or has a value out of range. Fix the fields listed in the details and send it again."
+      description: "400 invalid_decision: The decision has a missing field or a value that is not permitted. Correct the fields that the details list, then send the decision again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_answer:
-      description: "400 invalid_answer: The answer is missing a field. Fix the fields listed in the details and send it again."
+      description: "400 invalid_answer: The answer has a missing field. Correct the fields that the details list, then send the answer again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_profile:
-      description: "400 invalid_profile: The cost profile is missing a field or has a value out of range. Fix the fields listed in the details and save it again."
+      description: "400 invalid_profile: The cost profile has a missing field or a value that is not permitted. Correct the fields that the details list, then save the cost profile again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_query:
-      description: "400 invalid_query: The request is missing a field or has a value out of range. Fix the fields listed in the details and ask again."
+      description: "400 invalid_query: The request has a missing field or a value that is not permitted. Correct the fields that the details list, then send the request again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_replay:
-      description: "400 invalid_replay: A replayed record is missing a field or has a value out of range. Fix the records listed in the details and replay again."
+      description: "400 invalid_replay: A replayed record has a missing field or a value that is not permitted. Correct the records that the details list, then send the replay again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     ask_too_costly:
-      description: "422 ask_too_costly: With these costs, Limen would decide an action about someone it knows nothing about without asking. Make each kind of error cost more than two interruptions."
+      description: "422 ask_too_costly: With these costs, Limen would not ask about an action of a person that it has no answers from. Make the cost of each type of error more than two times the cost of an ask."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     action_conflict:
-      description: "409 action_conflict: This action id was already used for a different action. Give each action its own id."
+      description: "409 action_conflict: A different action already uses this action ID. Give each action its own ID."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     already_decided:
-      description: "409 already_decided: This action already has a decision. Each action is decided once."
+      description: "409 already_decided: This action already has a decision. Limen accepts one decision for each action."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     no_decision:
-      description: "409 no_decision: This action has no recorded decision. Record the decision first, then send the answer."
+      description: "409 no_decision: This action has no recorded decision. Record the decision, then send the answer."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     unauthenticated:
-      description: "401 unauthenticated: The request carries no valid credential. Sign in again and retry."
+      description: "401 unauthenticated: The request has no valid credential. Sign in again, then send the request again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     forbidden:
-      description: "403 forbidden: You do not have permission for this. Ask an administrator of the organization for access."
+      description: "403 forbidden: You do not have permission for this request. Ask an administrator of the organization for access."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     body_too_large:
-      description: "413 body_too_large: The request is larger than Limen accepts. Send it in smaller parts."
+      description: "413 body_too_large: The request is larger than the limit of Limen. Send it in smaller parts."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     rate_limited:
-      description: "429 rate_limited: Too many requests. Wait a moment and try again."
+      description: "429 rate_limited: There are too many requests. Wait a short time, then send the request again."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     internal:
-      description: "500 internal: Something failed on Limen's side. Try again; if it keeps failing, report it with the request id."
+      description: "500 internal: Limen had an internal failure. Send the request again. If the failure continues, report it with the request ID."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     authorizer_unavailable:
-      description: "503 authorizer_unavailable: The permission service is unavailable. Try again shortly."
+      description: "503 authorizer_unavailable: The permission service is not available. Send the request again after a short time."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     unavailable:
-      description: "503 unavailable: Limen is unavailable right now. Hold the action for a person and try again shortly."
+      description: "503 unavailable: Limen is not available now. Hold the action for a person, and send the request again after a short time."
       content:
         application/json:
           schema:

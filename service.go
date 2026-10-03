@@ -119,6 +119,6 @@ func (f failClosed) Predict(ctx context.Context, a Action) (Prediction, error) {
 		Key:     a.Key,
 		Verdict: Ask,
 		Source:  SourceUnavailable,
-		Reason:  "Limen could not predict this action in time, so it waits for a person.",
+		Reason:  "Limen could not give a prediction for this action in time. The action waits for a person.",
 	}, nil
 }
