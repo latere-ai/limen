@@ -148,11 +148,18 @@ values that change. Use American English. Do not use em dashes.
 ## Writing for users
 
 Limen decides which actions run without a person. A reader who
-misunderstands a document can let a harmful action run. Write every user
-surface to the writing rules of ASD-STE100, Simplified Technical English,
-and use only the terms in [`docs/terms.md`](docs/terms.md). This is not
-certified STE. We apply its writing rules and keep our own term list. We
-do not check words against the STE dictionary.
+misunderstands a document can let a harmful action run. Write each
+technical document for developers, integrators, and operators to the
+writing rules of ASD-STE100, Simplified Technical English. Use only the
+terms in [`docs/terms.md`](docs/terms.md). These documents are the user
+surfaces in the table above.
+
+This is not certified STE. We apply its writing rules and keep our own
+term list. We do not check words against the STE dictionary.
+
+A website or a product page is not a technical document. Write it in the
+language of its audience: the problem of the reader and what the reader
+gets. Do not use the terms and the structure of the engineering.
 
 Words:
 
