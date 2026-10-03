@@ -1,5 +1,5 @@
 name: Feature request
-description: Something Limen should be able to do.
+description: A function that Limen does not have.
 labels: [enhancement]
 body:
   - type: textarea
@@ -7,9 +7,9 @@ body:
     attributes:
       label: The problem
       description: >
-        What you are trying to do and where Limen stops you. Describe the
-        situation rather than the solution; the shape of the fix is easier to
-        judge with the constraint in front of it.
+        Tell what you want to do and where Limen stops you. Describe the
+        problem, not the solution. With the problem, we can find the best
+        solution more easily.
     validations:
       required: true
 
@@ -17,10 +17,10 @@ body:
     id: idea
     attributes:
       label: What you have in mind
-      description: Optional. How you would solve it, and what you have ruled out.
+      description: Optional. Tell how you would solve the problem, and which solutions you do not want.
 
   - type: textarea
     id: workaround
     attributes:
       label: What you do today
-      description: Optional. The workaround you are living with, if any.
+      description: Optional. Tell what you do now to get around the problem.

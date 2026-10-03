@@ -1,17 +1,19 @@
 ## What this changes
 
-<!-- What behavior is different after this, for whoever integrates a decision point, runs limend, or builds on the packages. -->
+<!-- Tell what is different after this change for the author of a decision point, the operator of limend, or a user of the packages. -->
 
 ## Why
 
-<!-- The problem it solves. Link the issue or the spec if there is one. -->
+<!-- Tell which problem this change solves. Add a link to the issue or the spec, if there is one. -->
 
 ## Checklist
 
-- [ ] `make` passes locally.
-- [ ] A bug fix carries a test that fails without it.
-- [ ] A change to the contract, the `/v1` API, a configuration variable, or
-      what the ledger stores is reflected in its spec, in
-      `api/openapi.yaml` where it is the API, and in `docs/`.
-- [ ] A change to an exported package keeps every existing call site compiling,
-      or the CHANGELOG names the break.
+- [ ] `make` passes on your computer.
+- [ ] A bug fix includes a test that fails without the fix.
+- [ ] If this changes the contract, the `/v1` API, a configuration
+      variable, or the data in the ledger, the related spec, the
+      `api/openapi.yaml` document, and `docs/` show the change.
+- [ ] Each call to an exported package still compiles. If not, the
+      CHANGELOG tells about the incompatible change.
+- [ ] Text for users follows the rules in `CONTRIBUTING.md` and uses the
+      terms in `docs/terms.md`.
