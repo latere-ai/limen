@@ -1,41 +1,49 @@
 # Documentation
 
-For people who connect a decision point to Limen, run it, or change it. A
-decision point is the code that lets an automated action run or not: an
-agent harness deciding on a tool call, a proxy deciding on a network
-request, a service deciding on a push or a payment.
+These documents are for people who connect a decision point to Limen, run
+Limen, or change Limen. A decision point is the software that decides if
+an automated action runs. Examples:
 
-Limen is pre-release. The [README](../README.md#limen) says which parts
-are built. Where a page describes behavior only an unbuilt part can have,
-it says so.
+- An agent harness that decides about a tool call.
+- A proxy that decides about a network request.
+- A service that decides about a push or a payment.
 
-## Using Limen from a decision point
+Limen is pre-release. The [README](../README.md#limen) tells you which
+parts are ready. If a page describes a part that is not ready, the page
+tells you.
 
-Read these in order the first time.
+## Terms
 
-| Page | |
+All documents use the terms on the [Terms](terms.md) page. Each term has
+one meaning only.
+
+## Connect a decision point to Limen
+
+The first time, read these pages in this order.
+
+| Page | Contents |
 |---|---|
-| [Integrating](integrating.md) | the three calls; building actions for tool calls, network requests, pushes, and payments; composing Limen's suggestion with your rules; recording decisions and answers; using the ledger alone; cost profiles; rolling out in four steps; notes for Topos, Claude Code, and Codex |
-| [The ledger](ledger.md) | what Limen records, what a review probability means, how answers count, and how the error rate of any decision source is computed |
-| [API](api.md) | authentication, every route with an example, idempotency, ordering, pagination, the errors, and the permission each route asks |
-| [OpenAPI](../api/openapi.yaml) | the same surface as an OpenAPI 3.1 document |
+| [Integration](integrating.md) | The three calls. Actions for tool calls, network requests, pushes, and payments. How to combine the suggested verdict of Limen with your rules. How to record decisions and answers. How to use the ledger alone. Cost profiles. A start in four steps. Notes for Topos, Claude Code, and Codex. |
+| [The ledger](ledger.md) | What Limen records, the meaning of the review probability, and how answers count. How Limen calculates the error rate of each source of decisions. |
+| [API](api.md) | Authentication, each route with an example, repeated requests, the order of calls, and pages of results. The errors, and the permission that each route needs. |
+| [OpenAPI](../api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document. |
 
-## Understanding it
+## Understand Limen
 
-| Page | |
+| Page | Contents |
 |---|---|
-| [Principles](principles.md) | the rules every implementation keeps, why each holds, and how it is checked |
-| [Theory](theory.md) | the model of a person's tolerance, the decision rule and its thresholds, forgetting, the estimators and certificates, and what can be known about an LLM judge |
+| [Principles](principles.md) | The rules that each implementation obeys, the reason for each rule, and how Limen checks it. |
+| [Theory](theory.md) | The model of the tolerance of a person, the decision rule and its thresholds, and forgetting. The estimates and the certificates, and what you can know about a judge. |
 
-## Operating it
+## Operate Limen
 
-| Page | |
+| Page | Contents |
 |---|---|
-| [Running limend](running.md) | getting the server, its configuration, its ledger directory, stopping it, and running it in a container |
+| [Running limend](running.md) | How to get the server, its configuration, and its ledger directory. How to stop the server, and how to run it in a container. |
 
-## Changing it
+## Change Limen
 
-| Page | |
+| Page | Contents |
 |---|---|
-| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | how to build, test, and send a change |
-| [`specs/`](../specs/README.md) | the design records, one per module, with the reasoning behind each decision |
+| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | How to build and test Limen, and how to send a change. |
+| [`specs/`](../specs/README.md) | The design records, one for each module, with the reason for each decision. |

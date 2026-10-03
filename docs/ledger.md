@@ -1,102 +1,121 @@
 # The ledger
 
-Limen's ledger records what decision points decided and what people
-answered, and from those two facts it reports how often any source of
-decisions is wrong for a given person. This page says what is recorded,
-what each field means, and how the numbers in a reliability report come
-out of the records. The mathematics is in [Theory](theory.md#the-ledger-error-rates-of-any-source).
+The ledger records two facts about each action: what the decision point
+decided, and what the person answered. From these records, Limen reports
+how often each source of decisions is wrong for a given person. This page
+tells you what Limen records and what each field means. It also tells you
+how Limen calculates the numbers in a reliability report.
+[Theory](theory.md#the-ledger-error-rates-of-any-source) gives the
+mathematics.
 
-The ledger does not need Limen's predictor. A decision point that decides
-by rules alone can record its decisions and the answers, and read its
-rules' error rate and its judge's.
+The ledger does not need the predictions of Limen. A decision point that
+decides only with rules can record its decisions and the answers. It can
+then read the error rate of its rules and of its judge.
 
-## What is recorded
+## What Limen records
 
-Every record is a case, keyed by three fields:
+Each record is a case. Three fields identify a case:
 
-| Key field | |
+| Field | Meaning |
 |---|---|
-| `org` | the organization the records belong to |
-| `subject` | the person on whose behalf the action runs and whose approvals are learned |
-| `action_id` | the decision point's own id for the action, unique within the organization and subject |
+| `org` | The organization that the records belong to. |
+| `subject` | The person for whom the action runs. Limen learns the approvals of this person. |
+| `action_id` | The identifier that the decision point gives the action. It is unique in the organization and for the person. |
 
-A case holds up to four things, each written once:
+A case has up to four parts. Limen writes each part one time only.
 
-1. **The action**, as the decision point observed it before it ran, without
-   its input: Limen reads the input to extract features and never keeps it.
-2. **The prediction**, when the decision point asked Limen for one.
-3. **The decision**: the verdict applied, the probability that a person sees
-   the action, and the policy that decided.
-4. **The answers** the person gave, each stamped by Limen when it arrived,
-   with who gave it.
+1. **The action.** This is the action as the decision point saw it before
+   it ran, without its input. Limen reads the input to calculate the
+   features. Limen does not keep the input.
+2. **The prediction.** A case has a prediction only if the decision point
+   asked Limen for one.
+3. **The decision.** This is the applied verdict, the probability that a
+   person sees the action, and the source that decided.
+4. **The answers.** These are the answers that the person gave. For each
+   answer, Limen records the time when it arrived and who gave it.
 
-A decision point records a decision for every action it decides, not only
-for the actions a person sees. The actions a source allowed are the
-denominator of that source's error rate; a ledger that only hears about
-asks cannot compute one.
+Record a decision for each action that your decision point decides. Do
+not record only the actions that a person sees. The allows of a source
+are the denominator of its error rate. If the ledger gets only the `ask`
+decisions, it cannot calculate an error rate.
 
 ## The review probability
 
-A decision's `review_probability` is the probability, fixed before the
-action ran, that a person sees it. `verdict.Decide` in
-`latere.ai/x/pkg/verdict` computes it together with the verdict:
+The `review_probability` of a decision is the probability that a person
+sees the action. The decision point sets it before the action runs.
+`verdict.Decide` in `latere.ai/x/pkg/verdict` calculates it together with
+the verdict:
 
-| What happened | Verdict | `review_probability` |
+| What occurred | Verdict | `review_probability` |
 |---|---|---|
-| your rules deny the action outright | `block` | 0 |
-| the action is held for a person | `ask` | 1 |
-| your rules require a review after it runs | `flag` | 1 |
-| automatic allow, picked by the random review | `flag` | the review rate |
-| automatic allow, not picked | `allow` | the review rate |
-| automatic block, picked by the random review | `ask` | the review rate |
-| automatic block, not picked | `block` | the review rate |
-| automatic verdict, no random review | `allow` or `block` | 0 |
+| Your rules deny the action (the ceiling is `block`). | `block` | 0 |
+| The action waits for a person. | `ask` | 1 |
+| Your rules require that a person examines the action after it runs. | `flag` | 1 |
+| Automatic allow, and the random selection selected it for audit. | `flag` | the audit rate |
+| Automatic allow, and the random selection did not select it. | `allow` | the audit rate |
+| Automatic block, and the random selection selected it for audit. | `ask` | the audit rate |
+| Automatic block, and the random selection did not select it. | `block` | the audit rate |
+| Automatic verdict, and the audit rate is 0. | `allow` or `block` | 0 |
 
-Two rows say the same probability for a picked and an unpicked action, and
-that is the point: the probability is what the action had before the draw,
-not whether the draw picked it. The draw is made once per action. Drawing
-again until the review misses would make every estimate built on the
-records biased, which is why an action takes one decision.
+Two rows give the same probability for a selected action and for an
+action that was not selected. This is correct. The probability is the
+value before the random selection. It does not tell if the selection
+selected the action.
 
-The ledger checks that a verdict and its probability agree: a person sees a
-`flag` or an `ask`, so its probability is positive; nobody sees an `allow`
-or a `block`, so its probability is below one.
+The decision point makes the random selection one time for each action.
+Assume that a decision point makes the selection again until the action
+is not selected. Then all estimates from the records have a bias. For this
+reason, an action can have only one decision.
+
+The ledger makes sure that a verdict and its probability agree. A person
+sees a `flag` or an `ask`, so its probability must be more than 0. Nobody
+sees an `allow` or a `block`, so its probability must be less than 1.
 
 ## How answers count
 
-The first answer to an action whose decision showed a person (a `flag` or
-an `ask`) is that action's review. It enters error estimates with weight
-one over the decision's review probability: an ask's answer counts once, an
-answer to a randomly reviewed allow at a 5% rate counts twenty times,
-standing in for the nineteen allows nobody looked at.
+A decision can show an action to a person (a `flag` or an `ask`). The
+first answer to such an action is the review of the action. A review goes
+into the error estimates with a weight of 1 divided by the review
+probability of the decision. Examples:
 
-Every other answer teaches the model and never enters an estimate: a
-dispute of an action that ran without anyone being asked, an answer after
-the review, a person changing their mind. Nothing fixed the probability
-with which such an answer is given, so there is no weight to give it. The
-model learns the latest answer.
+- The answer to an `ask` has a weight of 1.
+- With an audit rate of 5%, the answer to an audited `allow` has a weight
+  of 20. It counts for itself and for the 19 other allows that nobody
+  examined.
 
-Limen derives each answer's role from the recorded decision, so an answer
-needs a recorded decision first: an answer for an action with none is
-refused with `no_decision`.
+All other answers teach the model, but they never go into an estimate.
+Examples:
+
+- A person disputes an action that ran without a question to the person.
+- A person answers after the review.
+- A person changes an earlier answer.
+
+Nothing set the probability that such an answer occurs. For this reason,
+there is no weight to give it. The model learns from the most recent
+answer.
+
+Limen gets the role of each answer from the recorded decision. For this
+reason, an answer needs a recorded decision first. If an action has no
+recorded decision, Limen refuses its answer with `no_decision`.
 
 ## Sources
 
 A reliability report is about one source of verdicts:
 
-| `of` | The source's verdict on an action is |
+| `of` | The verdict of the source for an action |
 |---|---|
-| `learned` | Limen's suggestion, from the prediction |
-| `applied` | the verdict the decision point applied, whatever decided it |
-| a decision's `source`, such as `rules/1` or `topos/progressive` | the verdict applied, on the actions that policy decided |
-| a signal's `source`, such as `classifier/claude-auto-mode` | the signal's verdict, on the actions that carried one |
+| `learned` | The suggested verdict of Limen, from the prediction |
+| `applied` | The verdict that the decision point applied, from any source |
+| The `source` of a decision, for example `rules/1` or `topos/progressive` | The applied verdict, for the actions that this source decided |
+| The `source` of a signal, for example `classifier/claude-auto-mode` | The verdict of the signal, for the actions that have this signal |
 
-A source's allows are the actions on which it said `allow`, and its blocks
-the actions on which it said `block`. A signal that only ever carries a
-score has no allows and no blocks, so its rates are always `null`.
+The allows of a source are the actions for which it gave `allow`. Its
+blocks are the actions for which it gave `block`. A signal that has only a
+score has no allows and no blocks. Its rates are always `null`.
 
-Name each source as `<kind>/<name>` and keep the name stable: the ledger
-reports under that name, per person, per window.
+Give each source a name in the form `<kind>/<name>`, and do not change the
+name. The ledger reports under that name, for each person and each period
+of time.
 
 ## Reading a report
 
@@ -113,33 +132,37 @@ reports under that name, per person, per window.
 }
 ```
 
-| Field | |
+| Field | Meaning |
 |---|---|
-| `value` | the estimated share of the source's allows (or blocks) the person would have denied (or approved); `null` when no such action could have been seen, which means unknown, not zero |
-| `interval` | a 95% interval; read it before the value, since a window with few reviews gives a wide one |
-| `covered` | the share of the source's allows (or blocks) that had any chance of being seen; the estimate speaks for that share only |
-| `reviews`, `audits` | the reviews the estimate rests on, and how many of them came from random review rather than an ask |
-| `unanswered` | actions shown to the person with no review yet; the estimate assumes they would have gone the way the answered ones did, which is doubtful if people skip the hard ones |
-| `certificate` | the profile's claim, a false-allow rate below `alpha` at confidence `1 - delta`: `clean` consecutive clean random reviews of the source's allows in the window against the `needed` ones, and whether the claim `holds` |
+| `value` | The estimated part of the allows of the source that the person would deny. In `false_block`, it is the part of the blocks that the person would approve. If a person could see none of these actions, the value is `null`. `null` means unknown. It does not mean zero. |
+| `interval` | A 95% interval for the value. Read the interval before the value. A period with few reviews gives a wide interval. |
+| `covered` | The part of the allows (or blocks) of the source that had a review probability more than 0. The estimate applies only to this part. |
+| `reviews`, `audits` | `reviews` is the number of reviews that the estimate uses. `audits` is the number of these reviews that came from the random selection. |
+| `unanswered` | The number of actions that a decision showed to the person and that have no review yet. The estimate treats these answers as missing at random: it assumes that the chance of a missing answer does not depend on the answer. If people do not answer the difficult actions, this assumption is false. |
+| `certificate` | A test of the claim of the profile: the false allow rate is below `alpha`, with a confidence of `1 - delta`. `clean` is the number of the most recent consecutive audited allows that the person approved, in the period. A denied allow stops the count. `needed` is the number that the claim needs. `holds` is true if `clean` is equal to or more than `needed`. |
 
-The numbers above are illustrative. The rates hold for this person and
-this window only: the same judge is more or less reliable for a stricter or
-a more permissive person, and for the same person after their tolerance
-changes. In the paper's simulation, one unchanged judge's false-allow rate
-for one person went from 2.9% to 10.0% after the person's trust reset, and
+The numbers above are only examples. The rates apply only to this person
+and to this period. The same judge can be more reliable or less reliable
+for a stricter person or for a more permissive person. It can also change
+for the same person, after the tolerance of the person changes.
+
+In the simulation of the paper, the tolerance of one person suddenly
+decreased (a trust reset). The judge did not change. Its false allow rate
+for this person went from 2.9% to 10.0% after the reset. Then it went
 back to 3.4%.
 
 ## Mistakes that bias the record
 
-- **Recording only what a person sees.** The source's allows are then
-  missing, and its error rate has no denominator.
-- **Drawing the review more than once.** A sample that can be re-drawn is
-  not random.
-- **Recording a probability you did not use.** If your code shows every
-  action with a certain flag to the person, its probability is one, whatever
-  the profile's review rate says. Record what your decision point actually
-  did.
-- **Recording after the fact.** Record the decision before the action runs
-  or anyone sees it, so the record cannot depend on the outcome.
-- **Leaving the review queue unanswered.** A growing `unanswered` count
-  weakens every estimate.
+- **Record each decision, not only the actions that a person sees.** If
+  you record only these actions, the allows of the source are missing. Its
+  error rate then has no denominator.
+- **Make the random selection one time only.** A sample that you can
+  select again is not random.
+- **Record the probability that you used.** Assume that your code shows
+  each action with a given property to the person. Then the probability
+  of these actions is 1, for all audit rates in the profile. Record what
+  your decision point did.
+- **Record the decision before the action runs.** Also record it before a
+  person sees the action. Then the record cannot depend on the result.
+- **Answer the actions in the review queue.** If the `unanswered` count
+  increases, each estimate becomes weaker.
