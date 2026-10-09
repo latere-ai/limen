@@ -41,11 +41,20 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
+// restore puts back the signal context and the listener a test replaces,
+// so the next test runs limend's own.
+func restore(t *testing.T) {
+	t.Helper()
+	sc, l := signalContext, listen
+	t.Cleanup(func() { signalContext, listen = sc, l })
+}
+
 // start runs limend until stop is called, and returns its address.
 func start(t *testing.T, ledger string) (addr string, stop func() (int, string)) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	got := make(chan net.Addr, 1)
+	restore(t)
 	signalContext = func() (context.Context, context.CancelFunc) { return ctx, cancel }
 	listen = func(string) (net.Listener, error) {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -54,10 +63,6 @@ func start(t *testing.T, ledger string) (addr string, stop func() (int, string))
 		}
 		return ln, err
 	}
-	t.Cleanup(func() {
-		signalContext = func() (context.Context, context.CancelFunc) { return context.WithCancel(context.Background()) }
-		listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) }
-	})
 	var out, errOut syncBuffer
 	code := make(chan int, 1)
 	go func() {
@@ -169,6 +174,7 @@ func TestDataDir(t *testing.T) {
 
 // A listener that fails ends the server with an error rather than hanging.
 func TestServerStops(t *testing.T) {
+	restore(t)
 	listen = func(string) (net.Listener, error) {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err == nil {
@@ -176,7 +182,6 @@ func TestServerStops(t *testing.T) {
 		}
 		return ln, err
 	}
-	t.Cleanup(func() { listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) } })
 	var out, errOut bytes.Buffer
 	code := run(nil, &out, &errOut, env(map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": t.TempDir()}))
 	if code != exitFail || !strings.Contains(errOut.String(), "the server stopped") {
