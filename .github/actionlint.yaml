@@ -1,6 +1,5 @@
-# The repository is private, so its Go jobs run on the organization's
-# self-hosted runner; the jobs that build images run on GitHub's hosted
-# runners, which carry Docker and buildx.
+# The organization's self-hosted runner, by the label the runner policy
+# names it with, so actionlint accepts a job that names it.
 self-hosted-runner:
   labels:
     - linux-vm
