@@ -87,6 +87,9 @@ The documents:
 ### Security
 
 - Built with Go 1.27.2 and golang.org/x/net v0.60.0, which fix GO-2026-6611, GO-2026-6612, GO-2026-6613 and GO-2026-6617.
+- **Built with gRPC-Go 1.83.2,** which fixes GHSA-2v4p-qf9q-27wj, a crash
+  of gRPC xDS servers on a request with neither `:authority` nor `Host`.
+  This code runs no xDS server, so the flaw was not reachable.
 
 ### Fixed
 
