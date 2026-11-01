@@ -19,6 +19,9 @@
 //     gives the environment, a host counting as credentialed because it
 //     holds the person's own credentials, a Cella sandbox as not; the
 //     recorded risk score is a signal from its source, such as rules/1;
+//     and the attribute "attended" says whether a person began the call's
+//     turn, as Topos v0.56.0 and later record it and send it with the
+//     action, so a replay featurizes the action as the live session did;
 //   - the verdict is the one Topos recorded, with the review probability
 //     Topos recorded for the call: in auto mode a share of automatic
 //     verdicts is drawn for review,
@@ -80,6 +83,11 @@ const DefaultOrg = "local"
 
 // DefaultSubject is the subject of a session whose initiator has none.
 const DefaultSubject = "local"
+
+// AttributeAttended is the attribute of an action that says whether a
+// person began the call's turn: false on a turn a trigger's message began,
+// which nobody watches (Topos spec 087). Topos sends it under this name.
+const AttributeAttended = "attended"
 
 // ErrNoSessions reports a data directory with no Topos sessions in it.
 var ErrNoSessions = errors.New("no Topos sessions")
@@ -237,6 +245,9 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 		k := key
 		k.ActionID = sess.ID + "/" + u.ToolUseID
 		a := limen.Action{Key: k, Actor: actor, Kind: "tool", Name: u.Name, Effect: EffectOf(u.Name), Input: u.Input, Environment: env}
+		if u.Attended != nil {
+			a.Attributes = map[string]any{AttributeAttended: *u.Attended}
+		}
 		if u.Risk != nil && u.Risk.Source != "" && u.Risk.Score >= 0 && u.Risk.Score <= 1 {
 			score := u.Risk.Score
 			a.Signals = []limen.Signal{{Source: u.Risk.Source, Score: &score}}

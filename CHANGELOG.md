@@ -32,6 +32,9 @@ the commit log.
   record has one answer. For a call that a person saw, it is the first
   answer, which is the review. For a call that ran without a person, it is
   the last answer, which the model learns.
+- A call in `limen replay topos` has the attribute `attended`, as Topos
+  v0.56.0 and later send it with each call. Thus a replay calculates the
+  same features as the live session.
 
 ## v0.3.0 - 2026-11-01
 

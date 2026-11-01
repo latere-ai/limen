@@ -397,3 +397,32 @@ func TestDecidedByNamesTheSource(t *testing.T) {
 		}
 	}
 }
+
+// A call carries whether a person began its turn, as Topos sends it with
+// the action, so a replay featurizes the action as the live session did. A
+// log written before Topos recorded it carries no attribute.
+func TestAttended(t *testing.T) {
+	data := t.TempDir()
+	yes, no := true, false
+	topostest.Write(t, data, topostest.Session{Initiator: "u", Calls: []topostest.Call{
+		{ToolUseID: "watched", Name: "bash", Verdict: "ask", Mode: "confirm", Attended: &yes},
+		{ToolUseID: "triggered", Name: "bash", Verdict: "ask", Mode: "confirm", Attended: &no},
+		{ToolUseID: "old", Name: "bash", Verdict: "ask", Mode: "confirm"},
+	}})
+	rs, err := collect(t, data, topos.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := byID(rs)
+	for id, want := range map[string]any{"watched": true, "triggered": false} {
+		if a := got[id].Action.Attributes; len(a) != 1 || a[topos.AttributeAttended] != want {
+			t.Errorf("%s: attributes %v, want attended %v", id, a, want)
+		}
+		if err := got[id].Validate(); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+	if a := got["old"].Action.Attributes; a != nil {
+		t.Errorf("an old log: attributes %v", a)
+	}
+}
