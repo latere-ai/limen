@@ -43,6 +43,12 @@ the commit log.
   v0.56.0 and later send it with each call. Thus a replay calculates the
   same features as the live session.
 
+### Fixed
+
+- A reliability query or a preview that has neither `from` nor `to` gets
+  an `invalid_query` error that names both fields. Before, the error
+  named only `from`.
+
 ## v0.3.0 - 2026-11-01
 
 ### Added

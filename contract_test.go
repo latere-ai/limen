@@ -327,6 +327,10 @@ func TestAnswerAndQueries(t *testing.T) {
 			t.Errorf("%s: %v", c.field, fields)
 		}
 	}
+	// A window with neither bound names both.
+	if fields := fieldsOf(t, ReliabilityQuery{Org: "o", Subject: "s", Of: OfApplied}.Validate(), CodeInvalidQuery); !slices.Equal(fields, []string{"from", "to"}) {
+		t.Errorf("no window: %v", fields)
+	}
 }
 
 func TestProfileValidate(t *testing.T) {
@@ -401,6 +405,7 @@ func TestExplanationQueries(t *testing.T) {
 		{func(r *PreviewRequest) { r.From = time.Time{} }, CodeInvalidQuery, []string{"from"}},
 		{func(r *PreviewRequest) { r.To = time.Time{} }, CodeInvalidQuery, []string{"to"}},
 		{func(r *PreviewRequest) { r.To = r.From }, CodeInvalidQuery, []string{"to"}},
+		{func(r *PreviewRequest) { r.From, r.To = time.Time{}, time.Time{} }, CodeInvalidQuery, []string{"from", "to"}},
 		{func(r *PreviewRequest) { r.AuditRate = 1.5 }, CodeInvalidQuery, []string{"audit_rate"}},
 		{func(r *PreviewRequest) { r.AuditRate = math.NaN() }, CodeInvalidQuery, []string{"audit_rate"}},
 		// Every field at fault in one error, the costs checked only after.

@@ -40,15 +40,22 @@ func (q ReliabilityQuery) Validate() error {
 	if q.Of == "" {
 		p.add("of", "is empty")
 	}
-	switch {
-	case q.From.IsZero():
+	checkWindow(&p, q.From, q.To)
+	return p.err(CodeInvalidQuery)
+}
+
+// checkWindow holds a window to its bounds: each bound is set, and to is
+// after from. A bound that is not set is at fault whatever the other is.
+func checkWindow(p *problems, from, to time.Time) {
+	if from.IsZero() {
 		p.add("from", "is not set")
-	case q.To.IsZero():
+	}
+	switch {
+	case to.IsZero():
 		p.add("to", "is not set")
-	case !q.From.Before(q.To):
+	case !from.IsZero() && !from.Before(to):
 		p.add("to", "is not after from")
 	}
-	return p.err(CodeInvalidQuery)
 }
 
 // Reliability reports how often one source's verdicts disagree with one

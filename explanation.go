@@ -194,14 +194,7 @@ func (r PreviewRequest) Validate() error {
 	if r.Subject == "" {
 		p.add("subject", "is empty")
 	}
-	switch {
-	case r.From.IsZero():
-		p.add("from", "is not set")
-	case r.To.IsZero():
-		p.add("to", "is not set")
-	case !r.From.Before(r.To):
-		p.add("to", "is not after from")
-	}
+	checkWindow(&p, r.From, r.To)
 	if !unit(r.AuditRate) {
 		p.add("audit_rate", "is outside [0, 1]")
 	}
