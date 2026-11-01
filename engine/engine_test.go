@@ -373,3 +373,34 @@ func TestDecisionWithoutPrediction(t *testing.T) {
 		t.Errorf("verdict %q shown %v", p.Verdict, shown)
 	}
 }
+
+// Models are keyed by version and never mix (spec 004, criterion 10, as
+// far as one version is built): an engine never reads the snapshot of
+// another version, which here would fail to decode, and its fits leave
+// that snapshot as it was, so the engine of the other version keeps
+// serving from it. Forget removes the snapshots of every version.
+func TestVersionsKeepTheirSnapshots(t *testing.T) {
+	st := store.NewMemory()
+	other := []byte("the snapshot of another model version")
+	if err := st.PutSnapshot(ctx, "o", "s", "0", other); err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(engine.Options{Store: st, Inline: 1})
+	defer e.Close()
+	train(t, e, "s", 12)
+	if p := predictOne(t, e, "s", "probe"); p.Approve <= 0.6 || p.Source != engine.Source {
+		t.Errorf("the model of this version: %+v", p)
+	}
+	if b, ok, err := st.Snapshot(ctx, "o", "s", "0"); err != nil || !ok || string(b) != string(other) {
+		t.Errorf("the snapshot of the other version: %q, %v, %v", b, ok, err)
+	}
+	if _, ok, err := st.Snapshot(ctx, "o", "s", engine.Version); err != nil || !ok {
+		t.Errorf("no snapshot of version %s: %v", engine.Version, err)
+	}
+	if err := e.Forget(ctx, "o", "s"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := st.Snapshot(ctx, "o", "s", "0"); ok {
+		t.Error("Forget kept the snapshot of another version")
+	}
+}
