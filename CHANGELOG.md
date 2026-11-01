@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.1.1 - 2026-11-01
+
 ### Fixed
 
 - The release publishes its image. The v0.1.0 release built the image but
