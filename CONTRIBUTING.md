@@ -25,8 +25,9 @@ The tree has these parts:
 | `cmd/limend`, `cmd/limen` | The server program and the replay command |
 | `importer/topos` | The reader of Topos session logs for replays |
 
-The hook command for Claude Code and Codex, and a store for a hosted
-installation, do not exist yet. Work on one of them starts from its spec.
+The hook command for Claude Code and Codex, and a store that more than
+one server can share, do not exist yet. Work on one of them starts from
+its spec.
 
 ## Set up
 
