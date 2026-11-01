@@ -110,10 +110,11 @@ permits less. It treats a ceiling of `block` as final: the verdict is
 `latere.ai/x/pkg/verdict`. No input gives a verdict that permits more than
 the ceiling.
 
-## 6. If Limen fails, the action waits for a person
+## 6. If Limen fails, Limen never allows the action
 
-If Limen fails, is slow, or is not available, the action waits for a
-person. Nothing allows the action by default.
+If Limen fails, is slow, or is not available, the suggested verdict is
+`ask`. Nothing allows the action because Limen failed. With the usual
+composition, the action waits for a person.
 
 **Why.** A check that permits all actions when it fails is not a check.
 `FailClosed` sets a limit on the time that a decision point waits for a
@@ -121,6 +122,12 @@ prediction. It changes each error or timeout into a suggested verdict of
 `ask`, with the source `learned/unavailable`. The ceiling can only make
 this verdict stricter. Then the decision point records the decision with
 the action attached, and the answer of the person still teaches the model.
+
+The fallback is an `ask` with the kind `unsure`. A decision point that
+lets its rules decide an `unsure` ask also lets them decide when Limen
+fails ([Integration](integrating.md#two-kinds-of-ask)). Then the action
+gets the verdict that the rules gave before Limen, never more than the
+ceiling.
 
 **Checked by.** The tests of the contract check `FailClosed`. The
 conformance suite checks that an implementation reports each failure to
@@ -266,9 +273,11 @@ never takes the text that the judge read.
 Because Limen does not keep the input, an agent harness can remove a
 secret from a command, and no copy in Limen keeps the secret.
 
-**Checked by.** The architecture test of the engine: no package that reads
-the input of an action depends on a model client. The conformance suite
-also checks that a case that Limen returns has no input.
+**Checked by.** The `depcheck` gate in `.lateregate.yaml`. The engine has
+the feature extractors, and it gets only the standard library, the
+numerical library, and the shared verdict package. No model client is
+among them. The conformance suite also checks that a case that Limen
+returns has no input.
 
 ## 14. The data of a person belongs to that person
 
