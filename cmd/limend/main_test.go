@@ -49,8 +49,15 @@ func restore(t *testing.T) {
 	t.Cleanup(func() { signalContext, listen = sc, l })
 }
 
-// start runs limend until stop is called, and returns its address.
+// start runs limend for one person until stop is called, and returns its
+// address.
 func start(t *testing.T, ledger string) (addr string, stop func() (int, string)) {
+	t.Helper()
+	return startWith(t, map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": ledger, "LIMEN_SUBJECT": "me"})
+}
+
+// startWith runs limend with the environment vars until stop is called.
+func startWith(t *testing.T, vars map[string]string) (addr string, stop func() (int, string)) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	got := make(chan net.Addr, 1)
@@ -66,7 +73,7 @@ func start(t *testing.T, ledger string) (addr string, stop func() (int, string))
 	var out, errOut syncBuffer
 	code := make(chan int, 1)
 	go func() {
-		code <- run(nil, &out, &errOut, env(map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": ledger, "LIMEN_SUBJECT": "me"}))
+		code <- run(nil, &out, &errOut, env(vars))
 	}()
 	select {
 	case a := <-got:

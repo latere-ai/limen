@@ -6,7 +6,7 @@ depends_on: []
 affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, cmd/limend/, cmd/limen-hook/, api/, docs/]
 effort: medium
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -195,14 +195,16 @@ action before it acts, with the resource fields [[003-http-api]] names,
 and decides nothing about a person. A token is read by the family's shared
 verifier, `latere.ai/x/pkg/authkit/jwt`, and by nothing of Limen's own.
 
-`limend` today serves one person: one bearer, `LIMEN_TOKEN`, is that
-person's subject, and the shared owner policy decides. A hosted `limend`
-verifies tokens from the issuers its operator lists and asks the
-installation's authorization endpoint, configured as Topos configures
-them: `LIMEN_OIDC_ISSUERS`, `LIMEN_OIDC_AUDIENCE` and
-`LIMEN_AUTHORIZER_URL`. The server's `JWT` authenticator is that path;
-the daemon reads those variables when a hosted deployment exists to run
-it.
+`limend` serves one person or a hosted installation. For one person, one
+bearer, `LIMEN_TOKEN`, is that person's subject, and the shared owner
+policy decides. A hosted `limend` verifies tokens from the issuers its
+operator lists, `LIMEN_OIDC_ISSUERS` for `LIMEN_OIDC_AUDIENCE`, as Topos
+configures them, and reads the key sets once at start so a wrong issuer
+stops the start. It then asks the installation's authorization endpoint,
+`LIMEN_AUTHORIZER_URL` with its bearer, or, without one, applies the
+shared owner policy with `LIMEN_ADMINS` as its admins: the decision
+point's service subject is one, since it predicts, decides and answers
+for every person it runs for. The two modes exclude each other.
 
 ### Dependencies
 

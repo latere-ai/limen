@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/errwriter"
+	"latere.ai/x/pkg/otel"
 
 	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/engine/store/file"
@@ -66,6 +67,10 @@ var signalContext = func() (context.Context, context.CancelFunc) {
 // listen opens the server's listener; a test replaces it to learn the port.
 var listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) }
 
+// httpClient reads the issuers' key sets and asks the authorization
+// endpoint, instrumented as every outbound call of the family is.
+var httpClient = otel.HTTPClient
+
 func run(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	out, errOut := errwriter.New(stdout), errwriter.New(stderr)
 	fs := flag.NewFlagSet("limend", flag.ContinueOnError)
@@ -88,13 +93,12 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		errOut.Printf("limend: unexpected argument %q.\n", fs.Arg(0))
 		return exitConfig
 	}
-	token := strings.TrimSpace(getenv("LIMEN_TOKEN"))
-	if token == "" {
-		errOut.Println("limend: set LIMEN_TOKEN to a secret, then start limend again. Decision points send this secret as their bearer token.")
+	acc, err := readAccess(getenv, httpClient())
+	if err != nil {
+		errOut.Printf("limend: %v\n", err)
 		return exitConfig
 	}
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
-	subject := cmp.Or(strings.TrimSpace(getenv("LIMEN_SUBJECT")), "local")
 	dir := dataDir(getenv)
 	if dir == "" {
 		errOut.Println("limend: there is no directory for the ledger. Set LIMEN_DATA_DIR.")
@@ -117,18 +121,24 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	}
 	ctx, stop := signalContext()
 	defer stop()
+	if acc.warm != nil {
+		if err := acc.warm(ctx); err != nil {
+			errOut.Printf("limend: cannot read the key sets of LIMEN_OIDC_ISSUERS: %v\n", err)
+			return exitFail
+		}
+	}
 
 	eng := engine.New(engine.Options{Store: st})
 	// Close stops the fitters and cannot fail.
 	defer func() { _ = eng.Close() }()
-	o := server.Local(token, subject)
+	o := acc.options
 	o.Logger = slog.New(slog.NewTextHandler(errOut, nil))
 	srv := &http.Server{
 		Handler:           server.New(eng, o),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	out.Printf("Limen is available at http://%s. The ledger is in %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir)
+	out.Printf("Limen is available at http://%s. The ledger is in %s. Callers: %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir, acc.describe)
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	select {
