@@ -15,9 +15,14 @@ states. Limen also records each decision and each answer. From these
 records, Limen calculates the error rate of each source of decisions: your
 rules, a language model that examines actions, and Limen itself.
 
-> **Status: pre-release.** Limen has not decided a live action for a
-> person yet. Start with a [replay](#replay-recorded-decisions) of
-> recorded decisions.
+> **Status: in production.** Limen v0.3.0 decides live actions for
+> persons. Hosted [Topos](https://github.com/latere-ai/topos) v0.66.0 and
+> later sends each tool call of a hosted session to Limen. The suggested
+> verdict of Limen decides a call only if Limen has evidence about the
+> person. For the other calls, the rules of Topos decide, and Limen learns
+> from the answers. [Integration](docs/integrating.md#topos) gives the
+> details. For your own decision point, start with a
+> [replay](#replay-recorded-decisions) of recorded decisions.
 >
 > These parts are ready:
 >
@@ -29,21 +34,23 @@ rules, a language model that examines actions, and Limen itself.
 > - The server, `limend`, and its HTTP client. The server supplies the API
 >   for one person, or for many persons in hosted mode. In hosted mode, it
 >   verifies the tokens of your issuers and asks your authorization
->   endpoint or the owner policy. It keeps the ledger on disk. It can also
->   supply the API under a second prefix, for a public route
+>   endpoint or the owner policy. It keeps the ledger in a directory. It
+>   can also supply the API under a second prefix, for a public route
 >   (`LIMEN_BASE_PATH`).
 > - Explanations for the person: why Limen suggests a verdict for one
 >   action, what the model learned about the person, and a preview of a
 >   different cost profile. The parts of each explanation are exact for
->   the model.
+>   the model. Each prediction tells if an `ask` comes from few answers or
+>   from answers that disagree.
 > - The `limen` command. It replays recorded decisions, for example from a
 >   Topos data directory.
 > - A stub service for tests, and the conformance tests that each
 >   implementation must pass.
 >
 > These parts are not ready: a store that more than one server can share,
-> and hooks for Claude Code and Codex. The [specs](specs/README.md)
-> describe them.
+> and hooks for Claude Code and Codex. Until there is a shared store, one
+> `limend` process serves each ledger. The [specs](specs/README.md)
+> describe these parts.
 
 ## The problem
 
@@ -104,7 +111,10 @@ flowchart LR
 These rules apply to each implementation of Limen:
 
 - **An unclear action waits for a person.** If the evidence is not clear,
-  the action waits for a person. It does not fail.
+  Limen suggests `ask`, not `block`, and the action waits for a person.
+  The suggestion also tells if the person has few answers or answers
+  that disagree. Your decision point can let its rules decide if the
+  person has few answers.
 - **The costs set the thresholds.** You state three costs: the cost of a
   false allow, the cost of a false block, and the cost of one `ask`. A
   formula calculates the thresholds from these costs. Nobody adjusts the
@@ -112,7 +122,8 @@ These rules apply to each implementation of Limen:
   `ask`.
 - **Your rules have priority.** The ceiling from your rules is a limit for
   the suggested verdict. If Limen fails or does not answer in time, the
-  action waits for a person.
+  suggested verdict is `ask`. Nothing allows the action because Limen
+  failed.
 - **Tolerance changes, risk does not.** The model lets the tolerance of
   each person change with time. It does not let the risk of an action
   change with time.
@@ -216,17 +227,21 @@ Content-Type: application/json
   "verdict": "ask",
   "approve": 0.58,
   "uncertainty": 0.71,
+  "evidence_ratio": 0.84,
+  "ask_kind": "split",
   "thresholds": {"allow_above": 0.9, "block_below": 0.25},
   "profile": {"org": "org_7"},
   "audit_rate": 0.05,
-  "source": "learned/3",
+  "source": "learned/1",
   "reason": "The approval probability is 0.58, between the block threshold (0.25) and the allow threshold (0.90). Limen suggests ask."
 }
 ```
 
 The judge gave `allow`. But the approval probability is in the ask range,
-so Limen suggests `ask`. The decision point asks the person and records
-the decision:
+so Limen suggests `ask`. The `ask_kind` is `split`: the person answered
+about such actions, and the answers disagree. More answers do not change
+this suggestion. The decision point asks the person and records the
+decision:
 
 ```http
 POST /v1/decisions
@@ -291,7 +306,7 @@ You need Topos v0.11.0 or later.
    topos run --mode auto "..."
    ```
 
-[Integration](docs/integrating.md#notes-for-each-agent-harness) gives more
+[Integration](docs/integrating.md#topos-on-your-computer) gives more
 information about the two modes. [Running limend](docs/running.md) gives
 the configuration of the server.
 
