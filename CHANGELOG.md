@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.1.0 - 2026-11-01
+
 This is the first version of Limen. Limen has three parts:
 
 - The shared verdict vocabulary, `latere.ai/x/pkg/verdict`.
