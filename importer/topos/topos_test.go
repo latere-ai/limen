@@ -426,3 +426,64 @@ func TestAttended(t *testing.T) {
 		t.Errorf("an old log: attributes %v", a)
 	}
 }
+
+// testdata/topos-v0.66.0 is a data directory as the session store of Topos
+// v0.66.0 wrote it, frozen, so a later Topos version that reads it
+// differently fails here. Its one session, in auto mode, records the layer
+// that decided each call, whether a person began the turn, the review
+// probability, a risk score, network approvals with a person's answers and
+// a message in place of one, and a plan-mode block.
+func TestToposV066Log(t *testing.T) {
+	data := t.TempDir()
+	if err := os.CopyFS(data, os.DirFS(filepath.Join("testdata", "topos-v0.66.0"))); err != nil {
+		t.Fatal(err)
+	}
+	var skips []topos.Skip
+	rs, err := collect(t, data, topos.Options{Skipped: func(s topos.Skip) { skips = append(skips, s) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs) != 6 || len(skips) != 0 {
+		t.Fatalf("%d records, %d skips %+v; want 6 and none", len(rs), len(skips), skips)
+	}
+	yes, no := true, false
+	want := []struct {
+		id       string
+		verdict  limen.Verdict
+		prob     float64
+		source   string
+		effect   limen.Effect
+		attended bool
+		approve  *bool
+	}{
+		{"toolu_read", limen.Allow, 0, "topos/progressive/read_only", limen.EffectRead, true, nil},
+		{"toolu_test", limen.Allow, 0.05, "topos/progressive/learned", limen.EffectWrite, true, nil},
+		// A flag answered through its network approvals: the first answer,
+		// an allow, is its review.
+		{"toolu_deps", limen.Flag, 0.05, "topos/progressive/score", limen.EffectWrite, true, &yes},
+		{"toolu_push", limen.Ask, 1, "topos/progressive/always_confirm", limen.EffectWrite, true, &no},
+		// A message in place of an answer to the approval is no answer.
+		{"toolu_curl", limen.Allow, 0, "topos/progressive/remembered", limen.EffectWrite, false, nil},
+		{"toolu_rm", limen.Block, 0, "topos/plan/plan", limen.EffectWrite, true, nil},
+	}
+	const sessionID = "ses_01M6CGWN9R780H7N4TENKKNYJB"
+	for i, w := range want {
+		r := rs[i]
+		key := limen.Key{Org: "acme", Subject: "https://issuer.example|usr_ada", ActionID: sessionID + "/" + w.id}
+		if r.Action.Key != key || r.Verdict != w.verdict || r.ReviewProbability != w.prob || r.Source != w.source || r.Action.Effect != w.effect {
+			t.Errorf("%s: %+v", w.id, r)
+		}
+		if r.Action.Attributes[topos.AttributeAttended] != w.attended {
+			t.Errorf("%s: attributes %v", w.id, r.Action.Attributes)
+		}
+		if (r.Approve == nil) != (w.approve == nil) || (r.Approve != nil && *r.Approve != *w.approve) {
+			t.Errorf("%s: approve %v, want %v", w.id, r.Approve, w.approve)
+		}
+		if err := r.Validate(); err != nil {
+			t.Errorf("%s: %v", w.id, err)
+		}
+	}
+	if s := rs[1].Action.Signals; len(s) != 1 || s[0].Source != "rules/1" || *s[0].Score != 0.42 {
+		t.Errorf("signals %+v", s)
+	}
+}
