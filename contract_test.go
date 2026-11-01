@@ -6,6 +6,7 @@ package limen
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/parser"
 	"go/token"
 	"math"
@@ -447,6 +448,10 @@ func TestErrorTable(t *testing.T) {
 	}
 	if CodeOf(errors.New("plain")) != CodeInternal {
 		t.Error("a plain error is not internal")
+	}
+	wrapped := fmt.Errorf("decision point: %w", fmt.Errorf("record: %w", e))
+	if CodeOf(wrapped) != CodeInvalidAction {
+		t.Errorf("CodeOf a wrapped error: %s", CodeOf(wrapped))
 	}
 }
 
