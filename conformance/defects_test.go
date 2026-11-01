@@ -460,6 +460,10 @@ func TestDefects(t *testing.T) {
 			if err == nil || !strings.Contains(string(out), "--- FAIL: TestDefective/"+d.rule+" (") {
 				t.Errorf("the rule %s passed against a service where %s: %v\n%s", d.rule, d.what, err, out)
 			}
+			// A rule catches the defect by its own check, not by a panic.
+			if strings.Contains(string(out), "panic:") {
+				t.Errorf("the rule %s panicked against a service where %s:\n%s", d.rule, d.what, out)
+			}
 		})
 	}
 }
