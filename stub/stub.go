@@ -145,6 +145,9 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 	v := p.Thresholds.Verdict(approve)
 	pr := limen.Prediction{
 		Key: a.Key, Verdict: v, Approve: approve, Uncertainty: uncertainty,
+		// The stub's predictor knows no answers' variance: every ask is
+		// unsure, as its explanations say.
+		AskKind:    kindOf(v),
 		Thresholds: p.Thresholds, Profile: p.Scope, AuditRate: p.AuditRate, Source: Source,
 		Reason: fmt.Sprintf("approval %.2f against the ask band %.2f to %.2f", approve, p.Thresholds.BlockBelow, p.Thresholds.AllowAbove),
 	}

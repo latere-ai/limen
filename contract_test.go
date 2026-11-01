@@ -407,7 +407,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		v   any
 		doc string
 	}{
-		{&Prediction{}, `{"org":"org_7","subject":"https://issuer.example|usr_42","action_id":"ses_9f/toolu_01","verdict":"ask","approve":0.58,"uncertainty":0.71,"thresholds":{"allow_above":0.9,"block_below":0.25},"profile":{"org":"org_7"},"audit_rate":0.05,"source":"learned/3","reason":"the chance this person approves (0.58) is inside the ask band (0.25 to 0.90)"}`},
+		{&Prediction{}, `{"org":"org_7","subject":"https://issuer.example|usr_42","action_id":"ses_9f/toolu_01","verdict":"ask","approve":0.58,"uncertainty":0.71,"evidence_ratio":0.62,"ask_kind":"split","thresholds":{"allow_above":0.9,"block_below":0.25},"profile":{"org":"org_7"},"audit_rate":0.05,"source":"learned/3","reason":"the chance this person approves (0.58) is inside the ask band (0.25 to 0.90)"}`},
 		{&Decision{}, `{"org":"org_7","subject":"https://issuer.example|usr_42","action_id":"ses_9f/toolu_01","verdict":"flag","review_probability":0.05,"source":"topos/progressive"}`},
 		{&Answer{}, `{"org":"org_7","subject":"https://issuer.example|usr_42","action_id":"ses_9f/toolu_01","approve":true}`},
 	}

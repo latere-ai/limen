@@ -59,6 +59,11 @@ func TestExplanationIsThePrediction(t *testing.T) {
 	if x.Approve != p.Approve || x.Uncertainty != p.Uncertainty || x.Verdict != p.Verdict || x.Thresholds != p.Thresholds {
 		t.Errorf("explained %+v, predicted %+v", x, p)
 	}
+	// The prediction carries the explanation's evidence, so a decision point
+	// can tell an ask on little evidence from one on evidence at once.
+	if p.EvidenceRatio != x.EvidenceRatio || p.AskKind != x.AskKind || p.EvidenceRatio <= 0 || p.EvidenceRatio >= 1 {
+		t.Errorf("predicted evidence %v %q, explained %v %q", p.EvidenceRatio, p.AskKind, x.EvidenceRatio, x.AskKind)
+	}
 	if x.PredictedBy == nil || *x.PredictedBy != x.Model || x.Model.Source != engine.Source || x.Model.Answers != 30 {
 		t.Errorf("model %+v, predicted by %+v", x.Model, x.PredictedBy)
 	}
@@ -93,8 +98,8 @@ func TestExplanationIsThePrediction(t *testing.T) {
 func TestAskKinds(t *testing.T) {
 	e := taught(t, 0)
 	fresh := bash("s", "fresh", "go test ./...")
-	if _, err := e.Predict(ctx, fresh); err != nil {
-		t.Fatal(err)
+	if p, err := e.Predict(ctx, fresh); err != nil || p.AskKind != limen.AskUnsure || p.EvidenceRatio != 0 {
+		t.Fatalf("the first prediction for a person: %+v, %v", p, err)
 	}
 	x, err := e.Explain(ctx, fresh.Key)
 	if err != nil {
@@ -107,8 +112,8 @@ func TestAskKinds(t *testing.T) {
 		answer(t, e, bash("s", fmt.Sprintf("m-%d", i), "make release"), i%2 == 0)
 	}
 	split := bash("s", "split", "make release")
-	if _, err := e.Predict(ctx, split); err != nil {
-		t.Fatal(err)
+	if p, err := e.Predict(ctx, split); err != nil || p.AskKind != limen.AskSplit || p.EvidenceRatio < engine.EvidenceCut {
+		t.Fatalf("a prediction on answers that disagree: %+v, %v", p, err)
 	}
 	x, err = e.Explain(ctx, split.Key)
 	if err != nil {

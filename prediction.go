@@ -24,6 +24,16 @@ type Prediction struct {
 	// value behind Approve: two actions with the same Approve can differ
 	// here, one well known and one never seen.
 	Uncertainty float64 `json:"uncertainty"`
+	// EvidenceRatio is the share of the prior variance at the action that
+	// the subject's answers removed, 1 - σ²/v₀ (spec 009): near 0 for an
+	// action unlike any answered one, near 1 for a well-known one.
+	EvidenceRatio float64 `json:"evidence_ratio"`
+	// AskKind is [AskUnsure] or [AskSplit] when Verdict is [Ask]: whether
+	// the ask rests on little evidence, so more answers will move it, or on
+	// answers that disagree, so they will not. A decision point can let the
+	// rules decide an unsure ask and keep a split one (spec 009). Empty for
+	// an allow or a block.
+	AskKind string `json:"ask_kind,omitempty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a
 	// profile can change.

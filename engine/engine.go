@@ -236,16 +236,20 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 	}
 	post := m.post.Load()
 	pr := post.Predict(kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
+	v := prof.Thresholds.Verdict(pr.Approve)
+	er := evidenceRatio(pr.Var, post.Kernel().Var())
 	p := limen.Prediction{
-		Key:         a.Key,
-		Verdict:     prof.Thresholds.Verdict(pr.Approve),
-		Approve:     pr.Approve,
-		Uncertainty: math.Sqrt(pr.Var),
-		Thresholds:  prof.Thresholds,
-		Profile:     prof.Scope,
-		AuditRate:   prof.AuditRate,
-		Source:      Source,
-		Reason:      reason(pr.Approve, prof.Thresholds, post.Len()),
+		Key:           a.Key,
+		Verdict:       v,
+		Approve:       pr.Approve,
+		Uncertainty:   math.Sqrt(pr.Var),
+		EvidenceRatio: er,
+		AskKind:       askKind(v, er),
+		Thresholds:    prof.Thresholds,
+		Profile:       prof.Scope,
+		AuditRate:     prof.AuditRate,
+		Source:        Source,
+		Reason:        reason(pr.Approve, prof.Thresholds, post.Len()),
 	}
 	c.Prediction = &p
 	by := post.answers

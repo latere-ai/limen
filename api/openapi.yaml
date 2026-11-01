@@ -749,6 +749,14 @@ components:
           type: number
           minimum: 0
           description: The posterior standard deviation of the latent tolerance behind approve.
+        evidence_ratio:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: The share of the prior variance at the action that the subject's answers removed.
+        ask_kind:
+          $ref: "#/components/schemas/AskKind"
+          description: Present when verdict is ask. unsure means the ask rests on little evidence, so more answers will move it; split means the answers disagree, so they will not.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
         profile:
@@ -763,7 +771,7 @@ components:
         reason:
           type: string
           description: One sentence for the person who reads the record. Never shown to an agent.
-      required: [org, subject, action_id, verdict, approve, uncertainty, thresholds, profile, audit_rate, source, reason]
+      required: [org, subject, action_id, verdict, approve, uncertainty, evidence_ratio, thresholds, profile, audit_rate, source, reason]
     Thresholds:
       type: object
       description: Above allow_above is an allow, below block_below a block, and everything between, both ends included, an ask.

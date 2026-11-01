@@ -46,6 +46,15 @@ func askKind(v limen.Verdict, evidenceRatio float64) string {
 	return limen.AskSplit
 }
 
+// evidenceRatio is 1 - σ²/v₀, the share of the prior variance at a point
+// that the answers removed, held to [0, 1] against rounding.
+func evidenceRatio(variance, prior float64) float64 {
+	if prior <= 0 {
+		return 0
+	}
+	return min(max(1-variance/prior, 0), 1)
+}
+
 // point is the case as the model sees it at time t. A case featurized by
 // another featurizer version is featurized again from its stored action,
 // as a fit does.

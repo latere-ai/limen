@@ -238,6 +238,13 @@ func predictionFollowsTheProfile(t *testing.T, target Target) {
 	must(t, err)
 	p := predict(t, s, action("p1"))
 	expect(t, p.Verdict == p.Thresholds.Verdict(p.Approve), "verdict %q, the thresholds give %q for %v", p.Verdict, p.Thresholds.Verdict(p.Approve), p.Approve)
+	expect(t, p.EvidenceRatio >= 0 && p.EvidenceRatio <= 1, "evidence ratio %v outside [0, 1]", p.EvidenceRatio)
+	switch p.Verdict {
+	case limen.Ask:
+		expect(t, p.AskKind == limen.AskUnsure || p.AskKind == limen.AskSplit, "an ask of kind %q", p.AskKind)
+	default:
+		expect(t, p.AskKind == "", "a %s with an ask kind %q", p.Verdict, p.AskKind)
+	}
 	want, _ := saved.Costs.Thresholds()
 	expect(t, p.Thresholds == want && p.AuditRate == 0.1 && p.Profile == saved.Scope,
 		"prediction %+v, want thresholds %+v, audit rate 0.1, profile %+v", p, want, saved.Scope)

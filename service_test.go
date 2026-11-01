@@ -31,7 +31,7 @@ func TestFailClosedOnError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FailClosed returned an error: %v", err)
 	}
-	if got.Verdict != Ask || got.Source != SourceUnavailable || got.Key != key || got.Reason == "" {
+	if got.Verdict != Ask || got.Source != SourceUnavailable || got.AskKind != AskUnsure || got.Key != key || got.Reason == "" {
 		t.Errorf("fallback %+v", got)
 	}
 	if reported == nil {
