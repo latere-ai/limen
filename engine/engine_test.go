@@ -188,20 +188,31 @@ func TestBackgroundFitAndReload(t *testing.T) {
 	}
 }
 
-// A small cache evicts models; an evicted model is loaded again from the
-// store and knows the answers that arrived while it was out.
+// A small cache evicts models. An evicted model fitted through every
+// answer reloads its stored snapshot, keeps what it learned, and fits
+// nothing (spec 004, criterion 8).
 func TestEvictionReloads(t *testing.T) {
-	st := store.NewMemory()
+	st := newFaulty("", 0)
 	e := engine.New(engine.Options{Store: st, Inline: 1, CacheBytes: 1})
 	defer e.Close()
 	train(t, e, "a", 12)
+	if err := e.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
 	train(t, e, "b", 12)
+	fits, loads := st.called("PutSnapshot"), st.called("Snapshot")
 	p, err := e.Predict(ctx, bash("a", "probe", "go test ./x"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Approve < 0.6 {
 		t.Errorf("an evicted model lost what it learned: %+v", p)
+	}
+	if n := st.called("PutSnapshot") - fits; n != 0 {
+		t.Errorf("the reload fitted %d times", n)
+	}
+	if n := st.called("Snapshot") - loads; n != 1 {
+		t.Errorf("the reload read the snapshot %d times, want 1", n)
 	}
 }
 
