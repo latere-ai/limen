@@ -528,7 +528,9 @@ Each tool call that has a verdict becomes one record:
 
 - The action is a `tool` action with the name of the tool. Its effect is
   the declared effect of a built-in tool of Topos, or `write` for a
-  different tool.
+  different tool. From Topos v0.56.0, it has the attribute `attended`,
+  which Topos also sends with each call. The attribute is `false` if a
+  trigger, not a person, started the turn of the call.
 - The verdict is the recorded verdict of Topos, with the source
   `topos/<mode>/<rule>`. `<rule>` is the type of rule that decided the
   call, for example `always_allow` for a pattern of the permitted list, or
