@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.3.0 - 2026-11-01
+
 ### Added
 
 - A prediction has `evidence_ratio`, and for an `ask` also `ask_kind`
