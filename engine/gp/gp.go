@@ -214,6 +214,46 @@ func (p *Posterior) Predict(q kernel.Point) Prediction {
 	return Prediction{Mean: mean, Var: variance, Approve: cdf(mean / math.Sqrt(1+variance))}
 }
 
+// Explanation is a prediction taken apart in the model's own terms
+// (spec 009). The mean is a weighted sum over the fitted answers,
+// k(x_i, q) times the gradient of the log likelihood at the mode, so each
+// answer's term is its exact share of the mean.
+type Explanation struct {
+	Prediction
+	// Prior is k(q, q), the variance before any answer, and EvidenceRatio
+	// 1 - Var / Prior, the share of it the answers removed.
+	Prior         float64
+	EvidenceRatio float64
+	// Points are the fitted answers' points, in the order they were fitted,
+	// and Contributions each one's term of Mean; they sum to Mean.
+	Points        []kernel.Point
+	Contributions []float64
+	// Parts split Mean by the kernel's terms when it is [kernel.Parted],
+	// and is nil otherwise; they sum to Mean.
+	Parts []float64
+}
+
+// Explain returns the prediction at q with its explanation.
+func (p *Posterior) Explain(q kernel.Point) Explanation {
+	pr := p.Predict(q)
+	prior := p.k.Var()
+	e := Explanation{Prediction: pr, Prior: prior, EvidenceRatio: 1 - pr.Var/prior, Points: clone(p.train)}
+	e.Contributions = make([]float64, len(p.train))
+	parted, ok := p.k.(kernel.Parted)
+	if ok {
+		e.Parts = make([]float64, 3)
+	}
+	for i, t := range p.train {
+		e.Contributions[i] = p.k.Cov(t, q) * p.grad[i]
+		if ok {
+			for j, part := range parted.Parts(t, q) {
+				e.Parts[j] += part * p.grad[i]
+			}
+		}
+	}
+	return e
+}
+
 // PredictAll returns the posterior predictive at each point.
 func (p *Posterior) PredictAll(qs []kernel.Point) []Prediction {
 	out := make([]Prediction, len(qs))

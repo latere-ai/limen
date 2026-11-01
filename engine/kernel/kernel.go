@@ -67,9 +67,17 @@ type Kernel interface {
 	Validate() error
 }
 
+// Parted is a kernel that is a sum of terms: Parts returns each term of
+// k(a, b), in a fixed order, summing to Cov(a, b). A posterior's mean splits
+// into the same terms (spec 009).
+type Parted interface {
+	Kernel
+	Parts(a, b Point) [3]float64
+}
+
 var (
 	_ Kernel = Product{}
-	_ Kernel = Additive{}
+	_ Parted = Additive{}
 )
 
 // Product is the separable kernel Sigma2 * k_tool * k_ctx * k_time.
@@ -128,6 +136,16 @@ func (k Additive) Cov(a, b Point) float64 {
 // time they are.
 func (k Additive) StaticCov(a, b Point) float64 {
 	return k.SStatic * Static(a, b, k.LTool, k.LCtx)
+}
+
+// Parts returns the three terms of Cov in its order: the static term,
+// SStatic * k_x, what is known about this kind of action at any time; the
+// shared tolerance, SGlobal * k_t, which every answer moves whatever its
+// action; and the interaction, SInter * k_x * k_t.
+func (k Additive) Parts(a, b Point) [3]float64 {
+	kx := Static(a, b, k.LTool, k.LCtx)
+	kt := Time(a.T, b.T, k.Lambda)
+	return [3]float64{k.SStatic * kx, k.SGlobal * kt, k.SInter * kx * kt}
 }
 
 // Var returns SStatic + SGlobal + SInter.
