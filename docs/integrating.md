@@ -484,7 +484,7 @@ Topos. Topos v0.66.0 added this variable.
 | `TOPOS_DECISIONS_MODE` | What decides a `progressive` call |
 |---|---|
 | `shadow` | The rules and the risk score of Topos decide each call. Topos records the suggested verdict of Limen with the call. |
-| `learned` | The suggested verdict of Limen decides if it is `allow`, `block`, or an `ask` with `ask_kind` `split`. For an `unsure` ask, an `ask` without `ask_kind`, or if Limen does not answer, the rules and the risk score decide. A part of these automatic verdicts goes to the person, at the audit rate of the prediction. |
+| `learned` | The suggested verdict of Limen decides if it is `allow`, `block`, or an `ask` with `ask_kind` `split`. For an `unsure` ask, an `ask` without `ask_kind`, or if Limen does not answer, the rules and the risk score decide. If Limen answered, a part of these automatic verdicts goes to the person, at the audit rate of the prediction. |
 | `decide` (the default) | The suggested verdict of Limen decides each call that the rules do not decide. If Limen fails, the call waits for a person. |
 
 In each mode, these rules apply:
