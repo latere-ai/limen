@@ -150,3 +150,13 @@ depcheck:
         github.com/cespare/xxhash: attribute hashing in the metric SDK
         github.com/felixge/httpsnoop: response capture in otelhttp
         github.com/go-logr: the SDK's internal logger
+
+# The image the release ships. limend answers 401 on every route and has no
+# health route, and the gate's probe sends no bearer token, so the start
+# check cannot see a 2xx.
+image:
+  images:
+    - name: limend
+      version_args: [-version]
+      version_expect: "limend "
+      skip_start: every route of limend requires the bearer token and the gate's probe sends none, so no request to a started limend answers 2xx
