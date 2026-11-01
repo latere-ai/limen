@@ -330,3 +330,35 @@ func TestRecordedReviewProbability(t *testing.T) {
 		}
 	}
 }
+
+// A log of Topos v0.65.0 or later names the layer of the rules that
+// decided each call, and the layer completes the source, so the ledger
+// reports each layer apart. The rule within the layer is not part of it,
+// and a layer this Topos version does not name is left out.
+func TestDecidedByNamesTheSource(t *testing.T) {
+	data := t.TempDir()
+	rate := 0.05
+	topostest.Write(t, data, topostest.Session{Initiator: "u", Calls: []topostest.Call{
+		{ToolUseID: "listed", Name: "bash", Verdict: "allow", Mode: "confirm", DecidedBy: session.DecidedAlwaysAllow, DecidedByRule: "bash:go test*"},
+		{ToolUseID: "scored", Name: "bash", Verdict: "flag", Mode: "progressive", DecidedBy: session.DecidedScore, DecidedByRule: "flag_at", ReviewProbability: &rate},
+		{ToolUseID: "learned", Name: "bash", Verdict: "allow", Mode: "progressive", DecidedBy: session.DecidedLearned, DecidedByRule: "learned/1", ReviewProbability: &rate},
+		{ToolUseID: "future", Name: "bash", Verdict: "ask", Mode: "confirm", DecidedBy: "a_layer_from_a_later_topos"},
+		{ToolUseID: "old", Name: "bash", Verdict: "ask", Mode: "confirm"},
+	}})
+	rs, err := collect(t, data, topos.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := byID(rs)
+	for id, want := range map[string]string{
+		"listed":  "topos/confirm/always_allow",
+		"scored":  "topos/progressive/score",
+		"learned": "topos/progressive/learned",
+		"future":  "topos/confirm",
+		"old":     "topos/confirm",
+	} {
+		if r, ok := got[id]; !ok || r.Source != want {
+			t.Errorf("%s: source %q, want %q", id, r.Source, want)
+		}
+	}
+}

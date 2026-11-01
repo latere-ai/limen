@@ -530,11 +530,18 @@ Each tool call that has a verdict becomes one record:
   the declared effect of a built-in tool of Topos, or `write` for a
   different tool.
 - The verdict is the recorded verdict of Topos, with the source
-  `topos/<mode>`.
+  `topos/<mode>/<rule>`. `<rule>` is the type of rule that decided the
+  call, for example `always_allow` for a pattern of the permitted list, or
+  `score` for the risk score. Topos v0.65.0 and later record the type of
+  rule. For a log from an earlier version, the source is `topos/<mode>`.
 - The review probability is the recorded probability. A log from before
   Topos v0.11.0 has no probability. Then the probability is 1 for an `ask`
   or a `flag`, and 0 for an `allow` or a `block`.
 - The answer is the first confirmation of the call by the person.
+
+Thus, after `limen replay topos --keep`, the ledger gives the error rate
+of each type of rule. Topos itself records a live decision with the
+source `topos/<mode>`.
 
 A replay does not include these calls. The report gives the number of
 each:

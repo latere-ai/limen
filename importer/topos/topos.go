@@ -19,13 +19,25 @@
 //     gives the environment, a host counting as credentialed because it
 //     holds the person's own credentials, a Cella sandbox as not; the
 //     recorded risk score is a signal from its source, such as rules/1;
-//   - the verdict is the one Topos recorded, from the source
-//     "topos/<mode>", with the review probability Topos recorded for the
-//     call: in auto mode a share of automatic verdicts is drawn for review,
+//   - the verdict is the one Topos recorded, with the review probability
+//     Topos recorded for the call: in auto mode a share of automatic
+//     verdicts is drawn for review,
 //     and the probability is that share. A log written before Topos
 //     recorded it (before v0.11.0) carries none, and a call there was shown
 //     to a person exactly when its verdict was ask or flag, so the
 //     probability is one for those and zero otherwise;
+//   - the source of the verdict is "topos/<mode>/<layer>": the mode, and
+//     the layer of Topos's rules that decided the call (its decided_by),
+//     for example "topos/confirm/always_allow" or "topos/progressive/score",
+//     so the ledger reports how often each layer is wrong. A log written
+//     before Topos v0.65.0 records no layer, and a layer the pinned Topos
+//     version does not name is left out; the source is then "topos/<mode>".
+//     The rule within the layer (decided_by_rule) is not part of the
+//     source: it is free text, such as a pattern, and a source for each
+//     pattern divides the answers too finely for an estimate. Topos
+//     sends a live decision under "topos/<mode>" alone, so the sources of
+//     a kept replay are finer than those of a live session, and "applied"
+//     reports both;
 //   - the answer is the first user.tool_confirmation for the call.
 //
 // A call is skipped, with the reason reported through [Options.Skipped],
@@ -43,6 +55,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"latere.ai/x/topos/harness/tools"
 	"latere.ai/x/topos/session"
@@ -240,6 +253,9 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 		source := "topos"
 		if u.Mode != "" {
 			source += "/" + u.Mode
+		}
+		if slices.Contains(session.Decided, u.DecidedBy) {
+			source += "/" + u.DecidedBy
 		}
 		r := limen.ReplayRecord{At: e.Time, Action: a, Verdict: v, Source: source}
 		switch {

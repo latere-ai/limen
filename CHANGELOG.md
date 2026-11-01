@@ -22,6 +22,11 @@ the commit log.
   how to check the server, and its logs. Each spec records what is
   built.
 - `SECURITY.md` names the supported versions: v0.3 and v0.2.
+- `limen replay topos` reads logs up to Topos v0.66.0. A decision from a
+  log of Topos v0.65.0 or later has the source `topos/<mode>/<rule>`, for
+  example `topos/confirm/always_allow`. `<rule>` is the type of rule that
+  decided the call. Thus the ledger gives the error rate of each type of
+  rule. A decision from an earlier log keeps the source `topos/<mode>`.
 
 ## v0.3.0 - 2026-11-01
 

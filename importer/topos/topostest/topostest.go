@@ -26,7 +26,12 @@ type Call struct {
 	// predates recorded verdicts.
 	Verdict string
 	Mode    string
-	Risk    *session.Risk
+	// DecidedBy and DecidedByRule are the layer of the rules that decided
+	// the call and the rule within it, as Topos v0.65.0 and later record
+	// them; empty writes a call from an older log.
+	DecidedBy     string
+	DecidedByRule string
+	Risk          *session.Risk
 	// Answer is the person's confirmation, "allow" or "deny"; empty writes
 	// none.
 	Answer   string
@@ -123,6 +128,7 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 			eid := add(session.TypeAgentToolUse, mustJSON(session.AgentToolUse{
 				ToolUseID: c.ToolUseID, Name: c.Name, Input: json.RawMessage(in),
 				Risk: c.Risk, Verdict: c.Verdict, Mode: c.Mode, ReviewProbability: c.ReviewProbability,
+				DecidedBy: c.DecidedBy, DecidedByRule: c.DecidedByRule,
 			}))
 			if c.Redact {
 				redact = append(redact, eid)
