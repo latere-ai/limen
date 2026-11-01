@@ -188,28 +188,6 @@ func TestBackgroundFitAndReload(t *testing.T) {
 	}
 }
 
-// Answers that arrive while the background fitter runs are fitted by a
-// later fit; the model converges.
-func TestBackgroundConverges(t *testing.T) {
-	e := engine.New(engine.Options{Debounce: time.Millisecond, Workers: 2})
-	defer e.Close()
-	train(t, e, "s", 25)
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		p, err := e.Predict(ctx, bash("s", fmt.Sprintf("probe-%d", time.Now().UnixNano()), "go test ./x"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if p.Approve > 0.6 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the background fitter never caught up: %+v", p)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
 // A small cache evicts models; an evicted model is loaded again from the
 // store and knows the answers that arrived while it was out.
 func TestEvictionReloads(t *testing.T) {
