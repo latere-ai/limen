@@ -10,7 +10,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	gonum.org/v1/gonum v0.17.0
 	latere.ai/x/pkg v0.110.2
-	latere.ai/x/topos v0.62.0
+	latere.ai/x/topos v0.66.0
 )
 
 require (
@@ -21,11 +21,11 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0 // indirect
-	github.com/yuin/goldmark v1.8.2 // indirect
+	github.com/yuin/goldmark/v2 v2.1.13 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/runtime v0.71.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/runtime v0.72.0 // indirect
 	go.opentelemetry.io/otel v1.47.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0 // indirect
@@ -50,5 +50,5 @@ require (
 	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	latere.ai/x/ci-gate v0.62.0 // indirect
-	latere.ai/x/sdk-go v0.10.0 // indirect
+	latere.ai/x/sdk-go v0.21.0 // indirect
 )
