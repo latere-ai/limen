@@ -209,6 +209,30 @@ func TestCertificate(t *testing.T) {
 	}
 }
 
+// The default claim, a false-allow rate below 1% at 95% confidence, holds
+// on 300 clean audits and not on 299 (spec 008, criterion 6; paper,
+// Proposition 5(b)). A denial before the run does not count against it.
+func TestCertificateAt300(t *testing.T) {
+	audit := func(approve bool) Row {
+		return Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true, Approve: approve}
+	}
+	rows := []Row{audit(false)}
+	for range 299 {
+		rows = append(rows, audit(true))
+	}
+	if c := Certificate(rows, limen.DefaultCertify); c.Clean != 299 || c.Needed != 300 || c.Holds {
+		t.Errorf("299 clean audits: %+v", c)
+	}
+	rows = append(rows, audit(true))
+	if c := Certificate(rows, limen.DefaultCertify); c.Clean != 300 || c.Needed != 300 || !c.Holds {
+		t.Errorf("300 clean audits: %+v", c)
+	}
+	rows = append(rows, audit(false))
+	if c := Certificate(rows, limen.DefaultCertify); c.Clean != 0 || c.Holds {
+		t.Errorf("a denial after 300 clean audits: %+v", c)
+	}
+}
+
 func TestWilson(t *testing.T) {
 	iv := wilson(0.5, 100)
 	if !near(iv[0], 0.4038, 1e-3) || !near(iv[1], 0.5962, 1e-3) {
