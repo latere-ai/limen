@@ -180,6 +180,75 @@ at your costs. No learner can remove it. (Lean: `optimal_asks_on_band`,
 In the simulation of the paper, this lower limit was 10.3% of actions with
 the symmetric profile and 31.3% with the safety-weighted profile.
 
+## Two kinds of ask
+
+An `ask` has one of two causes. The model knows little about the action,
+or the answers of the person about the action disagree. Each prediction
+tells which cause applies.
+
+The prior variance at an action is the variance of $f$ before any answer:
+
+$$
+v_0 = k\bigl((x, t), (x, t)\bigr) = \sigma_s^2 + \sigma_g^2 + \sigma_d^2.
+$$
+
+With the default kernel of the engine, $v_0 = 1.6 + 1.0 + 0.6 = 3.2$.
+The predictive variance $\sigma^2$ is never more than $v_0$. The evidence
+ratio is
+
+$$
+e = 1 - \frac{\sigma^2}{v_0}.
+$$
+
+It is the part of the prior variance that the answers of the person
+removed. It is near 0 for an action that is not similar to an answered
+action. It is near 1 for a familiar action. A prediction gives $e$ as
+`evidence_ratio`. For example, `uncertainty` 0.71 gives
+$e = 1 - 0.71^2 / 3.2 \approx 0.84$.
+
+For an `ask`, Limen compares $e$ with 0.5:
+
+- If $e < 0.5$, the `ask_kind` is `unsure`. The answers of the person
+  tell little about this action. More answers can move $\hat p$ out of
+  the ask range.
+- If $e \ge 0.5$, the `ask_kind` is `split`. The answers tell much about
+  this action, and they disagree. $\hat p$ is in the ask range because of
+  the evidence. Proposition 3 applies: more answers do not move it out.
+
+The cut 0.5 is a constant of the engine, `engine.EvidenceCut`. An
+`allow` or a `block` has no `ask_kind`. A decision point can let its
+rules decide an `unsure` ask and keep a `split` ask for the person
+([Integration](integrating.md#two-kinds-of-ask)).
+
+## Explanations
+
+The Laplace posterior mean is a sum over the answers of the person:
+
+$$
+\mu(x) = \sum_i k(x_i, x)\, g_i.
+$$
+
+Here $g_i$ is the gradient of the log likelihood at the mode of the
+posterior, for answer $i$. It is positive for an approval and negative
+for a denial. It is larger if the answer disagrees more with the mode.
+
+An explanation gives the part of each answer, $c_i = k(x_i, x)\, g_i$.
+The parts add up to $\mu(x)$ exactly. The `share` of an answer is
+$|c_i| / \sum_j |c_j|$.
+
+The additive kernel also divides $\mu$ into the three terms of the
+kernel. Each term is a sum over the same $g_i$:
+
+- `action` $= \sigma_s^2 \sum_i k_x(x_i, x)\, g_i$: what the model
+  learned about this type of action, at any time.
+- `recent` $= \sigma_g^2 \sum_i k_{\text{time}}(t_i, t)\, g_i$: the
+  recent tolerance of the person, from all recent answers.
+- `interaction` $= \sigma_d^2 \sum_i k_x(x_i, x)\, k_{\text{time}}(t_i, t)\, g_i$.
+
+The three parts add up to $\mu(x)$ exactly. The product kernel has no
+parts. An explanation of its prediction gives only the parts of the
+answers and the evidence ratio.
+
 ## The cost of forgetting
 
 $k_{\text{time}}$ gives recent answers more weight. This lets the model
