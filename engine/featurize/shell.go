@@ -27,13 +27,17 @@ const (
 
 // Shell is the shell extractor's reading of a command: the base name of
 // each segment's program, in order, the program classes found (in the
-// order of features/1's dimensions, each once), and whether any segment is
-// destructive or writes outside the workspace.
+// order of features/1's dimensions, each once), whether any segment is
+// destructive or writes outside the workspace, and the labels of the
+// segments whose program the tables below name, in order, each once.
+// Programs is the command's own text and is never kept; Labels holds words
+// of the tables alone (spec 009).
 type Shell struct {
 	Programs         []string
 	Classes          []string
 	Destructive      bool
 	OutsideWorkspace bool
+	Labels           []string
 }
 
 // ReadShell reads a command statically, before it runs. It is a worst-case
@@ -43,7 +47,7 @@ type Shell struct {
 func ReadShell(command string) Shell {
 	var r reading
 	r.read(command, 0)
-	out := Shell{Programs: r.programs, Destructive: r.destructive, OutsideWorkspace: r.outside}
+	out := Shell{Programs: r.programs, Destructive: r.destructive, OutsideWorkspace: r.outside, Labels: r.labels}
 	for i, on := range r.classes {
 		if on {
 			out.Classes = append(out.Classes, classNames[i])
@@ -62,6 +66,7 @@ type reading struct {
 	classes     [numClasses]bool
 	destructive bool
 	outside     bool
+	labels      []string
 }
 
 func (r *reading) read(command string, depth int) {
@@ -208,6 +213,9 @@ func (r *reading) segment(seg string, depth int) {
 	rest := args[1:]
 	r.programs = append(r.programs, prog)
 	r.classify(prog, rest)
+	if l := labelOf(prog, rest); l != "" && !slices.Contains(r.labels, l) {
+		r.labels = append(r.labels, l)
+	}
 	if r.isDestructive(seg, prog, rest) {
 		r.destructive = true
 	}
@@ -382,6 +390,60 @@ func (r *reading) classify(prog string, args []string) {
 	case infraProgs[prog]:
 		on(clsInfra)
 	}
+}
+
+// labelOf names a segment in words of the tables above and nothing else, so
+// a label never carries text of the command: the program when a table names
+// it, its subcommand when a table names that, and a fixed flag word for a
+// recursive delete or a forced push. A program no table names has no label.
+func labelOf(prog string, args []string) string {
+	s := sub(prog, args)
+	switch {
+	case prog == "git":
+		switch {
+		case s == "push" && anyArg(args, forced):
+			return "git push --force"
+		case gitRead[s], gitLocal[s], gitRemote[s], s == "clean":
+			return "git " + s
+		}
+		return "git"
+	case prog == "rm" && anyArg(args, func(a string) bool { return a == "--recursive" || shortFlag(a, "rR") }):
+		return "rm -r"
+	case pkgManagers[prog]:
+		if pkgSubs[s] || (prog == "npm" && (s == "test" || s == "run")) {
+			return prog + " " + s
+		}
+		return prog
+	case prog == "go":
+		if goSubs[s] {
+			return "go " + s
+		}
+		return prog
+	case prog == "cargo":
+		if cargoSubs[s] {
+			return "cargo " + s
+		}
+		return prog
+	case prog == "gem":
+		if s == "install" {
+			return "gem install"
+		}
+		return prog
+	case readProgs[prog], networkProgs[prog], deleteProgs[prog], buildProgs[prog], infraProgs[prog], prog == "gh":
+		return prog
+	}
+	return ""
+}
+
+var (
+	goSubs    = set("install", "get", "build", "test", "vet", "run")
+	cargoSubs = set("install", "add", "build", "test", "run")
+)
+
+// forced reports an argument of git push that forces or deletes a ref.
+func forced(a string) bool {
+	return a == "--force" || strings.HasPrefix(a, "--force-with-lease") || strings.HasPrefix(a, "--force-if-includes") ||
+		shortFlag(a, "f") || (len(a) > 1 && a[0] == '+')
 }
 
 // shortFlag reports whether a is a cluster of short options (-rf) holding

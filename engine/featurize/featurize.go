@@ -47,6 +47,7 @@
 package featurize
 
 import (
+	"cmp"
 	"encoding/json"
 	"hash/fnv"
 	"math"
@@ -190,6 +191,53 @@ func Of(a limen.Action) Features {
 	attributes(C[cAttributes:cAttributes+attrBuckets], a.Attributes)
 	signals(C[cSignals:cSignals+3*signalBuckets], a.Signals)
 	return Features{A: A, C: C}
+}
+
+// LabelsVersion names the vocabulary of [Label]: a case keeps the version
+// its label was written with (spec 009).
+const LabelsVersion = "labels/1"
+
+// maxLabelName bounds the part of a label that is the action's own name.
+const maxLabelName = 64
+
+// Label names an action for the person it runs for, in words a person can
+// read, from the action's kind and name and, for a shell action, the
+// segments the shell reader's tables name (spec 009): "bash: git push,
+// go test", "bash: other command", "web_fetch", "egress https". It never
+// holds text of the input, so keeping it keeps the input unkept. The kind
+// and the name are the decision point's own fields, already kept with the
+// action.
+func Label(a limen.Action) string {
+	name := cut(strings.ToLower(strings.TrimSpace(a.Name)), maxLabelName)
+	if isShell(a) {
+		var ls []string
+		if cmd, ok := command(a.Input); ok {
+			ls = ReadShell(cmd).Labels
+		}
+		switch {
+		case len(ls) == 0:
+			return name + ": other command"
+		case len(ls) > 2:
+			return name + ": " + strings.Join(ls[:2], ", ") + ", …"
+		}
+		return name + ": " + strings.Join(ls, ", ")
+	}
+	kind := cut(strings.ToLower(strings.TrimSpace(a.Kind)), maxLabelName)
+	switch {
+	case kind == "tool" && name != "":
+		return name
+	case name == "":
+		return cmp.Or(kind, "action")
+	}
+	return kind + " " + name
+}
+
+// cut shortens s to at most n runes.
+func cut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }
 
 // shellNames are the tool names whose input is a shell command.
