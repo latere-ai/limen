@@ -70,6 +70,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [006](006-conformance.md) | Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests | drafted |
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | drafted |
+| [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | drafted |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not built; it is the rule every
