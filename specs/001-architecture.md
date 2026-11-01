@@ -1,6 +1,6 @@
 ---
 title: "Architecture: the shared vocabulary, the ledger, the predictor, and the decision point that composes them"
-status: testing
+status: complete
 track: core
 depends_on: []
 affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, server/, cmd/limend/, cmd/limen/, importer/topos/, api/, docs/]
@@ -237,11 +237,11 @@ review the decision point draws.
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. Limen is in production: hosted
+Recorded on 2026-11-01, after v0.3.0. Limen is in production: hosted
 [Topos](https://github.com/latere-ai/topos) v0.66.0 sends every tool call
 of a hosted session to one hosted `limend`. The architecture holds as
 designed. The decision point owns the decision, and Limen predicts and
-keeps the ledger.
+keeps the ledger. Every criterion has its proof in the tree.
 
 ### What was built
 
@@ -261,9 +261,9 @@ keeps the ledger.
 |---|---|
 | 1 | `TestRootImports` and the `depcheck` gate |
 | 2 | review: the table above matches the tree; its open rows are `cmd/limen-hook` and the shared store of [[004-engine]] |
-| 3 | `TestDecideProducesValidDecisions` here; `TestDecide`, `TestDecideProbabilityIsTheShowFrequency` and `FuzzDecide` in `latere.ai/x/pkg/verdict` |
-| 4 | conformance cases per invariant: 2 `FailClosed`; 3 `OneDecision`, `ReviewsWeightedByProbability`; 4 `UnknownIsAnAsk`, `AskTooCostly`; 5 `CasesNeverReturnInput`, `IdempotentPredict`; 6 `AnswerRoles`, `LaterAnswersNeverEstimate`; 7 `IdempotentPredict`, `DecisionNeedsAnAction`; 8 `ForgetIsScoped`, with the model's removal in the engine's `TestForgetDropsTheModel`. Invariant 1 is the verdict package's |
-| 5 | the engine: `TestConformance`, `TestConformanceInline`, `TestEngineConformance`; the client: `TestConformanceEngine`, `TestConformanceStub` |
+| 3 | `TestDecideNeverExceedsTheCeiling` and `TestDecideProducesValidDecisions` (`contract_test.go`); also `TestDecide`, `TestDecideProbabilityIsTheShowFrequency` and `FuzzDecide` in `latere.ai/x/pkg/verdict` |
+| 4 | conformance cases per invariant: 2 `FailClosed`; 3 `OneDecision`, `ReviewsWeightedByProbability`; 4 `UnknownIsAnAsk`, `AskTooCostly`; 5 `CasesNeverReturnInput`, `IdempotentPredict`; 6 `AnswerRoles`, `LaterAnswersNeverEstimate`; 7 `IdempotentPredict`, `DecisionNeedsAnAction`; 8 `ForgetIsScoped`, with the model's removal in the engine's `TestForgetDropsTheModel`. Invariant 1 is `verdict.Decide`'s, criterion 3 |
+| 5 | the engine: `TestConformance`, `TestConformanceInline`, `TestEngineConformance`; the client against a started `limend` on a fresh ledger directory: `TestConformance` in `cmd/limend`; also `TestConformanceEngine`, `TestConformanceStub` in `client/` |
 
 ### What diverges from the design as written
 
@@ -271,8 +271,7 @@ keeps the ledger.
 |---|---|---|
 | the package table | `server/`, `cmd/limen` and `importer/topos` exist and were not listed; the Postgres store was listed and does not exist | the table above is corrected; the shared store is [[004-engine]]'s |
 | a failure asks (invariant 2) | Limen's fallback is an `ask` with `ask_kind` `unsure`; a decision point that lets its rules decide an `unsure` ask, as hosted Topos does in its `learned` mode, also lets them decide when Limen fails | the invariant is about Limen's suggestion, and it holds; the decision point decides, never above its ceiling, and Limen never allows ([[007-evidence-gates]], Amendments) |
-| criterion 3 is proved by the `verdict` package's tests | those tests live in `latere.ai/x/pkg`, outside this tree; an undrawn automatic verdict also carries the audit rate | the vocabulary is shared by every decision point, so its tests sit with it |
-| the client passes the suite against a running `limend` | the client runs the suite against `server.New` in `httptest`, the handler `limend` serves | `cmd/limend` adds only the configuration; its `TestServe` starts it but runs no suite |
+| the probability of `verdict.Decide` is positive exactly for shown verdicts | it is positive for every verdict that review sampling could show, drawn or not: an undrawn automatic verdict carries the audit rate | the ledger weights each review by the probability that the action could be shown ([[008-ledger-and-estimation]]) |
 
 ### What this leaves open
 
@@ -280,4 +279,3 @@ keeps the ledger.
 |---|---|
 | `cmd/limen-hook` | the hooks for Claude Code and Codex come after Limen is open source ([[005-adapters]]) |
 | a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source ([[004-engine]]) |
-| criterion 3 in this tree and criterion 5 through a started `limend` | needed before this spec is `complete` |

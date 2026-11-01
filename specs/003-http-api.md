@@ -190,7 +190,7 @@ was built, each written into the section it changes:
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. The API is built as designed and is
+Recorded on 2026-11-01, after v0.3.0. The API is built as designed and is
 in production: a hosted `limend` serves it under
 `LIMEN_BASE_PATH=/v1/oversight` for hosted Topos and for the clients
 that show a person their explanations. Every criterion has a passing
@@ -214,7 +214,7 @@ test in the tree.
 | 4 | `TestAnswerBy` |
 | 5 | `TestReplayLimits`, `TestReplayReadError` |
 | 6 | `TestDecoding`, `TestQueryErrors` |
-| 7 | `TestConformanceEngine`, `TestConformanceStub` in `client/` |
+| 7 | `TestConformance` in `cmd/limend`, which starts `limend` on a fresh ledger directory for each case; also `TestConformanceEngine`, `TestConformanceStub` in `client/` |
 | 8 | `TestBasePath` in `server/` and in `cmd/limend`, and `TestConfiguration` |
 | 9 | `TestOwnContextProfile` |
 
@@ -222,7 +222,6 @@ test in the tree.
 
 | What it said | What was built | Why |
 |---|---|---|
-| criterion 7 runs the suite against a running `limend` | the client runs it against `server.New` behind `httptest`, the handler `limend` serves | `cmd/limend` adds only its configuration, which `TestServe`, `TestHostedOwnerPolicy` and `TestConfiguration` test on a started server |
 | the proofs of criteria 2 to 6 are `limend` handler tests | they are tests of `server/` | the handler moved to its own package so the client tests and `cmd/limend` share it |
 | a replay is bounded by its record count | the upload is also at most 256 MiB, and each line at most 1 MiB, both `body_too_large` | a record count alone does not bound the memory a line can take |
 | the owner policy covers cases and reports | it also lets a caller forget its own subject | a person's records are theirs ([[001-architecture]], invariant 8) |

@@ -27,10 +27,10 @@ on its main branch. A spec that cites a proposition cites that paper.
 
 Limen v0.3.0 is in production since 2026-11-01. Each spec's Outcome
 records what is built, the tests that prove it, and what is not built.
-Specs 003 and 009 are complete. Specs 001, 002, 006 and 008 describe
-code that is built and wait for the tests their criteria name. Spec 004
-is mostly built. Spec 005's hooks are not built, and spec 007 is a rule
-for deployments.
+Specs 001, 002, 003, 006, 008 and 009 are complete. Spec 004 is at
+`testing`: a second model version and a shared store are not built.
+Spec 005's hooks are not built, and spec 007 is a rule for
+deployments.
 
 ## Layout
 
@@ -39,8 +39,7 @@ the frontmatter. Numbers are stable identifiers and are never reused. Open
 specs sit here and are the work queue. A terminal spec moves to
 `specs/.archive/` keeping its number so `depends_on` paths keep resolving.
 The spec gate does not read the archive yet (`.lateregate.yaml` has no
-`archive` setting), so the complete specs 003 and 009 stay here until it
-does.
+`archive` setting), so the complete specs stay here until it does.
 
 ## Lifecycle
 
@@ -72,14 +71,14 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 
 | Spec | Title | Status |
 |---|---|---|
-| [001](001-architecture.md) | Architecture: the shared vocabulary, the ledger, the predictor, and the decision point that composes them | testing |
-| [002](002-contract.md) | Contract: the Go types, the Predictor, Ledger and Admin interfaces, the error table, fail-closed | testing |
+| [001](001-architecture.md) | Architecture: the shared vocabulary, the ledger, the predictor, and the decision point that composes them | complete |
+| [002](002-contract.md) | Contract: the Go types, the Predictor, Ledger and Admin interfaces, the error table, fail-closed | complete |
 | [003](003-http-api.md) | HTTP API: routes, bodies, statuses, the authorizer action and resource fields per route, subject binding, limits | complete |
-| [004](004-engine.md) | Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store | in-progress |
+| [004](004-engine.md) | Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store | testing |
 | [005](005-adapters.md) | Adapters: decision points for Claude Code and Codex hooks, Topos, and any harness over HTTP | drafted |
-| [006](006-conformance.md) | Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests | testing |
+| [006](006-conformance.md) | Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests | complete |
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
-| [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | testing |
+| [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
 
 The order of building is the order of the numbers except where a spec's

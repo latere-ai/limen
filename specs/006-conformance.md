@@ -1,6 +1,6 @@
 ---
 title: "Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests"
-status: testing
+status: complete
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
@@ -109,8 +109,8 @@ answers it recorded.
 Recorded on 2026-11-01, after v0.3.0. The suite and the stub are built
 and used: the engine with both stores, the HTTP client and the stub pass
 `conformance.Run`. Every case of the table runs, and each case fails
-against a stub seeded with its defect. The spec stays `testing` until
-criterion 4 has the test it names.
+against a stub seeded with its defect. Every criterion has a passing
+test in the tree.
 
 ### What was built
 
@@ -118,14 +118,14 @@ criterion 4 has the test it names.
 |---|---|
 | the suite, `Run(t, Target)` with `Steered` | `conformance/` |
 | the stub, `New(Options)` with `Predict` and `Clock` | `stub/` |
-| the runs of the suite | `TestRunAgainstTheStub`, `TestRunUnsteered` (`conformance/`); `TestConformance` (`stub/`, `engine/`); `TestConformanceInline` and `TestEngineConformance` (the engine with each store); `TestConformanceEngine` and `TestConformanceStub` (`client/`) |
+| the runs of the suite | `TestRunAgainstTheStub`, `TestRunUnsteered` (`conformance/`); `TestConformance` (`stub/`, `engine/`); `TestConformanceInline` and `TestEngineConformance` (the engine with each store); `TestConformance` in `cmd/limend` (the client against a started `limend`); `TestConformanceEngine` and `TestConformanceStub` (`client/`) |
 
 | # | Proof in the tree |
 |---|---|
 | 1 | `TestDefects`: for each case, in the order of the suite, a child run against a stub with that case's defect must fail on that case (`conformance/defects_test.go`) |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
-| 3 | the runs above; the client runs against `server.New`, the handler `limend` serves |
-| 4 | partly: the stub and the engine share `estimate/`, and the suite checks each against the same values; no test compares the two on one ledger |
+| 3 | the runs above |
+| 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same |
 | 5 | the `suite` gate, at 90% or more for each package |
 
 ### What diverges from the design as written
@@ -157,15 +157,13 @@ are merged:
 
 | What it said | What was built | Why |
 |---|---|---|
-| `UnknownIsAsk` checks 0.5 under saved profiles at each end of the accepted costs | `UnknownIsAnAsk` checks `ask` under the default profile | the engine's `TestLearns` and the contract tests hold 0.5 and every accepted profile ([[004-engine]]) |
 | `InvalidIsAnError` names every field at fault | `Validation` checks one named field per error | the contract tests hold the full lists ([[002-contract]]) |
 | `ReplayReport` checks the counts and the estimate | `Replay` checks the records and that nothing is kept without `keep` | the stub's `TestReplay` holds the counts for the stub alone |
-| `ForgetPerOrg` checks cases, reviews and reports | `ForgetIsScoped` checks cases | the engine's `TestForgetDropsTheModel` holds the model |
+| `ForgetPerOrg` checks cases, reviews and reports | `ForgetIsScoped` checks the cases and the reviews in the reports | the engine's `TestForgetDropsTheModel` holds the model |
 | the fail-closed cases wrap the target | `FailClosed` wraps a failing and a hanging predictor, then records into the target | the target is not what fails |
 | a decision point's own tests use the stub (Topos's, a hook's) | Topos tests against its own fake service over HTTP; no hook exists | Topos does not import this module ([[005-adapters]]) |
 
 ### What this leaves open
 
-| Open | Why |
-|---|---|
-| one test that runs the stub and the engine on one ledger (criterion 4) | not written ([[008-ledger-and-estimation]], criterion 7) |
+Nothing of this spec. A new rule of the contract adds its case and the
+defect that the case catches.

@@ -1,6 +1,6 @@
 ---
 title: "Contract: the Go types, the Predictor, Ledger and Admin interfaces, the error table, fail-closed"
-status: testing
+status: complete
 track: core
 depends_on: [001-architecture.md]
 affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go]
@@ -206,10 +206,11 @@ are validated strictly.
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. Every type, rule, interface and
+Recorded on 2026-11-01, after v0.3.0. Every type, rule, interface and
 error code of the design is in the module root, and the HTTP API serves
 the same contract ([[003-http-api]]). The root package reaches the
-standard library and `latere.ai/x/pkg/verdict` only.
+standard library and `latere.ai/x/pkg/verdict` only. Every criterion has
+a passing test in the tree.
 
 ### What was built
 
@@ -226,9 +227,9 @@ standard library and `latere.ai/x/pkg/verdict` only.
 | 2 | `TestCostsRefusesDecidingOnNoEvidence`, `TestCostsThresholds` |
 | 3 | `TestThresholdsVerdictIsBayesOptimal`, `TestThresholdsVerdict` |
 | 4 | `TestCertificationSize` |
-| 5 | partly: `TestActionValidate`, `TestDecisionValidate`, `TestAnswerAndQueries`, `TestProfileValidate`, `TestReplayRecordValidate`, `TestExplanationQueries` |
+| 5 | `TestActionValidate`, `TestDecisionValidate`, `TestAnswerAndQueries`, `TestProfileValidate`, `TestReplayRecordValidate`, `TestExplanationQueries`, each with one value that has every field at fault |
 | 6 | `TestDecideProducesValidDecisions` |
-| 7 | partly: `TestErrorTable` |
+| 7 | `TestErrorTable`, with an `*Error` wrapped twice |
 | 8 | `TestFailClosedOnError`, `TestFailClosedOnTimeout`, `TestFailClosedPassesAPrediction` |
 | 9 | the `suite` gate, which measures coverage across packages |
 | 10 | the conformance suite ([[006-conformance]]); the relay rule by the server's `TestAnswerBy` |
@@ -242,10 +243,9 @@ standard library and `latere.ai/x/pkg/verdict` only.
 | `Prediction` | carries `evidence_ratio` and, for an `ask`, `ask_kind`; the `FailClosed` fallback is `unsure` | added in v0.3.0 by [[009-explanations]], so a decision point can let its rules decide an `unsure` ask |
 | `invalid_query` is for the two queries; `invalid_replay` names a line | the table above lists every use | the explanation routes and the forget and profile routes reuse the code |
 | `rate_limited` (429) | the code and its sentence exist; no implementation sends it | `limend` has no rate limiter; an installation limits at its ingress |
+| a query window | a window with neither bound names both `from` and `to` (fixed after v0.3.0, which named `from` only) | every field at fault, in one error |
 
 ### What this leaves open
 
-| Open | Why |
-|---|---|
-| criterion 5: every field at fault for each type | `ReliabilityQuery.Validate` names only `from` when both `from` and `to` are zero, and no test asserts more than one field at fault for `Decision`, `Profile` or `CaseQuery` |
-| criterion 7: `CodeOf` over a wrapped `*Error` | no test wraps one with `%w` |
+Nothing of this spec. A new type or code changes this spec and the
+contract together.

@@ -1,6 +1,6 @@
 ---
 title: "Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source"
-status: testing
+status: complete
 track: core
 depends_on: [001-architecture.md, 002-contract.md]
 affects: [estimate/, stub/, engine/, reliability.go, answer.go, replay.go, cmd/limen/]
@@ -143,10 +143,11 @@ recorded verdict was shown.
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. The records, the roles of answers,
-the estimate, the certificate and the replay are built in `estimate/`,
-shared by the engine and the stub, and the reliability reports are in
-production behind hosted Topos. Two criteria lack the tests they name.
+Recorded on 2026-11-01, after v0.3.0. The records, the roles of
+answers, the estimate, the certificate and the replay are built in
+`estimate/`, shared by the engine and the stub, and the reliability
+reports are in production behind hosted Topos. Every criterion has a
+passing test in the tree.
 
 ### What was built
 
@@ -163,8 +164,8 @@ production behind hosted Topos. Two criteria lack the tests they name.
 | 3 | `TestRateIsUnbiased`, a seeded Monte Carlo run with a fixed tolerance of about four standard errors |
 | 4 | `TestRate` ("not estimable is null, not zero"); the conformance case `NullIsNotZero` |
 | 5 | `TestRate` ("unanswered"); the conformance case `Unanswered` |
-| 6 | partly: `TestCertificate` tests the boundary at 12 audits (alpha 0.25); the default claim is checked for `needed` 300 only |
-| 7 | partly: the engine and the stub call the same `estimate/` functions, and the suite checks each against the same values |
+| 6 | `TestCertificateAt300`: the default claim holds on 300 clean audits and not on 299; also `TestCertificate` and the conformance case `Certificate` |
+| 7 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`), over the whole history and a part of it, the certificate included |
 
 ### What diverges from the design as written
 
@@ -176,7 +177,6 @@ production behind hosted Topos. Two criteria lack the tests they name.
 
 ### What this leaves open
 
-| Open | Why |
-|---|---|
-| criterion 6 at 300: 300 clean audits hold and 299 do not | not written |
-| criterion 7: one test that runs the engine and the stub on one history and compares their reports, the certificate included | not written |
+Nothing of this spec. Judges' signals and the decision sources use the
+same estimate; what a deployment must measure before Limen decides is
+[[007-evidence-gates]]'s.

@@ -1,6 +1,6 @@
 ---
 title: "Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store"
-status: in-progress
+status: testing
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [engine/, engine/kernel/, engine/gp/, engine/featurize/, engine/store/]
@@ -302,12 +302,12 @@ reviewer.
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. The engine predicts, keeps the ledger
-and fits off the hot path, in process and behind `limend`, and it is in
-production behind hosted Topos. Two parts of the design are not built:
-side-by-side model versions and a store that more than one process
-shares. The spec stays `in-progress` until they are built or moved to
-their own spec.
+Recorded on 2026-11-01, after v0.3.0. The engine predicts, keeps the
+ledger and fits off the hot path, in process and behind `limend`, and it
+is in production behind hosted Topos. Every criterion has a test in the
+tree. Two parts of the design are not built: a second model version
+beside the first, and a store that more than one process shares. The
+spec stays `testing` until they are built or moved to their own spec.
 
 ### What was built
 
@@ -327,11 +327,11 @@ their own spec.
 | 3 | `TestShellClasses`, `TestShellDestructive`, `TestShellOutsideWorkspace`, `TestShellPrograms`, `TestRedirection`, `TestShellDepthBound`, `FuzzReadShell` |
 | 4 | `TestLearns`, `TestForgetDropsTheModel`, `TestPrior`, `TestCostsThresholds`; the conformance case `UnknownIsAnAsk` |
 | 5 | `TestTimeCountsDecisions`; the store rules `NextT` and `NextTConcurrent` |
-| 6 | partly: `BenchmarkPredict512` measures the posterior alone, about 0.1 ms on an Apple M5 Pro |
-| 7 | partly: `TestBackgroundConverges` and `TestBackgroundFitAndReload`, with the real clock |
-| 8 | partly: `TestEvictionReloads` |
-| 9 | partly: the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestCaseContract`, `TestLabelKeepsNoInput` |
-| 10 | not built |
+| 6 | `TestPredictionNeverFits`, on the fake clock of `testing/synctest`, and `TestWarmPredictionAt512` (`engine/fit_test.go`); `BenchmarkPredictWarm512` reports the 99th percentile |
+| 7 | `TestBackgroundFitWithinFiveSeconds`, on the fake clock; also `TestBackgroundFitAndReload` |
+| 8 | `TestCacheStaysWithinTheBudget`, `TestEvictionReloads` |
+| 9 | `TestNoFileHoldsTheInput` (`engine/store/file`), which searches every file of a ledger for a marker; also the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestLabelKeepsNoInput` |
+| 10 | `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version |
 | 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store) |
 
 ### What diverges from the design as written
@@ -351,6 +351,5 @@ their own spec.
 
 | Open | Why |
 |---|---|
-| criterion 10: versions that never share data, and an old version that serves while a new one fits | the cache is keyed by organization and subject; only `features/1` and version 1 exist |
+| a second model version that fits beside the first, and the operator's switch after a replay comparison | only `features/1` and version 1 exist; the cache in memory is keyed by organization and subject |
 | a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source |
-| the tests that criteria 6 to 9 name: a fit counter and a p99 on the reference runner, a fake clock with the five-second bound, a memory budget test, a search of every stored file for an input marker | the behavior is in place; the named tests are not |

@@ -249,7 +249,7 @@ or an `ask` with no `ask_kind`. The
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. The three views and the evidence on a
+Recorded on 2026-11-01, after v0.3.0. The three views and the evidence on a
 prediction are built, in production, and every criterion has a passing
 test in the tree. Hosted Topos decides on `ask_kind` in its `learned`
 mode ([[007-evidence-gates]], Amendments). People read the views through
@@ -273,7 +273,7 @@ the `oversight` package of
 |---|---|
 | 1 | `TestExplainSumsToTheMean` (`engine/gp`); the conformance case `Explanations` |
 | 2 | `TestExplainSumsToTheMean`, `TestExplanationIsThePrediction` |
-| 3 | `TestAskKinds`, `TestExplanationIsThePrediction` |
+| 3 | `TestAskKinds`, `TestExplanationIsThePrediction`, `TestBlockHasNoAskKind` |
 | 4 | `TestExplanationAfterARefit` |
 | 5 | `TestLabelKeepsNoInput`, `TestLabel`; the conformance case `LearnedEntries` |
 | 6 | `TestPreview`; the server's `TestQueryErrors`; the conformance cases `Previews` and `PreviewErrors` |
@@ -295,7 +295,6 @@ divergences remain:
 | a label holds the kind and the name | a tool's label is its name alone; a shell label is `<name>: <classes>`, at most two segments and then `…`; the kind appears for other kinds | the format is `featurize.Label`'s; it keeps no input string either way |
 | no view holds the subject's lock longer than a prediction | `Explain`, `Learned` and `Preview` hold it for their whole run, and `Learned` explains each label and up to 20 trend points under it | a view reads one subject's cases consistently; no view runs on a decision's path, and its effect on a waiting prediction is not measured |
 | the views' fields | `Learned` also names its `model`, each entry carries the profile's `thresholds`, entries come most answered first, and a preview echoes its request with `records`, `answered` and `thresholds` | a client needs them to draw the views |
-| the explanation's `ask_kind` is absent for `block` | held by the same branch as for `allow`, which `TestExplanationIsThePrediction` tests; no test builds a `block` | `askKind` returns nothing for every verdict but `ask` |
 
 ### What this leaves open
 
