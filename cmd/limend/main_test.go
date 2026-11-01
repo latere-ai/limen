@@ -17,6 +17,7 @@ import (
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/client"
+	"latere.ai/x/limen/conformance"
 )
 
 func env(m map[string]string) func(string) string {
@@ -215,4 +216,25 @@ func TestServerStops(t *testing.T) {
 	if code != exitFail || !strings.Contains(errOut.String(), "the server stopped") {
 		t.Errorf("exit %d: %s", code, errOut.String())
 	}
+}
+
+// The client against a running limend passes the conformance suite
+// (spec 001, criterion 5; spec 003, criterion 7): each case starts limend
+// on a fresh ledger directory, as a person runs it, and stops it after.
+func TestConformance(t *testing.T) {
+	conformance.Run(t, conformance.Target{
+		New: func(t *testing.T) limen.Service {
+			addr, stop := start(t, t.TempDir())
+			t.Cleanup(func() {
+				if code, log := stop(); code != exitOK {
+					t.Errorf("stop: exit %d: %s", code, log)
+				}
+			})
+			c, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return c
+		},
+	})
 }
