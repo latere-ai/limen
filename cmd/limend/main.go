@@ -13,6 +13,11 @@
 //	                  or ~/.local/state/limen
 //	LIMEN_SUBJECT   the person the server answers to, who may act for every
 //	                  subject in it; default local
+//	LIMEN_BASE_PATH a second prefix for the API in place of /v1, for an
+//	                  ingress that forwards a public path unchanged, for
+//	                  example /v1/oversight; default none
+//
+// docs/running.md has the variables of a hosted server.
 //
 // It stops on an interrupt or a termination signal, after fitting what
 // arrived since the last fit. It exits 0 when stopped, 1 when it fails, and
@@ -98,6 +103,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		errOut.Printf("limend: %v\n", err)
 		return exitConfig
 	}
+	base := strings.TrimSpace(getenv("LIMEN_BASE_PATH"))
+	if err := server.CheckBasePath(base); err != nil {
+		errOut.Printf("limend: LIMEN_BASE_PATH is not correct: %v. Use an absolute path with no slash at the end, for example /v1/oversight.\n", err)
+		return exitConfig
+	}
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
 	dir := dataDir(getenv)
 	if dir == "" {
@@ -133,12 +143,16 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	defer func() { _ = eng.Close() }()
 	o := acc.options
 	o.Logger = slog.New(slog.NewTextHandler(errOut, nil))
+	o.BasePath = base
 	srv := &http.Server{
 		Handler:           server.New(eng, o),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
 	out.Printf("Limen is available at http://%s. The ledger is in %s. Callers: %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir, acc.describe)
+	if base != "" {
+		out.Printf("The API is also available under %s.\n", base)
+	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	select {

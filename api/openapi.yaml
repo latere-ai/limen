@@ -289,7 +289,7 @@ paths:
       x-limen-action: profile.read
       x-limen-resource:
         kind: Profile
-        fields: [org, action_kind, agent]
+        fields: [org, action_kind, agent, subject]
       parameters:
       - $ref: "#/components/parameters/org"
       - name: kind
@@ -329,7 +329,7 @@ paths:
       x-limen-action: profile.write
       x-limen-resource:
         kind: Profile
-        fields: [org, action_kind, agent]
+        fields: [org, action_kind, agent, subject]
       requestBody:
         required: true
         content:
@@ -431,6 +431,143 @@ paths:
           description: Nothing about the subject remains in the organization.
         "400":
           $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
+  /v1/explanations:
+    get:
+      operationId: getExplanation
+      summary: Explain one prediction
+      description: >-
+        Takes one action's prediction apart in the model's own terms (spec
+        009): the answers that moved it most, each with its exact share of
+        the model's latent mean, the split of that mean into what the model
+        knows about this kind of action and about the person lately, and
+        for an ask whether it comes from too few answers (unsure) or from
+        answers that disagree (split). The explanation is by the person's
+        current model; predicted_by names the model that made the recorded
+        prediction, so a client can say the model has learned since. A
+        decision point never shows an explanation to an agent.
+      x-limen-action: case.list
+      x-limen-resource:
+        kind: Case
+        fields: [org, subject]
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/subject"
+      - name: action_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: The explanation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Explanation"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "404":
+          $ref: "#/components/responses/no_case"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
+  /v1/learned:
+    get:
+      operationId: getLearned
+      summary: Show what the model learned
+      description: >-
+        What the model has learned about one person: for each kind of action
+        they answered, named by its label, how often they approved and
+        denied it and what the model suggests now under the profile that
+        applies, with the evidence ratio and kind of uncertainty of an ask;
+        and the shared tolerance part over their decisions, for a trend.
+      x-limen-action: case.list
+      x-limen-resource:
+        kind: Case
+        fields: [org, subject]
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/subject"
+      - name: agent
+        in: query
+        required: false
+        description: The agent whose profile applies, with kind; empty applies the organization's.
+        schema:
+          type: string
+      - name: kind
+        in: query
+        required: false
+        description: Only the entries of this action kind.
+        schema:
+          type: string
+      responses:
+        "200":
+          description: What the model learned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learned"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
+  /v1/previews:
+    post:
+      operationId: createPreview
+      summary: Preview another profile
+      description: >-
+        What other costs would have done with one person's recorded
+        predictions in a window: the predictions as they were made,
+        re-thresholded under the costs' thresholds, with no model refitted.
+        Costs are checked as a profile's are.
+      x-limen-action: reliability.read
+      x-limen-resource:
+        kind: Reliability
+        fields: [org, subject]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewRequest"
+      responses:
+        "200":
+          description: The preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preview"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "413":
+          $ref: "#/components/responses/body_too_large"
+        "422":
+          $ref: "#/components/responses/ask_too_costly"
         "401":
           $ref: "#/components/responses/unauthenticated"
         "403":
@@ -896,6 +1033,215 @@ components:
         kept:
           type: boolean
       required: [records, answered, would, allowed_denied, blocked_approved, false_allow, kept]
+    ModelRef:
+      type: object
+      description: One fitted model of a person, the source of its predictions and the number of the person's answers it was fitted through.
+      properties:
+        source:
+          type: string
+        answers:
+          type: integer
+          minimum: 0
+      required: [source, answers]
+    AskKind:
+      type: string
+      description: The uncertainty behind a suggested ask. unsure is little evidence, which more answers will move; split is evidence that disagrees, which they will not.
+      enum: [unsure, split]
+    Parts:
+      type: object
+      description: The latent mean split by the additive model's terms; they sum to the mean.
+      properties:
+        action:
+          type: number
+          description: What the model knows about this kind of action at any time.
+        recent:
+          type: number
+          description: The person's tolerance lately, which every answer moves whatever its action.
+        interaction:
+          type: number
+      required: [action, recent, interaction]
+    Evidence:
+      type: object
+      description: One answer's share of an explanation. An approval pushed toward running, a denial toward stopping.
+      properties:
+        action_id:
+          type: string
+        label:
+          type: string
+          description: The answered action's label, from the featurizer's closed vocabulary, never from the input.
+        at:
+          type: string
+          format: date-time
+        approve:
+          type: boolean
+        share:
+          $ref: "#/components/schemas/Probability"
+          description: The answer's absolute contribution over the sum of all absolute contributions.
+      required: [action_id, label, at, approve, share]
+    Explanation:
+      type: object
+      description: One prediction taken apart in the model's own terms (spec 009).
+      properties:
+        org:
+          type: string
+        subject:
+          type: string
+        action_id:
+          type: string
+        model:
+          $ref: "#/components/schemas/ModelRef"
+        predicted_by:
+          $ref: "#/components/schemas/ModelRef"
+        approve:
+          $ref: "#/components/schemas/Probability"
+        uncertainty:
+          type: number
+          minimum: 0
+        verdict:
+          $ref: "#/components/schemas/Suggestion"
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+        mean:
+          type: number
+          description: The model's latent mean at the action; approve is its probit after the uncertainty.
+        parts:
+          $ref: "#/components/schemas/Parts"
+        evidence_ratio:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: The share of the prior variance the person's answers removed at this action.
+        ask_kind:
+          $ref: "#/components/schemas/AskKind"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+          description: Up to three answers toward the verdict's side and two against it, or three each way for an ask, by share.
+      required: [org, subject, action_id, model, approve, uncertainty, verdict, thresholds, mean, evidence_ratio, evidence]
+    LearnedEntry:
+      type: object
+      description: One kind of action the person answered, and what the model suggests for it now.
+      properties:
+        label:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        approved:
+          type: integer
+          minimum: 0
+        denied:
+          type: integer
+          minimum: 0
+        approve:
+          $ref: "#/components/schemas/Probability"
+        uncertainty:
+          type: number
+          minimum: 0
+        verdict:
+          $ref: "#/components/schemas/Suggestion"
+        evidence_ratio:
+          type: number
+          minimum: 0
+          maximum: 1
+        ask_kind:
+          $ref: "#/components/schemas/AskKind"
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+      required: [label, kind, name, approved, denied, approve, uncertainty, verdict, evidence_ratio, thresholds]
+    TrendPoint:
+      type: object
+      properties:
+        t:
+          type: integer
+          minimum: 0
+          description: The decision's ordinal in the person's history.
+        at:
+          type: string
+          format: date-time
+        value:
+          type: number
+          description: The shared tolerance part of the model at that decision.
+      required: [t, at, value]
+    Learned:
+      type: object
+      description: What the model has learned about one person.
+      properties:
+        org:
+          type: string
+        subject:
+          type: string
+        model:
+          $ref: "#/components/schemas/ModelRef"
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LearnedEntry"
+        recent:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/TrendPoint"
+      required: [org, subject, model, entries, recent]
+    PreviewRequest:
+      type: object
+      properties:
+        org:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        costs:
+          $ref: "#/components/schemas/Costs"
+        audit_rate:
+          $ref: "#/components/schemas/Probability"
+      required: [org, subject, from, to, costs, audit_rate]
+    Preview:
+      type: object
+      description: What the previewed costs would have done with the recorded predictions in the window.
+      properties:
+        org:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        costs:
+          $ref: "#/components/schemas/Costs"
+        audit_rate:
+          $ref: "#/components/schemas/Probability"
+        thresholds:
+          $ref: "#/components/schemas/Thresholds"
+        records:
+          type: integer
+        would:
+          type: object
+          description: The recorded predictions in the window, counted by the verdict the thresholds give them.
+          propertyNames:
+            $ref: "#/components/schemas/Suggestion"
+          additionalProperties:
+            type: integer
+        answered:
+          type: integer
+        allowed_denied:
+          type: integer
+        blocked_approved:
+          type: integer
+        expected_asks:
+          type: number
+          description: The asks, plus the audits the audit rate would draw from the automatic verdicts.
+      required: [org, subject, from, to, costs, audit_rate, thresholds, records, would, answered, allowed_denied, blocked_approved, expected_asks]
     ForgetRequest:
       type: object
       properties:
@@ -995,6 +1341,12 @@ components:
             $ref: "#/components/schemas/Error"
     no_decision:
       description: "409 no_decision: This action has no recorded decision. Record the decision, then send the answer."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    no_case:
+      description: "404 no_case: Limen has no record of this action. Check the organization, the person, and the action ID."
       content:
         application/json:
           schema:

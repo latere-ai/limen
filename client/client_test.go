@@ -67,6 +67,31 @@ func TestNew(t *testing.T) {
 			t.Errorf("base URL %q accepted", u)
 		}
 	}
+	if _, err := client.New("http://x", client.Options{HTTP: http.DefaultClient, BasePath: "v1/oversight"}); err == nil {
+		t.Error("a relative base path accepted")
+	}
+}
+
+// With a base path the client calls the routes under it.
+func TestBasePath(t *testing.T) {
+	var got []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(ts.Close)
+	c, err := client.New(ts.URL, client.Options{HTTP: ts.Client(), BasePath: "/v1/oversight/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Learned(ctx, limen.LearnedQuery{Org: "o", Subject: "s"})
+	c.Explain(ctx, limen.Key{Org: "o", Subject: "s", ActionID: "a"})
+	c.Preview(ctx, limen.PreviewRequest{Org: "o", Subject: "s"})
+	want := []string{"GET /v1/oversight/learned", "GET /v1/oversight/explanations", "POST /v1/oversight/previews"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("paths %v, want %v", got, want)
+	}
 }
 
 var ctx = context.Background()

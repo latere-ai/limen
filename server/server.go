@@ -48,6 +48,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"latere.ai/x/pkg/authz"
@@ -85,6 +86,28 @@ type Options struct {
 	// MaxReplayBytes bounds a whole replay upload; zero is
 	// DefaultMaxReplayBytes. limen.MaxReplayRecords bounds its records.
 	MaxReplayBytes int64
+	// BasePath, when set, serves every route a second time with this
+	// prefix in place of /v1, for a public route an Ingress forwards
+	// unchanged: "/v1/oversight" serves /v1/oversight/predictions beside
+	// /v1/predictions, with the same permissions. [New] panics on a base
+	// path [CheckBasePath] refuses.
+	BasePath string
+}
+
+// CheckBasePath reports a base path the server cannot serve: one that is
+// not an absolute path, ends in a slash, or is /v1 itself.
+func CheckBasePath(p string) error {
+	switch {
+	case p == "":
+		return nil
+	case !strings.HasPrefix(p, "/") || strings.HasSuffix(p, "/"):
+		return fmt.Errorf("base path %q must start with a slash and not end with one", p)
+	case p == "/v1":
+		return errors.New("base path /v1 is where every route is served already")
+	case strings.ContainsAny(p, " ?#{}"):
+		return fmt.Errorf("base path %q holds a character a route pattern cannot", p)
+	}
+	return nil
 }
 
 // Local is the setup of a server one person runs for themselves: the
@@ -122,6 +145,9 @@ var routes = []route{
 	{http.MethodPut, "/v1/profiles", authorizer.ActionProfileWrite, (*handler).putProfile},
 	{http.MethodPost, "/v1/replays", authorizer.ActionReplayCreate, (*handler).replay},
 	{http.MethodPost, "/v1/subjects/forget", authorizer.ActionSubjectForget, (*handler).forget},
+	{http.MethodGet, "/v1/explanations", authorizer.ActionCaseList, (*handler).explain},
+	{http.MethodGet, "/v1/learned", authorizer.ActionCaseList, (*handler).learned},
+	{http.MethodPost, "/v1/previews", authorizer.ActionReliabilityRead, (*handler).preview},
 }
 
 // New returns the handler that serves svc.
@@ -141,8 +167,14 @@ func New(svc limen.Service, o Options) http.Handler {
 		h.log = slog.New(slog.DiscardHandler)
 	}
 	mux := http.NewServeMux()
+	if err := CheckBasePath(o.BasePath); err != nil {
+		panic("server: " + err.Error())
+	}
 	for _, rt := range routes {
 		mux.Handle(rt.method+" "+rt.path, h.serve(rt))
+		if o.BasePath != "" {
+			mux.Handle(rt.method+" "+o.BasePath+strings.TrimPrefix(rt.path, "/v1"), h.serve(rt))
+		}
 	}
 	return mux
 }
@@ -245,9 +277,17 @@ func reliabilityResource(org, subject string) authz.Resource {
 	return authz.NewResource(authorizer.KindReliability, subject, map[string]any{"org": org, "subject": subject})
 }
 
+// A profile whose org is a rendered subject, issuer and sub joined by a
+// pipe, is a person's own context, which hosted decision points key a
+// person's sessions by: it carries that subject, so the owner policy lets
+// the person read and write it. No organization id holds a pipe, so an
+// organization's profiles carry no subject and stay its admins'.
 func profileResource(s limen.Scope) authz.Resource {
-	return authz.NewResource(authorizer.KindProfile, s.Org+"/"+s.Kind+"/"+s.Agent,
-		map[string]any{"org": s.Org, "action_kind": s.Kind, "agent": s.Agent})
+	fields := map[string]any{"org": s.Org, "action_kind": s.Kind, "agent": s.Agent}
+	if strings.Contains(s.Org, "|") {
+		fields["subject"] = s.Org
+	}
+	return authz.NewResource(authorizer.KindProfile, s.Org+"/"+s.Kind+"/"+s.Agent, fields)
 }
 
 func replayResource(org string) authz.Resource {
@@ -659,4 +699,57 @@ func trimSpace(b []byte) []byte {
 		b = b[:len(b)-1]
 	}
 	return b
+}
+
+func (h *handler) explain(c *call) error {
+	q := c.r.URL.Query()
+	k := limen.Key{Org: q.Get("org"), Subject: q.Get("subject"), ActionID: q.Get("action_id")}
+	if err := k.Validate(); err != nil {
+		return err
+	}
+	if err := h.authorize(c, caseResource(k.Org, k.Subject)); err != nil {
+		return err
+	}
+	x, err := h.svc.Explain(c.r.Context(), k)
+	if err != nil {
+		return err
+	}
+	writeJSON(c.w, http.StatusOK, x)
+	return nil
+}
+
+func (h *handler) learned(c *call) error {
+	q := c.r.URL.Query()
+	lq := limen.LearnedQuery{Org: q.Get("org"), Subject: q.Get("subject"), Agent: q.Get("agent"), Kind: q.Get("kind")}
+	if err := lq.Validate(); err != nil {
+		return err
+	}
+	if err := h.authorize(c, caseResource(lq.Org, lq.Subject)); err != nil {
+		return err
+	}
+	l, err := h.svc.Learned(c.r.Context(), lq)
+	if err != nil {
+		return err
+	}
+	writeJSON(c.w, http.StatusOK, l)
+	return nil
+}
+
+func (h *handler) preview(c *call) error {
+	var r limen.PreviewRequest
+	if err := h.decode(c, &r, limen.CodeInvalidQuery); err != nil {
+		return err
+	}
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if err := h.authorize(c, reliabilityResource(r.Org, r.Subject)); err != nil {
+		return err
+	}
+	p, err := h.svc.Preview(c.r.Context(), r)
+	if err != nil {
+		return err
+	}
+	writeJSON(c.w, http.StatusOK, p)
+	return nil
 }

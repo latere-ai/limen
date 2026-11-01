@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine/featurize"
 	"latere.ai/x/limen/engine/gp"
 	"latere.ai/x/limen/engine/kernel"
@@ -20,7 +21,7 @@ import (
 // a lock; a fit swaps in a new posterior and never mutates the old one.
 type model struct {
 	key  subjectKey
-	post atomic.Pointer[gp.Posterior]
+	post atomic.Pointer[fitted]
 	// answers counts the answers the subject has given, and fitted the
 	// count the current posterior was fitted through. A model is due when
 	// they differ.
@@ -35,6 +36,17 @@ type model struct {
 }
 
 func (m *model) due() int64 { return m.answers.Load() - m.fitted.Load() }
+
+// fitted is a posterior with the number of the subject's answers it was
+// fitted through, read together so a prediction names the model that made
+// it (spec 009).
+type fitted struct {
+	*gp.Posterior
+	answers int64
+}
+
+// ref names the posterior as the contract does.
+func (f *fitted) ref() limen.ModelRef { return limen.ModelRef{Source: Source, Answers: f.answers} }
 
 // cache holds models under a byte budget, least recently used first out.
 type cache struct {
@@ -175,7 +187,7 @@ func (e *Engine) load(ctx context.Context, k subjectKey) (*model, error) {
 		}
 		m.fitted.Store(s.Answers)
 	}
-	m.post.Store(post)
+	m.post.Store(&fitted{Posterior: post, answers: m.fitted.Load()})
 	m.bytes.Store(sizeOf(post))
 	if m.due() > 0 && e.inline <= 0 {
 		e.schedule(m)
@@ -242,7 +254,7 @@ func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
 	if err := e.st.PutSnapshot(ctx, m.key.org, m.key.subject, Version, b); err != nil {
 		return err
 	}
-	m.post.Store(post)
+	m.post.Store(&fitted{Posterior: post, answers: answers})
 	m.fitted.Store(answers)
 	e.models.resize(m, sizeOf(post))
 	return nil

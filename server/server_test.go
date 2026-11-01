@@ -82,6 +82,18 @@ func (s *spy) Forget(ctx context.Context, org, subject string) error {
 	s.calls.Add(1)
 	return s.Service.Forget(ctx, org, subject)
 }
+func (s *spy) Explain(ctx context.Context, k limen.Key) (limen.Explanation, error) {
+	s.calls.Add(1)
+	return s.Service.Explain(ctx, k)
+}
+func (s *spy) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learned, error) {
+	s.calls.Add(1)
+	return s.Service.Learned(ctx, q)
+}
+func (s *spy) Preview(ctx context.Context, r limen.PreviewRequest) (limen.Preview, error) {
+	s.calls.Add(1)
+	return s.Service.Preview(ctx, r)
+}
 
 func action(subject, id string) limen.Action {
 	return limen.Action{Org: "o", Subject: subject, ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
@@ -159,7 +171,15 @@ func valid(t *testing.T) []req {
 		{http.MethodPut, "/v1/profiles", body(t, limen.Profile{Org: "o", Kind: "tool", Costs: limen.DefaultCosts, AuditRate: 0.05})},
 		{http.MethodPost, "/v1/replays?keep=false", body(t, rec) + "\n\n"},
 		{http.MethodPost, "/v1/subjects/forget", body(t, map[string]string{"org": "o", "subject": bob})},
+		{http.MethodGet, "/v1/explanations?org=o&subject=" + alice + "&action_id=seed", ""},
+		{http.MethodGet, "/v1/learned?org=o&subject=" + alice + "&kind=tool", ""},
+		{http.MethodPost, "/v1/previews", body(t, preview(alice, now))},
 	}
+}
+
+// preview is a valid preview request for subject around now.
+func preview(subject string, now time.Time) limen.PreviewRequest {
+	return limen.PreviewRequest{Org: "o", Subject: subject, From: now.Add(-time.Hour), To: now.Add(time.Hour), Costs: limen.DefaultCosts, AuditRate: 0.05}
 }
 
 // seeded returns a service holding alice's decided seed action.
@@ -233,11 +253,7 @@ func TestRoutesMatchOpenAPI(t *testing.T) {
 // Each route asks exactly its action about exactly spec 003's resource.
 func TestAuthorizerQuestions(t *testing.T) {
 	az := azstub.New(t, azstub.WithVocabulary(authorizer.Vocabulary()))
-	client, err := authz.NewClient(authz.Options{URL: az.URL(), Token: az.Token(), HTTP: &http.Client{}, Vocabulary: authorizer.Vocabulary()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := New(seeded(t, stub.New(stub.Options{})), Options{Authenticator: StaticToken(tok, admin), Authorizer: client})
+	svc := seeded(t, stub.New(stub.Options{}))
 	want := []struct {
 		action, kind string
 		fields       map[string]any
@@ -251,8 +267,18 @@ func TestAuthorizerQuestions(t *testing.T) {
 		{authorizer.ActionProfileWrite, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "tool", "agent": ""}},
 		{authorizer.ActionReplayCreate, authorizer.KindReplay, map[string]any{"org": "o"}},
 		{authorizer.ActionSubjectForget, authorizer.KindSubject, map[string]any{"org": "o", "subject": bob}},
+		{authorizer.ActionCaseList, authorizer.KindCase, map[string]any{"org": "o", "subject": alice}},
+		{authorizer.ActionCaseList, authorizer.KindCase, map[string]any{"org": "o", "subject": alice}},
+		{authorizer.ActionReliabilityRead, authorizer.KindReliability, map[string]any{"org": "o", "subject": alice}},
 	}
 	for i, r := range valid(t) {
+		// A fresh client per route, since a client caches its decisions
+		// and routes share questions.
+		client, err := authz.NewClient(authz.Options{URL: az.URL(), Token: az.Token(), HTTP: &http.Client{}, Vocabulary: authorizer.Vocabulary()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := New(svc, Options{Authenticator: StaticToken(tok, admin), Authorizer: client})
 		az.ClearRequests()
 		if w := do(t, h, r); w.Code >= 300 {
 			t.Fatalf("%s: %d %s", r.target, w.Code, w.Body.String())
@@ -413,6 +439,14 @@ func TestDecoding(t *testing.T) {
 	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", body(t, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}})}), limen.CodeAskTooCostly)
 	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "x"}), limen.CodeInvalidQuery)
 	wantCode(t, do(t, h, req{http.MethodPost, "/v1/subjects/forget", "{}"}), limen.CodeInvalidQuery, "org", "subject")
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/previews", "x"}), limen.CodeInvalidQuery)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/previews", `{"audit_rate":2}`}), limen.CodeInvalidQuery, "org", "subject", "from", "audit_rate")
+	costly := preview(alice, time.Now())
+	costly.Costs = limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/previews", body(t, costly)}), limen.CodeAskTooCostly)
+	late := preview(alice, time.Now())
+	late.To = late.From
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/previews", body(t, late)}), limen.CodeInvalidQuery, "to")
 	big := `{"org":"` + strings.Repeat("x", DefaultMaxBodyBytes) + `"}`
 	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", big}), limen.CodeBodyTooLarge)
 }
@@ -425,6 +459,88 @@ func TestQueryErrors(t *testing.T) {
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned&from=yesterday&to=2026-10-02T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned", ""}), limen.CodeInvalidQuery, "from")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles", ""}), limen.CodeInvalidQuery, "org")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o", ""}), limen.CodeInvalidQuery, "subject", "action_id")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o&subject=s&action_id=none", ""}), limen.CodeNoCase, "action_id")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/learned?subject=s", ""}), limen.CodeInvalidQuery, "org")
+}
+
+// With a base path every route is served under it as well, with the same
+// permissions and the same answers, and /v1 stays.
+func TestBasePath(t *testing.T) {
+	for _, bad := range []string{"v1/oversight", "/v1/oversight/", "/", "/v1", "/a b", "/a{x}"} {
+		if CheckBasePath(bad) == nil {
+			t.Errorf("CheckBasePath(%q) = nil", bad)
+		}
+	}
+	for _, good := range []string{"", "/v1/oversight", "/limen"} {
+		if err := CheckBasePath(good); err != nil {
+			t.Errorf("CheckBasePath(%q) = %v", good, err)
+		}
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("New took the base path /v1/")
+			}
+		}()
+		New(stub.New(stub.Options{}), Options{BasePath: "/v1/"})
+	}()
+
+	h := New(seeded(t, stub.New(stub.Options{})), Options{Authenticator: StaticToken(tok, bob), Authorizer: OwnerPolicy{Admins: []string{admin}}, BasePath: "/v1/oversight"})
+	for _, r := range valid(t) {
+		under := r
+		under.target = "/v1/oversight" + strings.TrimPrefix(r.target, "/v1")
+		w, wu := do(t, h, r), do(t, h, under)
+		if w.Code != wu.Code {
+			t.Errorf("%s %s: %d under /v1, %d under the base path: %s", r.method, under.target, w.Code, wu.Code, wu.Body.String())
+		}
+	}
+	own := "/oversight/explanations?org=o&subject=" + bob + "&action_id=none"
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1" + own, ""}), limen.CodeNoCase)
+	if w := do(t, h, req{http.MethodGet, own, ""}); w.Code != http.StatusNotFound {
+		t.Errorf("%s without /v1: %d", own, w.Code)
+	}
+
+	h = New(seeded(t, stub.New(stub.Options{})), Options{Authenticator: StaticToken(tok, alice), Authorizer: OwnerPolicy{}, BasePath: "/v1/oversight"})
+	for _, path := range []string{"/v1/explanations", "/v1/oversight/explanations"} {
+		w := do(t, h, req{http.MethodGet, path + "?org=o&subject=" + alice + "&action_id=seed", ""})
+		var x limen.Explanation
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &x) != nil || x.ActionID != "seed" || x.Verdict != limen.Ask {
+			t.Errorf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
+// A profile of a person's own context, an org that is their rendered
+// subject, is theirs to read and write; an organization's profiles and every
+// replay stay the admins'.
+func TestOwnContextProfile(t *testing.T) {
+	h := New(stub.New(stub.Options{}), Options{Authenticator: StaticToken(tok, bob), Authorizer: OwnerPolicy{Admins: []string{admin}}})
+	mine := limen.Profile{Org: bob, Kind: "tool", Costs: limen.DefaultCosts, AuditRate: 0.05}
+	if w := do(t, h, req{http.MethodPut, "/v1/profiles", body(t, mine)}); w.Code != http.StatusOK {
+		t.Errorf("bob writing his own context's profile: %d %s", w.Code, w.Body.String())
+	}
+	if w := do(t, h, req{http.MethodGet, "/v1/profiles?org=" + bob + "&kind=tool", ""}); w.Code != http.StatusOK {
+		t.Errorf("bob reading his own context's profile: %d %s", w.Code, w.Body.String())
+	}
+	theirs := mine
+	theirs.Org = alice
+	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", body(t, theirs)}), limen.CodeForbidden)
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles?org=" + alice, ""}), limen.CodeForbidden)
+	org := mine
+	org.Org = "o"
+	wantCode(t, do(t, h, req{http.MethodPut, "/v1/profiles", body(t, org)}), limen.CodeForbidden)
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles?org=o", ""}), limen.CodeForbidden)
+	rec := limen.ReplayRecord{At: time.Now().UTC(), Action: limen.Action{Org: bob, Subject: bob, ActionID: "r1", Kind: "tool", Name: "bash", Effect: limen.EffectWrite},
+		Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1"}
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/replays?keep=false", body(t, rec) + "\n"}), limen.CodeForbidden)
+
+	if got := profileResource(limen.Scope{Org: bob}).String("subject"); got != bob {
+		t.Errorf("own context profile subject %q", got)
+	}
+	if got := profileResource(limen.Scope{Org: "o"}).String("subject"); got != "" {
+		t.Errorf("organization profile subject %q", got)
+	}
 }
 
 // failing answers every call with err, or panics.

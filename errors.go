@@ -27,6 +27,7 @@ const (
 	CodeActionConflict        Code = "action_conflict"
 	CodeAlreadyDecided        Code = "already_decided"
 	CodeNoDecision            Code = "no_decision"
+	CodeNoCase                Code = "no_case"
 	CodeUnauthenticated       Code = "unauthenticated"
 	CodeForbidden             Code = "forbidden"
 	CodeBodyTooLarge          Code = "body_too_large"
@@ -56,6 +57,7 @@ var table = map[Code]row{
 	CodeActionConflict:        {409, "A different action already uses this action ID. Give each action its own ID."},
 	CodeAlreadyDecided:        {409, "This action already has a decision. Limen accepts one decision for each action."},
 	CodeNoDecision:            {409, "This action has no recorded decision. Record the decision, then send the answer."},
+	CodeNoCase:                {404, "Limen has no record of this action. Check the organization, the person, and the action ID."},
 	CodeUnauthenticated:       {401, "The request has no valid credential. Sign in again, then send the request again."},
 	CodeForbidden:             {403, "You do not have permission for this request. Ask an administrator of the organization for access."},
 	CodeBodyTooLarge:          {413, "The request is larger than the limit of Limen. Send it in smaller parts."},
@@ -71,7 +73,7 @@ func Codes() []Code {
 	return []Code{
 		CodeInvalidAction, CodeInvalidDecision, CodeInvalidAnswer, CodeInvalidProfile,
 		CodeInvalidQuery, CodeInvalidReplay, CodeAskTooCostly, CodeActionConflict,
-		CodeAlreadyDecided, CodeNoDecision, CodeUnauthenticated, CodeForbidden,
+		CodeAlreadyDecided, CodeNoDecision, CodeNoCase, CodeUnauthenticated, CodeForbidden,
 		CodeBodyTooLarge, CodeRateLimited, CodeInternal, CodeAuthorizerUnavailable,
 		CodeUnavailable,
 	}

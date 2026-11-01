@@ -38,13 +38,18 @@ type Options struct {
 	HTTP *http.Client
 	// Token is the bearer token sent with every call; empty sends none.
 	Token string
+	// BasePath is the prefix the routes sit under in place of /v1, the
+	// server's LIMEN_BASE_PATH behind a public route such as
+	// "/v1/oversight"; empty is /v1.
+	BasePath string
 }
 
 // Client is a [limen.Service] that calls a Limen server.
 type Client struct {
-	base  string
-	http  *http.Client
-	token string
+	base   string
+	prefix string
+	http   *http.Client
+	token  string
 }
 
 var _ limen.Service = (*Client)(nil)
@@ -60,12 +65,19 @@ func New(baseURL string, o Options) (*Client, error) {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("client: base URL %q is not an http or https URL", baseURL)
 	}
-	return &Client{base: strings.TrimRight(baseURL, "/"), http: o.HTTP, token: o.Token}, nil
+	prefix := strings.TrimRight(o.BasePath, "/")
+	if prefix == "" {
+		prefix = "/v1"
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		return nil, fmt.Errorf("client: base path %q is not an absolute path", o.BasePath)
+	}
+	return &Client{base: strings.TrimRight(baseURL, "/"), prefix: prefix, http: o.HTTP, token: o.Token}, nil
 }
 
 // do sends one call and decodes a 2xx body into out when out is not nil.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, contentType string, body io.Reader, out any) error {
-	u := c.base + path
+	u := c.base + c.prefix + strings.TrimPrefix(path, "/v1")
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
@@ -256,4 +268,30 @@ func (c *Client) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		return limen.ReplayReport{}, srcErr
 	}
 	return rep, err
+}
+
+// Explain implements [limen.Explainer].
+func (c *Client) Explain(ctx context.Context, k limen.Key) (limen.Explanation, error) {
+	v := url.Values{"org": {k.Org}, "subject": {k.Subject}, "action_id": {k.ActionID}}
+	var x limen.Explanation
+	return x, c.do(ctx, http.MethodGet, "/v1/explanations", v, "", nil, &x)
+}
+
+// Learned implements [limen.Explainer].
+func (c *Client) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learned, error) {
+	v := url.Values{"org": {q.Org}, "subject": {q.Subject}}
+	if q.Agent != "" {
+		v.Set("agent", q.Agent)
+	}
+	if q.Kind != "" {
+		v.Set("kind", q.Kind)
+	}
+	var l limen.Learned
+	return l, c.do(ctx, http.MethodGet, "/v1/learned", v, "", nil, &l)
+}
+
+// Preview implements [limen.Explainer].
+func (c *Client) Preview(ctx context.Context, r limen.PreviewRequest) (limen.Preview, error) {
+	var p limen.Preview
+	return p, c.json(ctx, http.MethodPost, "/v1/previews", r, &p)
 }

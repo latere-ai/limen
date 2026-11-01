@@ -30,13 +30,21 @@ type Case struct {
 	Digest     string       `json:"digest"`
 	Action     limen.Action `json:"action"`
 	// Featurizer names the featurizer A and C came from.
-	Featurizer string                 `json:"featurizer"`
-	A          []float64              `json:"a"`
-	C          []float64              `json:"c"`
-	Prediction *limen.Prediction      `json:"prediction,omitempty"`
-	Decision   *limen.Decision        `json:"decision,omitempty"`
-	DecidedAt  time.Time              `json:"decided_at,omitzero"`
-	Answers    []limen.RecordedAnswer `json:"answers,omitempty"`
+	Featurizer string    `json:"featurizer"`
+	A          []float64 `json:"a"`
+	C          []float64 `json:"c"`
+	// Label names the action for a person, from the featurizer's closed
+	// vocabulary, never from the input; Labels names that vocabulary. A
+	// case from before labels has neither (spec 009).
+	Label      string            `json:"label,omitempty"`
+	Labels     string            `json:"labels,omitempty"`
+	Prediction *limen.Prediction `json:"prediction,omitempty"`
+	// PredictedBy is the number of answers the model that made Prediction
+	// was fitted through, nil for a case from before models were named.
+	PredictedBy *int64                 `json:"predicted_by,omitempty"`
+	Decision    *limen.Decision        `json:"decision,omitempty"`
+	DecidedAt   time.Time              `json:"decided_at,omitzero"`
+	Answers     []limen.RecordedAnswer `json:"answers,omitempty"`
 }
 
 // Limen returns the case as the contract shows it.

@@ -105,6 +105,9 @@ var schemaTypes = map[string]any{
 	"Profile": limen.Profile{}, "Costs": limen.Costs{}, "Certify": limen.Certify{},
 	"Reliability": limen.Reliability{}, "Estimate": limen.Estimate{}, "Certificate": limen.Certificate{},
 	"ReplayRecord": limen.ReplayRecord{}, "ReplayReport": limen.ReplayReport{},
+	"ModelRef": limen.ModelRef{}, "Parts": limen.Parts{}, "Evidence": limen.Evidence{}, "Explanation": limen.Explanation{},
+	"LearnedEntry": limen.LearnedEntry{}, "TrendPoint": limen.TrendPoint{}, "Learned": limen.Learned{},
+	"PreviewRequest": limen.PreviewRequest{}, "Preview": limen.Preview{},
 }
 
 func TestSchemasMatchTypes(t *testing.T) {
@@ -173,6 +176,7 @@ func TestEnumsMatchConstants(t *testing.T) {
 		string(limen.Allow), string(limen.Flag), string(limen.Ask), string(limen.Block))
 	check("Suggestion", strs(at(t, schemas, "Suggestion")["enum"]),
 		string(limen.Allow), string(limen.Ask), string(limen.Block))
+	check("AskKind", strs(at(t, schemas, "AskKind")["enum"]), limen.AskUnsure, limen.AskSplit)
 	check("Action.effect", strs(at(t, schemas, "Action", "properties", "effect")["enum"]),
 		string(limen.EffectNone), string(limen.EffectRead), string(limen.EffectWrite), string(limen.EffectExternal))
 	if ref := at(t, schemas, "Prediction", "properties", "verdict")["$ref"]; ref != "#/components/schemas/Suggestion" {

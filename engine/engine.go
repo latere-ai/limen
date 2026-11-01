@@ -189,8 +189,10 @@ func (e *Engine) newCase(ctx context.Context, a limen.Action, dg string, at time
 		return store.Case{}, err
 	}
 	f := featurize.Of(a)
+	label := featurize.Label(a)
 	a.Input = nil
-	return store.Case{T: t, ReceivedAt: at, Digest: dg, Action: a, Featurizer: featurize.Version, A: f.A, C: f.C}, nil
+	return store.Case{T: t, ReceivedAt: at, Digest: dg, Action: a, Featurizer: featurize.Version, A: f.A, C: f.C,
+		Label: label, Labels: featurize.LabelsVersion}, nil
 }
 
 // Predict implements [limen.Predictor].
@@ -246,6 +248,8 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		Reason:      reason(pr.Approve, prof.Thresholds, post.Len()),
 	}
 	c.Prediction = &p
+	by := post.answers
+	c.PredictedBy = &by
 	if err := e.st.Put(ctx, c); err != nil {
 		return limen.Prediction{}, err
 	}

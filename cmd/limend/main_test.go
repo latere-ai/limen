@@ -130,6 +130,25 @@ func TestServe(t *testing.T) {
 	}
 }
 
+// With LIMEN_BASE_PATH the API answers under it as well as under /v1.
+func TestBasePath(t *testing.T) {
+	addr, stop := startWith(t, map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_BASE_PATH": "/v1/oversight"})
+	ctx := context.Background()
+	for _, base := range []string{"", "/v1/oversight"} {
+		c, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret", BasePath: base})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := c.Learned(ctx, limen.LearnedQuery{Org: "local", Subject: "local"})
+		if err != nil || l.Subject != "local" {
+			t.Errorf("learned under %q: %+v, %v", base, l, err)
+		}
+	}
+	if code, log := stop(); code != exitOK || !strings.Contains(log, "The API is also available under /v1/oversight.") {
+		t.Fatalf("stop: exit %d: %s", code, log)
+	}
+}
+
 func TestConfiguration(t *testing.T) {
 	cases := []struct {
 		args []string
@@ -143,6 +162,8 @@ func TestConfiguration(t *testing.T) {
 		{[]string{"-h"}, nil, exitOK, "Usage: limend"},
 		{[]string{"-version"}, nil, exitOK, "limend dev"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x"}, exitConfig, "no directory for the ledger"},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_BASE_PATH": "/v1/oversight/"}, exitConfig, "LIMEN_BASE_PATH is not correct"},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_BASE_PATH": "/v1"}, exitConfig, "LIMEN_BASE_PATH is not correct"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}

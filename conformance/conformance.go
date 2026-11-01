@@ -25,6 +25,7 @@ import (
 	"iter"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -71,6 +72,11 @@ var rules = []rule{
 	{"ForgetIsScoped", forgetIsScoped},
 	{"FailClosed", failClosed},
 	{"Replay", replay},
+	{"Explanations", explanations},
+	{"ExplanationsOfSteeredVerdicts", explanationsOfSteeredVerdicts},
+	{"LearnedEntries", learnedEntries},
+	{"Previews", previews},
+	{"PreviewErrors", previewErrors},
 }
 
 // Run runs every rule against the target.
@@ -569,4 +575,206 @@ func replay(t *testing.T, target Target) {
 	boom := errors.New("conformance: the source failed")
 	_, err = s.Replay(ctx, func(yield func(limen.ReplayRecord, error) bool) { yield(limen.ReplayRecord{}, boom) }, limen.ReplayOptions{})
 	expect(t, errors.Is(err, boom), "a failing source: %v", err)
+}
+
+// command is action id running the shell command cmd.
+func command(id, cmd string) limen.Action {
+	a := action(id)
+	a.Input = []byte(`{"command":` + strconv.Quote(cmd) + `}`)
+	return a
+}
+
+// consistent checks the fields of a verdict every model must agree on: it
+// is the thresholds' verdict, and only an ask has a kind of uncertainty.
+func consistent(t *testing.T, what string, approve, ratio float64, v limen.Verdict, kind string, th limen.Thresholds) {
+	t.Helper()
+	expect(t, v == th.Verdict(approve), "%s: verdict %q, the thresholds give %q for %v", what, v, th.Verdict(approve), approve)
+	expect(t, ratio >= 0 && ratio <= 1, "%s: evidence ratio %v outside [0, 1]", what, ratio)
+	if v == limen.Ask {
+		expect(t, kind == limen.AskUnsure || kind == limen.AskSplit, "%s: an ask of kind %q", what, kind)
+	} else {
+		expect(t, kind == "", "%s: a %s of kind %q", what, v, kind)
+	}
+}
+
+// explanations (spec 009): an explanation names its action and its model;
+// by the model that made the prediction it repeats the prediction; its
+// parts and its evidence add up; an action with no record is no_case.
+func explanations(t *testing.T, target Target) {
+	s := target.New(t)
+	_, err := s.Explain(ctx, limen.Key{Org: org})
+	code(t, err, limen.CodeInvalidQuery, "subject")
+	_, err = s.Explain(ctx, key("none"))
+	code(t, err, limen.CodeNoCase, "action_id")
+
+	a := action("e1")
+	p := predict(t, s, a)
+	x, err := s.Explain(ctx, a.Key)
+	must(t, err)
+	require(t, x.Key == a.Key && x.Model.Source != "" && x.Evidence != nil, "explanation %+v", x)
+	consistent(t, "explanation", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+	expect(t, x.Thresholds == p.Thresholds, "thresholds %+v, the prediction's %+v", x.Thresholds, p.Thresholds)
+	require(t, x.PredictedBy != nil && *x.PredictedBy == x.Model && x.Model.Answers == 0, "predicted by %+v, explained by %+v", x.PredictedBy, x.Model)
+	expect(t, math.Abs(x.Approve-p.Approve) < 1e-9 && math.Abs(x.Uncertainty-p.Uncertainty) < 1e-9 && x.Verdict == p.Verdict,
+		"by the same model the explanation %+v differs from the prediction %+v", x, p)
+	expect(t, x.Verdict != limen.Ask || x.AskKind == limen.AskUnsure, "with no answers an ask is %q, want unsure", x.AskKind)
+	expect(t, len(x.Evidence) == 0, "evidence %+v with no answers", x.Evidence)
+
+	decide(t, s, a, limen.Ask, 1, "test/1")
+	answer(t, s, a.Key, true)
+	b := action("e2")
+	predict(t, s, b)
+	decide(t, s, b, limen.Ask, 1, "test/1")
+	answer(t, s, b.Key, false)
+	for _, k := range []limen.Key{a.Key, b.Key} {
+		x, err := s.Explain(ctx, k)
+		must(t, err)
+		consistent(t, "explanation "+k.ActionID, x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+		expect(t, x.Model.Answers <= 2, "a model fitted through %d of 2 answers", x.Model.Answers)
+		if x.Parts != nil {
+			sum := x.Parts.Action + x.Parts.Recent + x.Parts.Interaction
+			expect(t, math.Abs(sum-x.Mean) < 1e-9, "parts %+v sum to %v, the mean is %v", *x.Parts, sum, x.Mean)
+		}
+		total := 0.0
+		for _, e := range x.Evidence {
+			expect(t, (e.ActionID == "e1" && e.Approve) || (e.ActionID == "e2" && !e.Approve), "evidence %+v is no answer given", e)
+			expect(t, e.Label != "" && !strings.Contains(e.Label, "./..."), "evidence label %q", e.Label)
+			total += e.Share
+		}
+		expect(t, total <= 1+1e-9, "evidence shares sum to %v", total)
+	}
+}
+
+// explanationsOfSteeredVerdicts: an allow and a block have no kind of
+// uncertainty, and an ask has one.
+func explanationsOfSteeredVerdicts(t *testing.T, target Target) {
+	if target.Steered == nil {
+		t.Skip("the target learns its predictions; Target.Steered is nil")
+	}
+	for approve, want := range map[float64]limen.Verdict{0.97: limen.Allow, 0.5: limen.Ask, 0.1: limen.Block} {
+		s := target.Steered(t, func(limen.Action) (float64, float64) { return approve, 0.1 })
+		predict(t, s, action("es1"))
+		x, err := s.Explain(ctx, key("es1"))
+		must(t, err)
+		expect(t, x.Verdict == want && x.Approve == approve, "approve %v: %+v, want %q", approve, x, want)
+		consistent(t, "steered", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+	}
+}
+
+// learnedEntries (spec 009): one entry per label of the person's answered
+// actions, most answered first, with the counts of their answers and a
+// verdict under the profile that applies; a kind filters them.
+func learnedEntries(t *testing.T, target Target) {
+	s := target.New(t)
+	_, err := s.Learned(ctx, limen.LearnedQuery{Org: org})
+	code(t, err, limen.CodeInvalidQuery, "subject")
+	l, err := s.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject})
+	must(t, err)
+	expect(t, len(l.Entries) == 0 && l.Recent != nil && l.Model.Source != "", "with no answers: %+v", l)
+
+	saved, err := s.PutProfile(ctx, limen.Profile{Org: org, Kind: "tool", Agent: "agt_x", Costs: limen.Costs{FalseAllow: 20, FalseBlock: 5, Ask: 1}, AuditRate: 0.1})
+	must(t, err)
+	for _, c := range []struct {
+		id, cmd string
+		approve bool
+	}{
+		{"l1", "go test ./...", true},
+		{"l2", "go test ./engine", false},
+		{"l3", "git push --force origin main", false},
+		{"l4", "ls -la /secret/path", true},
+	} {
+		a := command(c.id, c.cmd)
+		predict(t, s, a)
+		decide(t, s, a, limen.Ask, 1, "test/1")
+		answer(t, s, a.Key, c.approve)
+	}
+	predict(t, s, command("l5", "cat unanswered"))
+	l, err = s.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject, Agent: "agt_x"})
+	must(t, err)
+	got := map[string][2]int{}
+	var labels []string
+	for _, e := range l.Entries {
+		got[e.Label] = [2]int{e.Approved, e.Denied}
+		labels = append(labels, e.Label)
+		consistent(t, "entry "+e.Label, e.Approve, e.EvidenceRatio, e.Verdict, e.AskKind, e.Thresholds)
+		want, _ := saved.Costs.Thresholds()
+		expect(t, e.Kind == "tool" && e.Name == "bash" && e.Thresholds == want, "entry %+v, want the thresholds %+v of the agent's profile", e, want)
+		expect(t, !strings.Contains(e.Label, "secret") && !strings.Contains(e.Label, "origin"), "label %q holds input", e.Label)
+	}
+	want := map[string][2]int{"bash: go test": {1, 1}, "bash: git push --force": {0, 1}, "bash: ls": {1, 0}}
+	expect(t, len(got) == len(want) && got["bash: go test"] == want["bash: go test"] && got["bash: git push --force"] == want["bash: git push --force"] && got["bash: ls"] == want["bash: ls"],
+		"entries %v, want %v", got, want)
+	expect(t, len(labels) > 0 && labels[0] == "bash: go test", "entries %v, want the most answered first", labels)
+	expect(t, l.Model.Answers <= 4 && len(l.Recent) <= 20, "model %+v, %d trend points", l.Model, len(l.Recent))
+
+	l, err = s.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject, Kind: "message"})
+	must(t, err)
+	expect(t, len(l.Entries) == 0, "kind message: %+v", l.Entries)
+}
+
+// previews (spec 009): a preview re-thresholds the recorded predictions in
+// its window under the costs it names, and counts the errors among the
+// answered ones.
+func previews(t *testing.T, target Target) {
+	approvals := map[string]float64{"pv1": 0.97, "pv2": 0.5, "pv3": 0.1, "pv4": 0.97, "pv5": 0.1}
+	newService := func() limen.Service {
+		if target.Steered == nil {
+			return target.New(t)
+		}
+		return target.Steered(t, func(a limen.Action) (float64, float64) { return approvals[a.ActionID], 0.1 })
+	}
+	s := newService()
+	costs := limen.Costs{FalseAllow: 20, FalseBlock: 5, Ask: 1}
+	th, err := costs.Thresholds()
+	must(t, err)
+	want := limen.Preview{Would: map[limen.Verdict]int{limen.Allow: 0, limen.Ask: 0, limen.Block: 0}}
+	for _, id := range []string{"pv1", "pv2", "pv3", "pv4", "pv5"} {
+		a := action(id)
+		p := predict(t, s, a)
+		v := th.Verdict(p.Approve)
+		want.Records++
+		want.Would[v]++
+		if id == "pv4" || id == "pv5" {
+			decide(t, s, a, limen.Ask, 1, "test/1")
+			answer(t, s, a.Key, id == "pv5")
+			want.Answered++
+			if v == limen.Allow && id == "pv4" {
+				want.AllowedDenied++
+			}
+			if v == limen.Block && id == "pv5" {
+				want.BlockedApproved++
+			}
+		}
+	}
+	from, to := window()
+	got, err := s.Preview(ctx, limen.PreviewRequest{Org: org, Subject: subject, From: from, To: to, Costs: costs, AuditRate: 0.5})
+	must(t, err)
+	expect(t, got.Thresholds == th && got.Records == want.Records && got.Answered == want.Answered &&
+		got.AllowedDenied == want.AllowedDenied && got.BlockedApproved == want.BlockedApproved,
+		"preview %+v, want %+v", got, want)
+	for _, v := range []limen.Verdict{limen.Allow, limen.Ask, limen.Block} {
+		expect(t, got.Would[v] == want.Would[v], "would %s %d, want %d", v, got.Would[v], want.Would[v])
+	}
+	asks := float64(want.Would[limen.Ask]) + 0.5*float64(want.Would[limen.Allow]+want.Would[limen.Block])
+	expect(t, math.Abs(got.ExpectedAsks-asks) < 1e-9, "expected asks %v, want %v", got.ExpectedAsks, asks)
+	if target.Steered != nil {
+		expect(t, got.AllowedDenied == 1 && got.BlockedApproved == 1, "steered preview %+v, want one allowed denial and one blocked approval", got)
+	}
+
+	past, err := s.Preview(ctx, limen.PreviewRequest{Org: org, Subject: subject, From: from.Add(-48 * time.Hour), To: from, Costs: costs})
+	must(t, err)
+	expect(t, past.Records == 0 && past.Would[limen.Ask] == 0, "a window with no records: %+v", past)
+}
+
+// previewErrors: a preview validates its window and its costs as a profile
+// does, ask_too_costly included.
+func previewErrors(t *testing.T, target Target) {
+	s := target.New(t)
+	from, to := window()
+	_, err := s.Preview(ctx, limen.PreviewRequest{Org: org, Subject: subject, From: to, To: from, Costs: limen.DefaultCosts})
+	code(t, err, limen.CodeInvalidQuery, "to")
+	_, err = s.Preview(ctx, limen.PreviewRequest{Org: org, From: from, To: to, Costs: limen.DefaultCosts})
+	code(t, err, limen.CodeInvalidQuery, "subject")
+	_, err = s.Preview(ctx, limen.PreviewRequest{Org: org, Subject: subject, From: from, To: to, Costs: limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}})
+	code(t, err, limen.CodeAskTooCostly, "")
 }

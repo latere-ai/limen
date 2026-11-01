@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"latere.ai/x/limen"
+	"latere.ai/x/limen/engine/featurize"
 	"latere.ai/x/limen/estimate"
 )
 
@@ -58,15 +59,19 @@ type Service struct {
 	profiles map[limen.Scope]limen.Profile
 }
 
-// entry is one action's record. The action is kept without its input.
+// entry is one action's record. The action is kept without its input, and
+// label is written from the input before it is dropped (spec 009).
 type entry struct {
 	seq        int
 	at         time.Time
 	action     limen.Action
+	label      string
 	digest     string
 	prediction *limen.Prediction
-	decision   *limen.Decision
-	answers    []limen.RecordedAnswer
+	// predictedBy counts the subject's answers when the prediction was made.
+	predictedBy *int64
+	decision    *limen.Decision
+	answers     []limen.RecordedAnswer
 }
 
 var _ limen.Service = (*Service)(nil)
@@ -144,13 +149,16 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 		Reason: fmt.Sprintf("approval %.2f against the ask band %.2f to %.2f", approve, p.Thresholds.BlockBelow, p.Thresholds.AllowAbove),
 	}
 	e.prediction = &pr
+	n := s.answersLocked(a.Org, a.Subject)
+	e.predictedBy = &n
 	return pr, nil
 }
 
 func (s *Service) newEntry(a limen.Action, d string, at time.Time) *entry {
+	label := featurize.Label(a)
 	a.Input = nil
 	s.seq++
-	e := &entry{seq: s.seq, at: at, action: a, digest: d}
+	e := &entry{seq: s.seq, at: at, action: a, label: label, digest: d}
 	s.cases[a.Key] = e
 	return e
 }

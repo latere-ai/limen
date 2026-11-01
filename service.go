@@ -65,6 +65,7 @@ type Service interface {
 	Predictor
 	Ledger
 	Admin
+	Explainer
 }
 
 // FailClosed wraps a predictor so that a decision point never waits on it
