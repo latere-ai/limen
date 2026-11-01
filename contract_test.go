@@ -295,6 +295,31 @@ func TestDecideProducesValidDecisions(t *testing.T) {
 	}
 }
 
+// verdict.Decide never applies a verdict more permissive than its ceiling,
+// and a person sees every action it shows with a positive probability that
+// is the one the decision records (spec 001, criterion 3, held in this
+// tree for the decision points that import it). The grid covers every
+// suggestion and ceiling, malformed ones too, rates and draws at and
+// beyond their bounds.
+func TestDecideNeverExceedsTheCeiling(t *testing.T) {
+	verdicts := []Verdict{Allow, Flag, Ask, Block, "", "deny"}
+	for _, s := range verdicts {
+		for _, c := range verdicts {
+			for _, rate := range []float64{0, 0.05, 1, 1.5, -1, math.NaN()} {
+				for _, u := range []float64{0, 0.03, 0.5, 0.999, 1, -0.1, math.NaN()} {
+					v, p := verdict.Decide(s, c, rate, u)
+					if verdict.Least(v, c) != v {
+						t.Errorf("Decide(%q, %q, %v, %v) = %q, more permissive than the ceiling", s, c, rate, u, v)
+					}
+					if !(p >= 0 && p <= 1) || (v.Shown() && p == 0) || (!v.Shown() && p == 1) {
+						t.Errorf("Decide(%q, %q, %v, %v) = %q with probability %v", s, c, rate, u, v, p)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestAnswerAndQueries(t *testing.T) {
 	if err := (Answer{Key: key, Approve: true}).Validate(); err != nil {
 		t.Error(err)
