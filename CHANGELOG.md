@@ -11,6 +11,12 @@ the commit log.
 
 ## Unreleased
 
+### Fixed
+
+- The release publishes its image. The v0.1.0 release built the image but
+  stopped at its version check, which read the image's pull progress as
+  the version, so v0.1.0 has no published image; use this release.
+
 ## v0.1.0 - 2026-11-01
 
 This is the first version of Limen. Limen has three parts:
