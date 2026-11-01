@@ -6,7 +6,7 @@ depends_on: [001-architecture.md]
 affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go]
 effort: small
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -154,6 +154,7 @@ never interpolates, and a test asserts every code has one.
 | `action_conflict` | 409 | the key names a different action |
 | `already_decided` | 409 | a second decision for a key |
 | `no_decision` | 409 | an answer for a key with no decision |
+| `no_case` | 404 | an explanation of a key with no case ([[009-explanations]], added 2026-11-01) |
 | `unauthenticated` | 401 | no valid bearer token |
 | `forbidden` | 403 | the authorizer refused the route's action |
 | `body_too_large` | 413 | a body beyond the route's limit |

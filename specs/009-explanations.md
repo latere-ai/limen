@@ -74,13 +74,15 @@ prediction carries contributions and the evidence ratio, and no parts.
 
 ### Which model explains
 
-A prediction records its model, `source = learned/<version>`. An
-explanation of a recorded prediction uses that version's posterior,
-restored from its snapshot ([[004-engine]] keeps snapshots by version).
-When that snapshot is gone, it uses the current model and says so: the
-explanation's `version` then differs from the prediction's, and a client
-shows that the model has learned since. An explanation of an action with
-no recorded prediction uses the current model.
+*Amended 2026-11-01; see Amendments.* A model is named by a `ModelRef`,
+`{source, answers}`: the prediction source and the number of the
+person's answers the posterior was fitted through. A case records the
+`answers` of the model that predicted it (`predicted_by`). An explanation
+uses the person's current model and names it (`model`); when
+`predicted_by` equals `model`, the explanation repeats the recorded
+prediction, and when it differs, the model has learned since and a
+client says so. An explanation of an action with no recorded prediction
+uses the current model, under the profile that applies now.
 
 ### Labels
 
@@ -94,8 +96,9 @@ input, so keeping it keeps [[001-architecture]] invariant 5: the input is
 never stored. The label is stored with the case and versioned with the
 featurizer (`features/1` labels are `labels/1`).
 
-Cases recorded before labels exist have none; they are labeled
-`<kind> <name>` alone.
+Cases recorded before labels exist have none; they are labeled from their
+stored action, whose input is gone: the name alone for a tool, `<kind>
+<name>` otherwise, and for a shell action `<name>: other command`.
 
 ### Routes
 
@@ -117,8 +120,10 @@ does not change.
 | Field | |
 |---|---|
 | `org`, `subject`, `action_id` | the key |
-| `version` | the model that explains; equal to the prediction's unless its snapshot is gone |
-| `approve`, `uncertainty`, `verdict` | the prediction being explained, recomputed by that model |
+| `model` | the model that explains, the person's current one, as a `ModelRef` |
+| `predicted_by` | the model that made the recorded prediction; absent with no recorded prediction |
+| `approve`, `uncertainty`, `verdict` | the prediction being explained, recomputed by `model` at the action's own time |
+| `thresholds` | the recorded prediction's, or the profile's that applies now when there is none |
 | `mean` | `μ(x)` |
 | `parts` | `{action, recent, interaction}`, summing to `mean`; absent for a model without parts |
 | `evidence_ratio` | `e` |
@@ -133,10 +138,15 @@ answered cases in the model's window, each with `label`, `kind`, `name`,
 `approved` and `denied` counts, and the model's `approve`,
 `uncertainty` and suggested `verdict` now, at the most recent case of
 that label moved to the person's current time, under the profile that
-applies to it (the profile scope of `kind` and the optional `agent`).
+applies to it (the profile scope of `kind` and the optional `agent`),
+with the `evidence_ratio` and `ask_kind` an explanation at that point
+carries, so a client can draw an unsure ask apart from a split one.
 Plus `recent`: the shared tolerance part at up to 20 evenly spaced
 points of the person's decision count, each `{t, at, value}`, so a
 client can draw its trend.
+
+An explanation of an action Limen has no record of is `no_case` (404),
+a code this spec adds to the error table.
 
 **A preview** (`Preview`): the body is `{org, subject, from, to, costs,
 audit_rate}`; costs are validated like a profile's, `ask_too_costly`
@@ -168,10 +178,12 @@ prediction does, and none runs on a decision's path.
 
 ## Not in this spec
 
-- **A public route for people.** A hosted installation has no route a
-  person's own token reaches yet; Topos or the console proxies these
-  reads with the person's credential, or Limen gains its `/v1/oversight`
-  ingress with an authorizer that answers the person.
+- **A public route for people** beyond the base path. [[003-http-api]]
+  serves the API under `LIMEN_BASE_PATH` as well, so a hosted
+  installation can route a public prefix such as `/v1/oversight` to it,
+  and the owner policy answers a person for their own subject; a
+  console that acts for a person with another credential is the
+  installation's.
 - **Counterfactual edits** ("would it allow this if I had not denied
   that"): a refit per question, kept out until a client needs it.
 - **Explanations of a judge's verdict.** A judge is opaque by design
@@ -187,9 +199,39 @@ prediction does, and none runs on a decision's path.
 | 1 | For every explained prediction, the contributions sum to `mean` and the parts sum to `mean`, within 1e-9 | an `engine` test over fitted posteriors of random histories |
 | 2 | `mean`, `approve` and `uncertainty` of an explanation equal the prediction the same model returns | an `engine` test |
 | 3 | `ask_kind` is `unsure` below the evidence-ratio cut and `split` at or above it, and is absent for `allow` and `block` | an `engine` test that constructs both kinds |
-| 4 | An explanation of a prediction whose snapshot exists uses that version; one whose snapshot is gone uses the current model and reports its version | an `engine` test with a store that drops a snapshot |
+| 4 | An explanation names the current model and the model that made the recorded prediction; after a refit they differ, and an action with no prediction is explained under the profile that applies | an `engine` test that refits between the prediction and the explanation |
 | 5 | A label holds only the action's kind, name and program classes from the featurizer's tables; no string of the input appears in any stored label | a featurize test over a corpus of commands with secrets in arguments, asserting none survives |
 | 6 | A preview's counts equal the recorded predictions re-thresholded under the given costs, and `ask_too_costly` costs are refused | an `engine` test and a server test |
 | 7 | The three routes ask exactly `case.list`, `case.list` and `reliability.read` with the subject-bound resource, and a caller acting for another subject without permission gets `forbidden` | `server` tests against `authz/stub` |
-| 8 | The engine, the stub and the HTTP client agree on all three views for one scripted history | the conformance suite |
+| 8 | The engine, the stub and the HTTP client agree on every field of the three views that no model decides: the key, the thresholds, the verdict as the thresholds' verdict, an ask's kind, the labels and their counts, and every count of a preview; by the model that predicted it, an explanation repeats the prediction; an unknown action is `no_case` | the conformance suite |
 | 9 | `api/openapi.yaml` describes the three routes and types, held to the Go types by the existing test | `api` tests |
+| 10 | Each entry of `learned` carries the `evidence_ratio` of an explanation at the entry's point, and `ask_kind` `unsure` or `split` by the same cut when its verdict is `ask`, absent otherwise | an `engine` test that compares each entry with the posterior at its point |
+
+## Amendments
+
+**2026-11-01, at implementation.**
+
+- *Which model explains.* The design assumed [[004-engine]] keeps a
+  snapshot per model version. It keeps one snapshot per person, the
+  current one, so an earlier posterior cannot be restored. An
+  explanation therefore always uses the current model, named by a
+  `ModelRef` (`source` and the number of answers it was fitted through);
+  each case records the number of the model that predicted it, and the
+  explanation reports it as `predicted_by`. The `version` field became
+  `model` and `predicted_by`, and criterion 4 was reworded to match.
+  Keeping past posteriors for exact explanations of old predictions is
+  left out until a client needs it.
+- *What every implementation agrees on.* The stub has no posterior, so
+  criterion 8 holds the fields no model decides; the exact parts and
+  shares are the engine's, held by criteria 1 to 3.
+- *Learned entries* carry `evidence_ratio` and `ask_kind` (criterion
+  10), so a client draws each entry's kind of uncertainty without asking
+  for an explanation per label.
+- *`no_case`.* An explanation of an action with no record answers a new
+  code, `no_case` (404).
+- *Labels of earlier cases* are the label of their stored action, as the
+  Labels section states, and not `<kind> <name>` for every kind.
+- *Base path and a person's own context.* [[003-http-api]] gained
+  `LIMEN_BASE_PATH`, which serves these routes under a public prefix, and
+  profiles of a person's own context, which the person may read and
+  write.

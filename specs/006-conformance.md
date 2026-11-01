@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
 effort: medium
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -73,6 +73,9 @@ not the case, stamps time.
 | profiles | `Defaults` | `Profile` of an unsaved scope is the default with `default: true`; `PutProfile` fills a zero `certify` and derives the thresholds |
 | profiles | `AskTooCostly` | costs with an error at most twice the cost of asking are `ask_too_costly` |
 | replay | `ReplayReport` | a replay reports records, answered records, would-be verdicts, the allowed-denied and blocked-approved counts, and an estimate with its coverage, and keeps nothing without `keep` |
+| explanations | `Explanations` | an explanation names its key and model, repeats the prediction by the model that made it, is the thresholds' verdict with an ask's kind, and an unknown key is `no_case` ([[009-explanations]], added 2026-11-01) |
+| explanations | `LearnedEntries` | one entry per label of the answered cases, most answered first, with their counts and the thresholds of the profile that applies |
+| explanations | `Previews` | a preview's counts are the recorded predictions in its window re-thresholded under its costs; invalid costs are refused as a profile's are |
 | forget | `ForgetPerOrg` | after `Forget(org, subject)` the subject has no cases, reviews or reports in that org and is untouched in another |
 | fail-closed | `ErrorIsAsk`, `TimeoutIsAsk` | the target wrapped in `FailClosed` with a failing or a hanging inner predictor returns `ask` from `learned/unavailable` for the key |
 

@@ -3,10 +3,10 @@ title: "HTTP API: routes, bodies, statuses, the authorizer action and resource f
 status: drafted
 track: core
 depends_on: [001-architecture.md, 002-contract.md]
-affects: [api/, authorizer/, client/, cmd/limend/]
+affects: [api/, authorizer/, client/, cmd/limend/, server/]
 effort: medium
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -26,9 +26,14 @@ document.
 
 ### Routes
 
-`limend` serves the routes under `/v1`. A platform that serves several
-services behind one origin may mount them under a prefix of its own; the
-server is told its public base so the links it writes carry it.
+`limend` serves the routes under `/v1`. *Amended 2026-11-01:* with
+`LIMEN_BASE_PATH` set, for example to `/v1/oversight`, it also serves
+every route with that prefix in place of `/v1`, with the same handler and
+the same authorizer question, so an ingress that forwards a public prefix
+unchanged reaches it (`/v1/oversight/learned` is `/v1/learned`). The value
+is an absolute path with no trailing slash and is not `/v1`; `limend`
+refuses any other at start (exit 2). The client takes the same prefix as
+`Options.BasePath`.
 
 | Method | Path | Body | Success | Authorizer action | Contract |
 |---|---|---|---|---|---|
@@ -41,6 +46,12 @@ server is told its public base so the links it writes carry it.
 | PUT | `/v1/profiles` | `Profile` | 200 `Profile` (as stored) | `profile.write` | `Admin.PutProfile` |
 | POST | `/v1/replays?keep` | NDJSON of `ReplayRecord` | 200 `ReplayReport` | `replay.create` | `Admin.Replay` |
 | POST | `/v1/subjects/forget` | `{"org", "subject"}` | 204 | `subject.forget` | `Admin.Forget` |
+| GET | `/v1/explanations?org&subject&action_id` | none | 200 `Explanation` | `case.list` | `Explainer.Explain` |
+| GET | `/v1/learned?org&subject&agent&kind` | none | 200 `Learned` | `case.list` | `Explainer.Learned` |
+| POST | `/v1/previews` | `PreviewRequest` | 200 `Preview` | `reliability.read` | `Explainer.Preview` |
+
+The last three are [[009-explanations]]'s, added 2026-11-01 with the code
+`no_case` (404) for an explanation of an action Limen has no record of.
 
 Every route answers the errors of [[002-contract]] that its contract
 method can return, plus `unauthenticated`, `forbidden`, `body_too_large`
@@ -59,7 +70,7 @@ it acts, about a resource whose kind and fields are fixed per action:
 |---|---|---|
 | `case.predict`, `case.decide`, `case.answer`, `case.list` | `Case` | `org`, `subject` |
 | `reliability.read` | `Reliability` | `org`, `subject` |
-| `profile.read`, `profile.write` | `Profile` | `org`, `action_kind`, `agent` (empty when unscoped). The field is `action_kind`, not `kind`, because the shared authorizer's flat wire object reserves `kind` for the resource kind |
+| `profile.read`, `profile.write` | `Profile` | `org`, `action_kind`, `agent` (empty when unscoped), and `subject` for a person's own context (below). The field is `action_kind`, not `kind`, because the shared authorizer's flat wire object reserves `kind` for the resource kind |
 | `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own |
 | `subject.forget` | `Subject` | `org`, `subject` |
 
@@ -67,6 +78,15 @@ With no endpoint configured, `limend` applies the shared owner policy: a
 caller acts on cases and reports whose `subject` is the caller's own
 rendered subject, admins act on everything, and every other request is
 refused.
+
+*Amended 2026-11-01: a person's own context.* A decision point keys the
+actions of a person with no organization by the person's rendered
+subject as `org` (issuer and `sub` joined by `|`). A profile whose `org`
+contains `|` is such a context, and its `Profile` resource carries
+`subject` equal to `org`, so the owner policy lets that person read and
+write it. No organization id contains `|`, so an organization's profiles
+carry no `subject` and stay its admins'. A replay's resource carries no
+`subject` for any org, so replays stay admin-only.
 
 ### Subject binding and relays
 
@@ -150,3 +170,20 @@ caller).
 | 5 | A replay of 100001 records is `body_too_large` and learns nothing; an invalid record is `invalid_replay` naming its line | handler tests |
 | 6 | An unknown request field is ignored, and a known field out of range is the route's `invalid_*` naming it | handler tests |
 | 7 | `client/` satisfies `limen.Service` and passes the conformance suite against a running `limend` | an e2e test with `conformance.Run` ([[006-conformance]]) |
+| 8 | With a base path, every route answers under it as under `/v1`, with the same authorizer question; an invalid base path stops `limend` with exit 2 | `server` and `cmd/limend` tests |
+| 9 | A person reads and writes the profiles of their own context and no other person's; a non-admin cannot write an organization's profile; a replay is admin-only for a person's own context too | `server` tests under the owner policy |
+
+## Amendments
+
+**2026-11-01.** Two contract decisions made when [[009-explanations]]
+was built, each written into the section it changes:
+
+- *Base path* (Routes): `LIMEN_BASE_PATH` serves the API under a second
+  prefix, so a hosted installation routes a public path such as
+  `/v1/oversight` to `limend` without a rewrite. The earlier sentence,
+  that the server is told its public base for the links it writes, is
+  replaced: `limend` writes no links.
+- *A person's own context* (The authorizer): profiles of a context keyed
+  by a person's rendered subject are that person's. Criteria 8 and 9 hold
+  both.
+- *Explanations* (Routes): three routes and the code `no_case`.
