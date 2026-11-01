@@ -1,6 +1,6 @@
 ---
 title: "Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests"
-status: in-progress
+status: testing
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
@@ -106,10 +106,11 @@ answers it recorded.
 
 ## Outcome
 
-Recorded on 2026-11-01, at v0.3.0. The suite and the stub are built and
-used: the engine with both stores, the HTTP client and the stub pass
-`conformance.Run`. The spec stays `in-progress` because one listed case
-is missing and the defect-seeded tests of criterion 1 do not exist.
+Recorded on 2026-11-01, after v0.3.0. The suite and the stub are built
+and used: the engine with both stores, the HTTP client and the stub pass
+`conformance.Run`. Every case of the table runs, and each case fails
+against a stub seeded with its defect. The spec stays `testing` until
+criterion 4 has the test it names.
 
 ### What was built
 
@@ -121,7 +122,7 @@ is missing and the defect-seeded tests of criterion 1 do not exist.
 
 | # | Proof in the tree |
 |---|---|
-| 1 | partly: every case but `Certificate` runs; no test seeds a defect |
+| 1 | `TestDefects`: for each case, in the order of the suite, a child run against a stub with that case's defect must fail on that case (`conformance/defects_test.go`) |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above; the client runs against `server.New`, the handler `limend` serves |
 | 4 | partly: the stub and the engine share `estimate/`, and the suite checks each against the same values; no test compares the two on one ledger |
@@ -151,7 +152,7 @@ are merged:
 | `ForgetPerOrg` | `ForgetIsScoped` |
 | `ErrorIsAsk`, `TimeoutIsAsk` | `FailClosed` |
 | `Previews` | `Previews`, `PreviewErrors` |
-| `Certificate` | none |
+| `Certificate` | `Certificate` |
 | none | `SteeredVerdicts`, `LaterAnswersNeverEstimate`, `ExplanationsOfSteeredVerdicts` |
 
 | What it said | What was built | Why |
@@ -167,6 +168,4 @@ are merged:
 
 | Open | Why |
 |---|---|
-| the `Certificate` case | not written; the certificate is held by `estimate/`'s `TestCertificate` alone ([[008-ledger-and-estimation]]) |
-| a broken service per case (criterion 1) | not written |
-| one test that runs the stub and the engine on one ledger (criterion 4) | not written |
+| one test that runs the stub and the engine on one ledger (criterion 4) | not written ([[008-ledger-and-estimation]], criterion 7) |

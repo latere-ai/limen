@@ -226,7 +226,7 @@ standard library and `latere.ai/x/pkg/verdict` only.
 | 2 | `TestCostsRefusesDecidingOnNoEvidence`, `TestCostsThresholds` |
 | 3 | `TestThresholdsVerdictIsBayesOptimal`, `TestThresholdsVerdict` |
 | 4 | `TestCertificationSize` |
-| 5 | partly: `TestActionValidate`, `TestDecisionValidate`, `TestAnswerAndQueries`, `TestProfileValidate`, `TestReplayRecordValidate` |
+| 5 | partly: `TestActionValidate`, `TestDecisionValidate`, `TestAnswerAndQueries`, `TestProfileValidate`, `TestReplayRecordValidate`, `TestExplanationQueries` |
 | 6 | `TestDecideProducesValidDecisions` |
 | 7 | partly: `TestErrorTable` |
 | 8 | `TestFailClosedOnError`, `TestFailClosedOnTimeout`, `TestFailClosedPassesAPrediction` |
@@ -247,5 +247,5 @@ standard library and `latere.ai/x/pkg/verdict` only.
 
 | Open | Why |
 |---|---|
-| criterion 5: a table test that asserts every field at fault for each type | multi-field errors are asserted for `Action`, `Answer` and `ReplayRecord` only; `Key`, `LearnedQuery` and `PreviewRequest` are tested through the server and the engine; `ReliabilityQuery.Validate` names only `from` when both `from` and `to` are zero |
+| criterion 5: every field at fault for each type | `ReliabilityQuery.Validate` names only `from` when both `from` and `to` are zero, and no test asserts more than one field at fault for `Decision`, `Profile` or `CaseQuery` |
 | criterion 7: `CodeOf` over a wrapped `*Error` | no test wraps one with `%w` |
