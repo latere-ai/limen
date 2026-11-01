@@ -295,7 +295,7 @@ reviewer.
 | 5 | `t` increases by one per new case of a subject, and no time a caller sends reaches the model | an engine test with a fake clock |
 | 6 | A prediction never fits, and its 99th percentile at `n` = 512 with a warm snapshot is under 5 milliseconds on the reference runner | a test that counts fits and a benchmark |
 | 7 | A model with new answers is refitted within five seconds and the new snapshot is used by the next prediction | an engine test with a fake clock |
-| 8 | Memory for snapshots stays within the budget, and an evicted model reloads its snapshot without fitting | an engine test with a small budget |
+| 8 | Memory for snapshots stays within the budget, except a single model larger than the whole budget, and an evicted model reloads its snapshot without fitting (*amended 2026-11-01*) | an engine test with a small budget |
 | 9 | No store holds an action's input after the prediction returns | a store test that greps every row and file for a marker in the input |
 | 10 | Models of different versions never share training data, and a version change leaves the old version serving | an engine test |
 | 11 | `engine.Engine` passes `conformance.Run` with each store | [[006-conformance]] |
@@ -327,11 +327,11 @@ spec stays `testing` until they are built or moved to their own spec.
 | 3 | `TestShellClasses`, `TestShellDestructive`, `TestShellOutsideWorkspace`, `TestShellPrograms`, `TestRedirection`, `TestShellDepthBound`, `FuzzReadShell` |
 | 4 | `TestLearns`, `TestForgetDropsTheModel`, `TestPrior`, `TestCostsThresholds`; the conformance case `UnknownIsAnAsk` |
 | 5 | `TestTimeCountsDecisions`; the store rules `NextT` and `NextTConcurrent` |
-| 6 | `TestPredictionNeverFits`, on the fake clock of `testing/synctest`, and `TestWarmPredictionAt512` (`engine/fit_test.go`); `BenchmarkPredictWarm512` reports the 99th percentile |
-| 7 | `TestBackgroundFitWithinFiveSeconds`, on the fake clock; also `TestBackgroundFitAndReload` |
-| 8 | `TestCacheStaysWithinTheBudget`, `TestEvictionReloads` |
+| 6 | `TestPredictionNeverFits`, on the fake clock of `testing/synctest`, and `TestWarmPredictionAt512` (`engine/fit_test.go`); `BenchmarkPredictWarm512` reports a 99th percentile of 2.7 ms on an Apple M5 Pro. The gate does not assert the 5 ms bound, because under the race detector a prediction takes about 63 ms |
+| 7 | `TestBackgroundFitWithinFiveSeconds`, on the fake clock; also `TestBackgroundFitAndReload`. A fit takes no fake time, so the five seconds of wall time rest on the one second debounce and `BenchmarkFit512`, about 160 ms |
+| 8 | `TestCacheStaysWithinTheBudget`, `TestEvictionReloads`; one model larger than the whole budget stays alone, because a prediction needs the model it reads |
 | 9 | `TestNoFileHoldsTheInput` (`engine/store/file`), which searches every file of a ledger for a marker; also the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestLabelKeepsNoInput` |
-| 10 | `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version |
+| 10 | partly: `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version. Two versions side by side are not built |
 | 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store) |
 
 ### What diverges from the design as written

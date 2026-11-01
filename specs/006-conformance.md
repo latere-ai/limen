@@ -122,7 +122,7 @@ test in the tree.
 
 | # | Proof in the tree |
 |---|---|
-| 1 | `TestDefects`: for each case, in the order of the suite, a child run against a stub with that case's defect must fail on that case (`conformance/defects_test.go`) |
+| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 29 cases, in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above |
 | 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same |
@@ -159,7 +159,6 @@ are merged:
 |---|---|---|
 | `InvalidIsAnError` names every field at fault | `Validation` checks one named field per error | the contract tests hold the full lists ([[002-contract]]) |
 | `ReplayReport` checks the counts and the estimate | `Replay` checks the records and that nothing is kept without `keep` | the stub's `TestReplay` holds the counts for the stub alone |
-| `ForgetPerOrg` checks cases, reviews and reports | `ForgetIsScoped` checks the cases and the reviews in the reports | the engine's `TestForgetDropsTheModel` holds the model |
 | the fail-closed cases wrap the target | `FailClosed` wraps a failing and a hanging predictor, then records into the target | the target is not what fails |
 | a decision point's own tests use the stub (Topos's, a hook's) | Topos tests against its own fake service over HTTP; no hook exists | Topos does not import this module ([[005-adapters]]) |
 

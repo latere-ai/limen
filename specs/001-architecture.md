@@ -231,7 +231,7 @@ review the decision point draws.
 |---|---|---|
 | 1 | The root package imports only the standard library and `latere.ai/x/pkg/verdict` | `TestRootImports` and the `depcheck` gate |
 | 2 | Every package named in the table exists with the role given, or its spec is still open | review against the tree at each spec's completion |
-| 3 | `verdict.Decide` never returns a verdict more permissive than its ceiling, and its probability is positive exactly for shown verdicts drawn or forced | the `verdict` package's tests and fuzz targets |
+| 3 | `verdict.Decide` never returns a verdict more permissive than its ceiling, and the probability it returns is positive for a shown verdict and below one for an unshown one (*amended 2026-11-01*) | the `verdict` package's tests and fuzz targets, and a test in this tree |
 | 4 | Each invariant a `limen.Service` can show has a case in the conformance suite | [[006-conformance]] |
 | 5 | The engine and the client both satisfy `limen.Service` and pass the conformance suite | `conformance.Run` in `engine/` and in an e2e test against `limend` |
 
@@ -271,7 +271,7 @@ keeps the ledger. Every criterion has its proof in the tree.
 |---|---|---|
 | the package table | `server/`, `cmd/limen` and `importer/topos` exist and were not listed; the Postgres store was listed and does not exist | the table above is corrected; the shared store is [[004-engine]]'s |
 | a failure asks (invariant 2) | Limen's fallback is an `ask` with `ask_kind` `unsure`; a decision point that lets its rules decide an `unsure` ask, as hosted Topos does in its `learned` mode, also lets them decide when Limen fails | the invariant is about Limen's suggestion, and it holds; the decision point decides, never above its ceiling, and Limen never allows ([[007-evidence-gates]], Amendments) |
-| the probability of `verdict.Decide` is positive exactly for shown verdicts | it is positive for every verdict that review sampling could show, drawn or not: an undrawn automatic verdict carries the audit rate | the ledger weights each review by the probability that the action could be shown ([[008-ledger-and-estimation]]) |
+| criterion 3 said the probability is positive exactly for shown verdicts | an undrawn automatic verdict also carries the audit rate, so criterion 3 now says what holds: positive for a shown verdict, below one for an unshown one | the ledger weights each review by the probability that the action could be shown ([[008-ledger-and-estimation]]) |
 
 ### What this leaves open
 

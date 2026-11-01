@@ -231,7 +231,7 @@ a passing test in the tree.
 | 6 | `TestDecideProducesValidDecisions` |
 | 7 | `TestErrorTable`, with an `*Error` wrapped twice |
 | 8 | `TestFailClosedOnError`, `TestFailClosedOnTimeout`, `TestFailClosedPassesAPrediction` |
-| 9 | the `suite` gate, which measures coverage across packages |
+| 9 | the `suite` gate, which measures with `-covermode=atomic -coverpkg=./...`; the root package's own tests reach 100% |
 | 10 | the conformance suite ([[006-conformance]]); the relay rule by the server's `TestAnswerBy` |
 
 ### What diverges from the design as written
