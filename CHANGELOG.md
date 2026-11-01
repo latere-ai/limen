@@ -17,6 +17,11 @@ the commit log.
   must count the most recent audits that the person approved, back to the
   first denial. It must also need the number of audits that the claim of
   the organization gives.
+- The conformance case `UnknownIsAnAsk` also checks that a new person
+  gets the approval probability 0.5 and `ask`, under a saved profile at
+  each end of the accepted costs. The case `ForgetIsScoped` also checks
+  that `Forget` removes the reviews of the person from the reports of the
+  organization, and from no other organization.
 
 ### Changed
 

@@ -222,12 +222,25 @@ func validation(t *testing.T, target Target) {
 	code(t, err, limen.CodeInvalidAction, "effect")
 }
 
-// unknownIsAnAsk: an action about a subject Limen knows nothing about is
-// an ask under the default profile.
+// unknownIsAnAsk: an action about a subject Limen knows nothing about has
+// an approval of one half, which is an ask under the default profile and
+// under a saved profile at each end of the costs Limen accepts.
 func unknownIsAnAsk(t *testing.T, target Target) {
-	p := predict(t, target.New(t), action("u1"))
-	ok := p.Verdict == limen.Ask && p.Approve >= 0 && p.Approve <= 1 && p.Source != "" && p.Key == key("u1")
-	expect(t, ok, "prediction %+v, want an ask", p)
+	s := target.New(t)
+	p := predict(t, s, action("u1"))
+	ok := p.Verdict == limen.Ask && p.Approve == 0.5 && p.Source != "" && p.Key == key("u1")
+	expect(t, ok, "prediction %+v, want an ask at 0.5", p)
+	for i, costs := range []limen.Costs{
+		{FalseAllow: 2.001, FalseBlock: 2.001, Ask: 1},
+		{FalseAllow: 1e6, FalseBlock: 2.001, Ask: 1},
+		{FalseAllow: 2.001, FalseBlock: 1e6, Ask: 1},
+	} {
+		_, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: costs, AuditRate: 0.05})
+		must(t, err)
+		id := "u" + strconv.Itoa(i+2)
+		p := predict(t, s, action(id))
+		expect(t, p.Verdict == limen.Ask && p.Approve == 0.5, "costs %+v: prediction %+v, want an ask at 0.5", costs, p)
+	}
 }
 
 // predictionFollowsTheProfile: the suggestion is the thresholds' verdict
@@ -535,20 +548,31 @@ func casesNeverReturnInput(t *testing.T, target Target) {
 	expect(t, len(c.Action.Input) == 0 && c.Action.Key == key("c1") && c.Prediction != nil, "case %+v", c)
 }
 
-// forgetIsScoped: forgetting a subject in one organization leaves the
-// other organizations' records.
+// forgetIsScoped: forgetting a subject in one organization removes its
+// cases, its reviews and its reports there, and leaves the other
+// organizations' records.
 func forgetIsScoped(t *testing.T, target Target) {
 	s := target.New(t)
 	here, there := action("f1"), action("f1")
 	there.Org = "org_conformance_other"
-	decide(t, s, here, limen.Ask, 1, "test/1")
-	decide(t, s, there, limen.Ask, 1, "test/1")
+	for _, a := range []limen.Action{here, there} {
+		decide(t, s, a, limen.Flag, 0.5, "test/1")
+		answer(t, s, a.Key, false)
+	}
+	reviews := func(o string) int {
+		from, to := window()
+		r, err := s.Reliability(ctx, limen.ReliabilityQuery{Org: o, Subject: subject, Of: limen.OfApplied, From: from, To: to})
+		must(t, err)
+		return r.FalseAllow.Reviews
+	}
+	require(t, reviews(org) == 1 && reviews(there.Org) == 1, "a review in each organization before Forget")
 	must(t, s.Forget(ctx, org, subject))
 	must(t, s.Forget(ctx, org, subject))
 	page := cases(t, s, limen.CaseQuery{})
 	expect(t, len(page.Entries) == 0, "the forgotten organization keeps %+v", page)
+	expect(t, reviews(org) == 0, "the forgotten organization still reports its review")
 	page = cases(t, s, limen.CaseQuery{Org: there.Org, Subject: subject})
-	expect(t, len(page.Entries) == 1, "the other organization has %+v", page)
+	expect(t, len(page.Entries) == 1 && len(page.Entries[0].Answers) == 1 && reviews(there.Org) == 1, "the other organization has %+v", page)
 }
 
 type failing struct{}
