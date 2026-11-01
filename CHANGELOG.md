@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.2.0 - 2026-11-01
+
 ### Added
 
 - Explanations (spec 009). `GET /v1/explanations` shows why Limen
