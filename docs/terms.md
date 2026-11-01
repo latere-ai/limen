@@ -18,6 +18,7 @@ if there is one.
 | `limen` | The command that replays recorded decisions through Limen. | |
 | person | The person for whom an action runs. Limen learns the answers of this person. | `subject` |
 | organization | The organization that the records belong to. The records of one organization are separate from the records of all other organizations. | `org` |
+| context of a person | The records of a person that have no organization. Their `org` is the subject of the person. | `org` |
 
 ## Verdicts
 
@@ -54,6 +55,13 @@ verdicts. The list starts with the verdict that permits the most.
 | features | Numbers that Limen calculates from an action. The model uses the features. Limen keeps the features. | |
 | feature extractor | A fixed program that calculates features from the input of an action. A feature extractor is not a language model. | |
 | input | The arguments of an action, for example the text of a shell command. Limen reads the input to calculate the features. Limen does not keep the input. | `input` |
+| label | A short name for the type of an action, from a fixed list of words in the feature extractor. Examples: `bash: go test`, `bash: git push --force`. A label never contains the input. | `label` |
+| explanation | The parts of one prediction: the answers that changed it most, and what the model learned about the type of action and about the recent tolerance of the person. | `Explanation` |
+| share | The part of one answer in an explanation, from 0 to 1. | `share` |
+| evidence ratio | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. | `evidence_ratio` |
+| unsure | An `ask` with an evidence ratio less than 0.5. The person has few answers about this type of action. More answers change the suggestion. | `ask_kind` |
+| split | An `ask` with an evidence ratio of 0.5 or more. The answers of the person about this type of action disagree. More answers do not change the suggestion. | `ask_kind` |
+| preview | What a different cost profile would do with the recorded predictions of a person. | `Preview` |
 
 ## Costs and thresholds
 

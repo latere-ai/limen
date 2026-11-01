@@ -46,6 +46,15 @@ These variables apply in both modes:
 |---|---|---|
 | `LIMEN_ADDR` | The address that the server listens on. | `127.0.0.1:7720`. In the image: `:7720`. |
 | `LIMEN_DATA_DIR` | The ledger directory. | `$XDG_STATE_HOME/limen`, or `~/.local/state/limen`. In the image: `/var/lib/limen`. |
+| `LIMEN_BASE_PATH` | A second prefix for the routes, in place of `/v1`. Use it if an ingress sends a public path to `limend` without a change. | None |
+
+The server always supplies each route under `/v1`. If you set
+`LIMEN_BASE_PATH`, the server also supplies each route under that prefix.
+For example, with `LIMEN_BASE_PATH=/v1/oversight`, the server supplies
+`/v1/oversight/learned` and `/v1/learned`. The two paths are the same
+route, with the same permission. The value must start with `/`, must not
+end with `/`, and must not be `/v1`. If the value is not correct,
+`limend` stops with exit code 2.
 
 ### One person
 
@@ -76,10 +85,14 @@ one day, and it must carry the time when it was issued.
 Without an authorization endpoint, the shared owner policy decides:
 
 - A person can do the operations for their own subject: predict, decide,
-  answer, list cases, read reports, and forget their data.
+  answer, list cases, read explanations and reports, and forget their
+  data.
+- A person can read and save the cost profiles of their own context. The
+  `org` of these cost profiles is the subject of the person.
 - A subject in `LIMEN_ADMINS` can do all operations for all persons. Use
   it for the service that runs the decision point, for example Topos.
-- Only an admin can read or save cost profiles and send replays.
+- Only an admin can read or save the cost profiles of an organization and
+  send replays.
 
 The [API](api.md#permissions) lists the permission that each route needs
 from an authorization endpoint.

@@ -311,6 +311,19 @@ value of `of` is one of these sources:
 - Read `covered` to know which part of the actions the `value` applies to.
 - Keep `unanswered` small.
 
+## Explanations for the person
+
+Three routes show a person what Limen learned from their answers:
+`GET /v1/explanations` for one action, `GET /v1/learned` for each type of
+action, and `POST /v1/previews` for a different cost profile. In Go, they
+are the `Explainer` interface of each `limen.Service`. The
+[API](api.md#explanations) describes the fields.
+
+> **Warning:** Show an explanation only to the person. Never put an
+> explanation, or a part of it, in what an agent reads: a tool result, a
+> message, or a hint to try again. An agent can use it to change an
+> action until Limen allows it.
+
 ## A safe start
 
 Before Limen decides anything, show that it is useful on your own

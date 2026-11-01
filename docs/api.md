@@ -9,8 +9,11 @@ server.
 
 ## Conventions
 
-- **Base path.** The server supplies each route under `/v1`. A platform
-  that hosts Limen can put the routes under a different prefix.
+- **Base path.** The server supplies each route under `/v1`. If
+  `LIMEN_BASE_PATH` is set, the server also supplies each route with that
+  prefix in place of `/v1` ([Running limend](running.md#configuration)).
+  For example, with `/v1/oversight`, `GET /v1/oversight/learned` and
+  `GET /v1/learned` are the same route, with the same permission.
 - **Authentication.** Each request must have a bearer token:
   `Authorization: Bearer <token>`. The token must come from an issuer
   that the installation lists, for the audience that the installation
@@ -99,7 +102,7 @@ The response is the prediction:
   "subject": "https://issuer.example|usr_42",
   "action_id": "ses_9f/toolu_01",
   "verdict": "ask",
-  "approve": 0.58,
+  "approve": 0.6,
   "uncertainty": 0.71,
   "thresholds": {"allow_above": 0.9, "block_below": 0.25},
   "profile": {"org": "org_7"},
@@ -355,6 +358,143 @@ is also status 204.
 
 Errors: `invalid_query` and the common errors.
 
+## Explanations
+
+`GET /v1/explanations?org=...&subject=...&action_id=...`. Permission:
+`case.list`.
+
+The response is the explanation of the prediction for one action. The
+model of the person calculates the approval probability from the answers
+of that person. The explanation shows the part of each answer in that
+calculation. These parts are exact. They are not an estimate of the
+model.
+
+```json
+{
+  "org": "org_7",
+  "subject": "https://issuer.example|usr_42",
+  "action_id": "ses_9f/toolu_01",
+  "model": {"source": "learned/1", "answers": 212},
+  "predicted_by": {"source": "learned/1", "answers": 209},
+  "approve": 0.58,
+  "uncertainty": 0.71,
+  "verdict": "ask",
+  "thresholds": {"allow_above": 0.95, "block_below": 0.2},
+  "mean": 0.31,
+  "parts": {"action": 0.52, "recent": -0.18, "interaction": -0.03},
+  "evidence_ratio": 0.64,
+  "ask_kind": "split",
+  "evidence": [
+    {"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z", "approve": true, "share": 0.21},
+    {"action_id": "ses_8c/toolu_02", "label": "bash: git push --force", "at": "2026-10-01T15:40:10Z", "approve": false, "share": 0.17}
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `model` | The model that gives the explanation. This is the current model of the person. `answers` is the number of answers of the person that the model learned from. |
+| `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
+| `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. |
+| `thresholds` | The thresholds of the recorded prediction. If there is no recorded prediction, the thresholds of the cost profile that applies now. |
+| `mean` | The value that the model calculates before it changes it into a probability. A positive value is on the side of approval. |
+| `parts` | The parts of `mean`. Their sum is `mean`. `action` is what the model learned about this type of action. `recent` is the recent tolerance of the person, from all recent answers. `interaction` is a small part between the two. |
+| `evidence_ratio` | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. |
+| `ask_kind` | Only for an `ask`. `unsure` if `evidence_ratio` is less than 0.5: the person has few answers about this type of action, and more answers change the suggestion. `split` if it is 0.5 or more: the answers disagree, and more answers do not change the suggestion. |
+| `evidence` | The answers with the largest parts: not more than three on the side of the verdict and two on the other side. For an `ask`, not more than three on each side. The largest `share` is first. |
+| `label` | The type of the action, from a fixed list of words. A label never contains the input of the action. |
+| `share` | The size of the part of this answer, divided by the sum of the sizes of the parts of all answers. |
+
+Errors: `invalid_query`, `no_case` if Limen has no record of the action,
+and the common errors.
+
+> **Warning:** An explanation is for the person. Do not show an
+> explanation, or a part of it, to an agent. An agent can use it to
+> change an action until Limen allows it.
+
+## What the model learned
+
+`GET /v1/learned?org=...&subject=...`. Permission: `case.list`.
+
+The response shows what the model learned about one person. It has one
+entry for each label in the answered cases of the person. The entry with
+the most answers is first.
+
+| Parameter | Meaning |
+|---|---|
+| `org`, `subject` | Required. |
+| `agent` | The agent for the cost profile that applies. Without it, the cost profile of the kind of action, or of the organization, applies. |
+| `kind` | Gives only the entries of this kind of action. |
+
+```json
+{
+  "org": "org_7",
+  "subject": "https://issuer.example|usr_42",
+  "model": {"source": "learned/1", "answers": 212},
+  "entries": [
+    {"label": "bash: go test", "kind": "tool", "name": "bash", "approved": 41, "denied": 0, "approve": 0.99, "uncertainty": 0.31, "verdict": "allow", "evidence_ratio": 0.91, "thresholds": {"allow_above": 0.95, "block_below": 0.2}},
+    {"label": "bash: git push --force", "kind": "tool", "name": "bash", "approved": 3, "denied": 4, "approve": 0.47, "uncertainty": 0.62, "verdict": "ask", "evidence_ratio": 0.72, "ask_kind": "split", "thresholds": {"allow_above": 0.95, "block_below": 0.2}}
+  ],
+  "recent": [{"t": 10, "at": "2026-09-03T08:00:00Z", "value": 0.12}, {"t": 211, "at": "2026-10-01T15:40:10Z", "value": -0.18}]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `approved`, `denied` | The number of cases with this label that the person approved and denied. The last answer of each case counts. |
+| `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. |
+| `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. |
+| `thresholds` | The thresholds of the cost profile that applies to the kind of action and to `agent`. |
+| `recent` | The recent tolerance of the person (`parts.recent` of an explanation) at not more than 20 decisions. The decisions have equal intervals between them. `t` is the number of the decision, and `at` is the time when it arrived. |
+
+Errors: `invalid_query` and the common errors.
+
+## Previews
+
+`POST /v1/previews`. Permission: `reliability.read`.
+
+A preview shows what a different cost profile would do with the recorded
+predictions of one person in a period of time. Limen applies the
+thresholds of the costs to each recorded prediction. It does not
+calculate the model again.
+
+```json
+{
+  "org": "org_7",
+  "subject": "https://issuer.example|usr_42",
+  "from": "2026-09-01T00:00:00Z",
+  "to": "2026-10-01T00:00:00Z",
+  "costs": {"false_allow": 50, "false_block": 4, "ask": 1},
+  "audit_rate": 0.05
+}
+```
+
+Limen validates the costs as it validates the costs of a cost profile.
+The response contains the request and these fields:
+
+```json
+{
+  "thresholds": {"allow_above": 0.98, "block_below": 0.25},
+  "records": 1840,
+  "would": {"allow": 1211, "ask": 590, "block": 39},
+  "answered": 702,
+  "allowed_denied": 6,
+  "blocked_approved": 3,
+  "expected_asks": 652.5
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `records` | The number of recorded predictions in the period. |
+| `would` | The number of these predictions that would get each verdict. |
+| `answered` | The number of these predictions that have an answer. |
+| `allowed_denied`, `blocked_approved` | The answered predictions that would get `allow` and that the person denied, and that would get `block` and that the person approved. |
+| `expected_asks` | The number of `ask` verdicts, plus the audits that the audit rate would add. |
+
+The numbers are examples. Errors: `invalid_query`, `ask_too_costly`,
+`body_too_large`, and the common errors.
+
 ## Errors
 
 All errors have the same shape:
@@ -389,6 +529,7 @@ has one status and one message:
 | `action_conflict` | 409 | A different action already uses this action ID. Give each action its own ID. |
 | `already_decided` | 409 | This action already has a decision. Limen accepts one decision for each action. |
 | `no_decision` | 409 | This action has no recorded decision. Record the decision, then send the answer. |
+| `no_case` | 404 | Limen has no record of this action. Check the organization, the person, and the action ID. |
 | `unauthenticated` | 401 | The request has no valid credential. Sign in again, then send the request again. |
 | `forbidden` | 403 | You do not have permission for this request. Ask an administrator of the organization for access. |
 | `body_too_large` | 413 | The request is larger than the limit of Limen. Send it in smaller parts. |
@@ -413,14 +554,27 @@ and no others:
 | `POST /v1/answers` | `case.answer` | `Case` | `org`, `subject` |
 | `GET /v1/cases` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/reliability` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent` |
-| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent` |
+| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for the context of a person |
+| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for the context of a person |
 | `POST /v1/replays` | `replay.create` | `Replay` | `org` |
 | `POST /v1/subjects/forget` | `subject.forget` | `Subject` | `org`, `subject` |
+| `GET /v1/explanations` | `case.list` | `Case` | `org`, `subject` |
+| `GET /v1/learned` | `case.list` | `Case` | `org`, `subject` |
+| `POST /v1/previews` | `reliability.read` | `Reliability` | `org`, `subject` |
 
 The `Profile` resource gives the kind of action as `action_kind`. The
 reason is that the resource object of the shared authorizer uses `kind`
 for the kind of the resource itself.
+
+A cost profile can be for the context of a person. The `org` of such a
+cost profile is the subject of the person, with the issuer and the `sub`
+and a pipe between them. A decision point puts the actions of a person
+without an organization in this context. Then the `Profile` resource also
+has `subject`, equal to `org`, and the shared owner policy lets the
+person read and save these cost profiles. An organization ID never
+contains a pipe. Thus the cost profiles of an organization have no
+`subject`, and only an admin can read or save them. Replays have no
+`subject`, also for the context of a person.
 
 Usually, the caller is the person of the request. A decision point can
 predict, decide, or answer for the person that it runs for. An agent

@@ -11,6 +11,32 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- Explanations (spec 009). `GET /v1/explanations` shows why Limen
+  suggests what it suggests for one action: the answers of the person
+  that changed the prediction most, with the exact share of each, the
+  split into what the model learned about the type of action and about
+  the recent tolerance of the person, and for an `ask`, if the person has
+  few answers (`unsure`) or answers that disagree (`split`).
+  `GET /v1/learned` shows what the model learned about a person, for each
+  type of action. `POST /v1/previews` shows what a different cost profile
+  would do with the recorded predictions of a person. The Go contract has
+  the new `Explainer` interface, which `Service` includes.
+- Labels. Limen gives each new case a label from a fixed list of words,
+  for example `bash: git push --force`. A label never contains the input.
+- `LIMEN_BASE_PATH`. `limend` also supplies the API under this prefix, for
+  an ingress that sends a public path without a change. The client has
+  `Options.BasePath`.
+- The error code `no_case` (404), for an explanation of an action that
+  Limen has no record of.
+
+### Changed
+
+- A person can read and save the cost profiles of their own context: the
+  profiles whose `org` is the subject of the person. The profiles of an
+  organization and all replays stay with the admins.
+
 ## v0.1.1 - 2026-11-01
 
 ### Fixed
