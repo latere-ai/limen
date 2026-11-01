@@ -24,6 +24,17 @@
 //     the decisions applied, a rule, or an LLM judge whose verdict arrived
 //     as a [Signal].
 //
+// The [Explainer] shows the person what the model decides from: why one
+// prediction is what it is ([Explanation]), what the model has learned
+// about them for each kind of action ([Learned]), and what another cost
+// profile would have done ([Preview]). Each is exact for the model, and
+// none is for an agent to read.
+//
+// A [Service] is the [Predictor], the [Ledger], the [Admin] interface for
+// cost profiles, replays and forgetting, and the [Explainer]. The engine
+// (latere.ai/x/limen/engine), the HTTP client (latere.ai/x/limen/client)
+// and the stub (latere.ai/x/limen/stub) each implement it.
+//
 // The ledger needs no predictor: a harness that decides by rules alone can
 // record its decisions and learn how often its rules, and the judge it
 // consults, are wrong. The predictor needs the ledger, because the ledger's
