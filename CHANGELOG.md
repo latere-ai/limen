@@ -92,6 +92,14 @@ The documents:
 - The documents for users follow the writing rules of ASD-STE100. A term
   list gives each term one meaning.
 
+### Changed
+
+- **Releases are built, signed and published by the shared release stages
+  in latere-ai/ci.** The image signature and the signed `checksums.txt`
+  name those stages, run for this repository. Each release attaches the
+  `limend` binaries for linux/amd64 and linux/arm64, the bill of materials
+  of the image, and `checksums.txt` with its signature.
+
 ### Security
 
 - Built with Go 1.27.2 and golang.org/x/net v0.60.0, which fix GO-2026-6611, GO-2026-6612, GO-2026-6613 and GO-2026-6617.
