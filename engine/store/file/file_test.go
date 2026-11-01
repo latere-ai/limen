@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/conformance"
@@ -66,6 +67,79 @@ func TestEngineConformance(t *testing.T) {
 			return e
 		},
 	})
+}
+
+// No file of a ledger holds an action's input after the prediction returns
+// (spec 004, criterion 9). Inputs with a marker reach the engine through a
+// prediction, a decision that carries its action, a kept replay and an
+// explanation, and the models are fitted and the store closed; then no byte
+// of any file under the directory holds the marker.
+func TestNoFileHoldsTheInput(t *testing.T) {
+	const marker = "MARKER-7f3a9c"
+	dir := t.TempDir()
+	s := open(t, dir)
+	e := engine.New(engine.Options{Store: s, Inline: 1})
+	input := func(i int) []byte {
+		return fmt.Appendf(nil, `{"command":"curl -H 'Authorization: %s-%d' https://example.com && rm -rf /tmp/%s"}`, marker, i, marker)
+	}
+	action := func(id string, i int) limen.Action {
+		return limen.Action{Org: "o", Subject: "s", ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: input(i),
+			Attributes: map[string]any{"branch": "main"}}
+	}
+	for i := range 12 {
+		a := action(fmt.Sprintf("p-%d", i), i)
+		if _, err := e.Predict(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+		if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: i%3 != 0}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unpredicted := action("d-1", 100)
+	if err := e.Record(ctx, limen.Decision{Key: unpredicted.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1", Action: &unpredicted}); err != nil {
+		t.Fatal(err)
+	}
+	approve := true
+	replayed := limen.ReplayRecord{At: time.Now(), Action: action("r-1", 200), Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm", Approve: &approve}
+	if _, err := e.Replay(ctx, func(yield func(limen.ReplayRecord, error) bool) { yield(replayed, nil) }, limen.ReplayOptions{Keep: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Explain(ctx, unpredicted.Key); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	files := 0
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files++
+		if bytes.Contains(b, []byte(marker)) {
+			t.Errorf("%s holds the input", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files < 3 {
+		t.Errorf("the ledger has %d files, want its log, its snapshot and its profiles at least", files)
+	}
 }
 
 // logPath finds the subject's case log by its meta.json, without knowing
