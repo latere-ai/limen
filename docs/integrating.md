@@ -170,6 +170,51 @@ becomes `ask`.
 | `ask` | Hold the action until the person answers. Do not change an `ask` to a refusal after a timeout. An agent that gets a refusal tries a different way to do the same thing. |
 | `block` | Do not run the action. Tell the agent the reason in your own words. The `reason` of a prediction is for the record of the person. Never show it to an agent. |
 
+### Two kinds of `ask`
+
+A suggested `ask` has an `ask_kind`. The kind tells why Limen is not
+sure:
+
+| `ask_kind` | Evidence ratio | Meaning |
+|---|---|---|
+| `unsure` | Less than 0.5 | The person has few answers about this type of action. More answers change the suggestion. |
+| `split` | 0.5 or more | The person has answers about this type of action, and the answers disagree. More answers do not change the suggestion. |
+
+The evidence ratio is the `evidence_ratio` of the prediction.
+[Theory](theory.md#two-kinds-of-ask) gives its formula. The `FailClosed`
+fallback has the kind `unsure`.
+
+Your decision point can use the kind. The person decides a `split` ask.
+Your rules can decide an `unsure` ask, as they did before you connected
+Limen:
+
+```go
+suggested := p.Verdict
+if p.Verdict == limen.Ask && p.AskKind != limen.AskSplit {
+	suggested = rulesVerdict // Your rules decide. Limen learns from the answers.
+}
+v, prob := verdict.Decide(suggested, ceiling, p.AuditRate, rand.Float64())
+```
+
+- Use the verdict of your rules only for an `ask` that is not `split`.
+  Use the suggested `allow` and `block` of Limen as usual.
+- Treat an `ask` without `ask_kind` as `unsure`. A server before v0.3.0
+  does not send the field.
+- Keep the audit rate of the prediction. Then a part of the automatic
+  verdicts of your rules also goes to the person, and the ledger can
+  measure your rules.
+- Record the decision as usual, with the review probability that
+  `verdict.Decide` returns.
+- If Limen fails, the `FailClosed` fallback is an `unsure` ask. Then
+  your rules decide, as they did before you connected Limen. The
+  fallback has an audit rate of zero, so no random selection occurs. The
+  verdict never permits more than the ceiling.
+
+With this policy, the suggested verdict of Limen decides only where Limen
+has evidence about the person. Hosted Topos uses this policy in its
+`learned` mode ([Topos](#topos)). Limen still suggests `ask`, and its
+reliability report (`of=learned`) still measures that suggestion.
+
 ## Record each decision
 
 Record each decision before the action runs and before a person sees it:
@@ -373,30 +418,44 @@ before it.
    `verdict.Decide`, under the ceiling of your rules. Start where an
    automatic `allow` can do the least damage, for example in a sandbox.
 
+   You can also start with the policy in
+   [Two kinds of `ask`](#two-kinds-of-ask). Then Limen decides only where
+   it has evidence about the person, and your rules decide the other
+   actions as before. Hosted Topos uses this policy.
+
 4. **Signals from a judge.** Attach the verdicts of your judge to the
    actions as signals. Monitor the reliability report of the judge for
    each person.
 
 ## Notes for each agent harness
 
-**Topos** ([github.com/latere-ai/topos](https://github.com/latere-ai/topos))
-is the first decision point. It works now, from Topos v0.11.0. Topos can
-use any decision service that has this API.
+### Topos
+
+[Topos](https://github.com/latere-ai/topos) is the first decision point
+that uses Limen. Topos can use any decision service that has this API.
 
 The rules of Topos give the ceiling, and `verdict.Decide` combines the
 verdicts. Topos records each decision with the tool call of the session.
-It sends the confirmations of the person as answers. Topos has two modes:
+The source of a decision is `topos/confirm` or `topos/progressive`. Topos
+sends the confirmations of the person as answers.
+
+#### Topos on your computer
+
+`topos run` uses Limen from Topos v0.11.0. It has two modes:
 
 - **Manual mode** (`topos run --mode manual`, the `confirm` mode of
   Topos). Topos asks you about each call that is not read-only, as
   before. Each answer teaches Limen. Topos records each prediction with
   the call. You can see what Limen would do.
 - **Auto mode** (`topos run --mode auto`, the `progressive` mode of
-  Topos). The suggested verdict of Limen decides, under the rules of
-  Topos. A familiar safe call runs, and Topos blocks a call that you would
-  deny. If Limen is not sure, Topos asks you. Topos still shows a part of
-  the automatic verdicts to you for audit. With these audits, the ledger
-  can measure how often auto mode is wrong.
+  Topos). The suggested verdict of Limen decides each call that the rules
+  of Topos do not decide. A familiar safe call runs, and Topos blocks a
+  call that you would deny. If Limen is not sure, Topos asks you. Topos
+  still shows a part of the automatic verdicts to you for audit. With
+  these audits, the ledger can measure how often auto mode is wrong.
+
+`topos run` does not read `TOPOS_DECISIONS_MODE`. Its auto mode is the
+`decide` mode of [hosted Topos](#hosted-topos).
 
 Start the server of Limen. Then give Topos its address and the token:
 
@@ -410,6 +469,46 @@ topos run --mode manual "Fix the failing test."  # First, for some time: Limen l
 topos run --mode auto   "Fix the failing test."  # Then: Limen decides under the rules.
 ```
 
+For a new person, Limen suggests `ask`. It suggests `allow` or `block`
+only after the answers of the person support it. Usually, auto mode asks
+about a type of call until it has approximately 30 or more answers for
+that type.
+
+#### Hosted Topos
+
+The Topos server, `toposd`, sends each tool call of each hosted session
+to Limen if `TOPOS_DECISIONS_URL` is set. `TOPOS_DECISIONS_MODE` sets how
+much the suggested verdict of Limen decides in the `progressive` mode of
+Topos. Topos v0.66.0 added this variable.
+
+| `TOPOS_DECISIONS_MODE` | What decides a `progressive` call |
+|---|---|
+| `shadow` | The rules and the risk score of Topos decide each call. Topos records the suggested verdict of Limen with the call. |
+| `learned` | The suggested verdict of Limen decides if it is `allow`, `block`, or an `ask` with `ask_kind` `split`. For an `unsure` ask, an `ask` without `ask_kind`, or if Limen does not answer, the rules and the risk score decide. A part of these automatic verdicts goes to the person, at the audit rate of the prediction. |
+| `decide` (the default) | The suggested verdict of Limen decides each call that the rules do not decide. If Limen fails, the call waits for a person. |
+
+In each mode, these rules apply:
+
+- In the `confirm` mode, the rules of Topos decide. Topos records each
+  decision in Limen, and Limen learns from the answers.
+- In the `plan` mode, Topos does not send the call to Limen.
+- A hosted session that runs on the computer of the person decides a
+  `progressive` call as in the `confirm` mode.
+- The lists of the organization, a tool that holds its own calls, and the
+  network rules of Topos decide before Limen.
+
+From v0.66.0, Topos also sends the answer of a person to a network
+approval. The answer goes to Limen as an answer to the call whose
+connection Topos refused.
+
+The Topos
+[configuration](https://github.com/latere-ai/topos/blob/main/docs/configuration.md)
+page gives the token settings, `TOPOS_DECISIONS_TOKEN` or
+`TOPOS_DECISIONS_AUDIENCE`. Use a hosted `limend` for hosted Topos
+([Running limend](running.md#hosted)).
+
+#### Replay the history of Topos
+
 To see what Limen would do on sessions that you ran before, replay the
 data directory of Topos. A replay does not need the server:
 
@@ -417,17 +516,48 @@ data directory of Topos. A replay does not need the server:
 limen replay topos
 ```
 
-A replay opens the data directory with the session store of Topos. If the
-directory has logs from a Topos version before v0.60.0, the store updates
-them to the current format one time. This is the same update that Topos
-does when it opens the directory.
+The data directory is `--data`, then `TOPOS_DATA_DIR`, then
+`$XDG_STATE_HOME/topos`, then `~/.local/state/topos`. A replay opens the
+directory with the session store of Topos, at the version in the `go.mod`
+file of Limen. If the directory has
+logs from a Topos version before v0.60.0, the store updates them to the
+current format one time. This is the same update that Topos does when it
+opens the directory.
 
-For a new person, Limen suggests `ask`. It suggests `allow` or `block`
-only after the answers of the person support it. Usually, auto mode asks
-about a type of call until it has approximately 30 or more answers for
-that type.
+Each tool call that has a verdict becomes one record:
 
-We plan to build the adapters below. They do not exist yet.
+- The action is a `tool` action with the name of the tool. Its effect is
+  the declared effect of a built-in tool of Topos, or `write` for a
+  different tool.
+- The verdict is the recorded verdict of Topos, with the source
+  `topos/<mode>`.
+- The review probability is the recorded probability. A log from before
+  Topos v0.11.0 has no probability. Then the probability is 1 for an `ask`
+  or a `flag`, and 0 for an `allow` or a `block`.
+- The answer is the first confirmation of the call by the person.
+
+A replay does not include these calls. The report gives the number of
+each:
+
+- A call that Topos removed from the log.
+- A call without a verdict, from a Topos version that did not record
+  verdicts.
+- A call with a verdict that Limen does not know, or that does not give a
+  valid record.
+- A call with the same tool call identifier as an earlier call in its
+  session.
+
+A replay does not use the answers to network approvals. In a log, such an
+answer has no tool call. Because of this, a replay of a session can have
+fewer answers than the ledger of hosted Topos. A replay reads only a data
+directory on your computer. It does not read the sessions of hosted
+Topos.
+
+### Claude Code and Codex
+
+The hooks for Claude Code and Codex do not exist yet.
+[Spec 005](../specs/005-adapters.md) describes them. These notes give
+what a hook must do.
 
 **Claude Code** calls the server from a command hook. A `PreToolUse` hook
 returns allow, ask, or deny. Apply the verdicts as follows:
