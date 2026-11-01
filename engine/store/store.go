@@ -3,8 +3,9 @@
 
 // Package store is where the engine keeps the ledger, the cost profiles
 // and the fitted models: one interface, with an in-memory implementation
-// here, a file store in store/file for a self-hosted process, and Postgres
-// later for a hosted one (spec 004).
+// here and a file store in store/file for one process, self-hosted or
+// hosted on a volume (spec 004). A store that more than one server shares
+// is not built.
 //
 // The store keeps records and nothing else. Every rule of the contract
 // (idempotency, one decision per action, which answer is a review) is the

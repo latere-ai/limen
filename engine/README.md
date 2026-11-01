@@ -1,20 +1,28 @@
 # engine
 
-The learning engine behind Limen's predictor. Two packages exist today, the
-numerical core the rest of the engine is built on (specs/004-engine.md):
+The learning engine behind Limen's predictor: the in-process
+`limen.Service` that predicts, keeps the ledger, fits each person's model
+off the hot path, and explains its predictions (specs/004-engine.md,
+specs/009-explanations.md). The engine package is the service; its
+subpackages are the parts it is built from:
 
 | Package | What it holds |
 |---|---|
 | [`kernel`](kernel/) | The covariance functions over feature points: the additive kernel, whose static term keeps what was learned about an action's risk while the person's tolerance drifts, and the separable product kernel the paper compares against. Standard library only. |
-| [`gp`](gp/) | The Laplace Gaussian-process probit classifier: an immutable fitted posterior, the approval probability it predicts, and the log marginal likelihood. |
+| [`gp`](gp/) | The Laplace Gaussian-process probit classifier: an immutable fitted posterior, the approval probability it predicts, the log marginal likelihood, and the split of the mean into each answer's term and the kernel's parts. |
+| [`featurize`](featurize/) | The open-set featurizer `features/1`: an action's tool and context feature vectors, the shell reader, and the label of each action from a fixed vocabulary. |
+| [`store`](store/) | The store interface, the memory store, the directory store [`store/file`](store/file/), and the contract tests every store passes ([`store/storetest`](store/storetest/)). |
 
-Both are ports of the research implementation,
-[github.com/changkun/trustcalib](https://github.com/changkun/trustcalib)
-(`go/kernel`, `go/gp`, Apache-2.0), and reproduce its golden fixtures, which
-the paper's Python reference wrote ([`testdata/fixtures`](testdata/fixtures/README.md)).
-The largest deviation from the reference is about 1e-15 for the kernel
-matrices, the fitted mode, its gradient, the log marginal likelihood, and
-the predictions; the tests hold it below 1e-12.
+`kernel` and `gp` are ports of the research implementation,
+[github.com/changkun/trustcalib at tag `v3`](https://github.com/changkun/trustcalib/tree/v3/go)
+([`go/kernel`](https://github.com/changkun/trustcalib/tree/v3/go/kernel),
+[`go/gp`](https://github.com/changkun/trustcalib/tree/v3/go/gp),
+Apache-2.0; the Go code is no longer on that repository's main branch),
+and reproduce its golden fixtures, which the paper's Python reference
+wrote ([`testdata/fixtures`](testdata/fixtures/README.md)). The largest
+deviation from the reference is about 1e-15 for the kernel matrices, the
+fitted mode, its gradient, the log marginal likelihood, and the
+predictions; the tests hold it below 1e-12.
 
 ## Cost
 

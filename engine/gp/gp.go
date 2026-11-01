@@ -26,7 +26,8 @@
 // bounds both. The same inputs give bitwise the same posterior.
 //
 // The package is a port of the research implementation,
-// github.com/changkun/trustcalib (go/gp, Apache-2.0), itself a port of the
+// github.com/changkun/trustcalib at tag v3 (go/gp, Apache-2.0; the Go code
+// is no longer on that repository's main branch), itself a port of the
 // paper's Python reference, and reproduces the reference's golden fixtures:
 // the fitted mode, the gradient, the log marginal likelihood, and the
 // predictions.

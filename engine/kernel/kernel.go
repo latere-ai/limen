@@ -4,9 +4,9 @@
 // Package kernel holds the covariance functions of Limen's Gaussian-process
 // model of a person's tolerance, over feature points (tool block, context
 // block, time). It is a port of the kernels of the research implementation,
-// github.com/changkun/trustcalib (go/kernel, Apache-2.0), reworked to
-// evaluate one pair of points at a time with the standard library alone, and
-// it reproduces that implementation's golden fixtures.
+// github.com/changkun/trustcalib at tag v3 (go/kernel, Apache-2.0), reworked
+// to evaluate one pair of points at a time with the standard library alone,
+// and it reproduces that implementation's golden fixtures.
 //
 // The model is the latent tolerance of the paper (Ou, "Learning When to Ask",
 // arXiv:2605.19151, Definition 1),
