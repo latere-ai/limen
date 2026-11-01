@@ -30,8 +30,9 @@
 //
 // A call is skipped, with the reason reported through [Options.Skipped],
 // when its event is redacted, carries no verdict (a log written before
-// verdicts were recorded), names an unknown verdict, or does not make a
-// valid record.
+// verdicts were recorded), names an unknown verdict, does not make a
+// valid record, or repeats the tool use ID of an earlier call in its
+// session. A key names one action, so the first call keeps it.
 package topos
 
 import (
@@ -87,6 +88,7 @@ const (
 	ReasonUnknownVerdict = "Limen does not know the recorded verdict"
 	ReasonUndecodable    = "Limen cannot read the event of the call"
 	ReasonInvalid        = "the call does not give a valid record"
+	ReasonRepeated       = "the session repeats the ID of an earlier call"
 )
 
 // effects are the declared effects of Topos's built-in tools.
@@ -122,12 +124,12 @@ func Records(dataDir string, o Options) iter.Seq2[limen.ReplayRecord, error] {
 			yield(limen.ReplayRecord{}, err)
 			return
 		}
-		st, err := dir.Open(dataDir)
+		ctx := context.Background()
+		st, err := dir.Open(ctx, dataDir)
 		if err != nil {
 			yield(limen.ReplayRecord{}, err)
 			return
 		}
-		ctx := context.Background()
 		cursor := ""
 		for {
 			page, next, err := st.List(ctx, session.ListOptions{Cursor: cursor})
@@ -204,6 +206,7 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 	}
 
 	var out []limen.ReplayRecord
+	kept := map[string]struct{}{}
 	for _, e := range events {
 		if e.Type != session.TypeAgentToolUse {
 			continue
@@ -251,6 +254,11 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			skip(u.ToolUseID, ReasonInvalid)
 			continue
 		}
+		if _, seen := kept[u.ToolUseID]; seen {
+			skip(u.ToolUseID, ReasonRepeated)
+			continue
+		}
+		kept[u.ToolUseID] = struct{}{}
 		out = append(out, r)
 	}
 	return out

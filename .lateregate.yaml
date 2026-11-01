@@ -108,8 +108,12 @@ depcheck:
         copy of its log format, and the declared effects of Topos's built-in
         tools, so the importer follows the format as Topos changes it
       allow:
-        latere.ai/x/topos: session, session/dir, harness/tools and what they import (machine, models, prompts)
+        latere.ai/x/topos: session, session/dir, harness/tools and what they import (machine, models, prompts, manifest, harness)
         latere.ai/x/pkg: verdict, and llmdialect through Topos's session package
+        latere.ai/x/sdk-go: the LLM wire types under latere.ai/x/pkg/llmdialect/ir, through Topos's tools
+        github.com/goccy/go-yaml: the manifest decoder of Topos, which session/dir reaches through its manifest package
+        github.com/yuin/goldmark: the Markdown parser of the Topos harness, which session/dir reaches since Topos v0.62
+        golang.org/x/net: the HTML parser of the Topos harness, for the same reason
     latere.ai/x/limen/cmd/limen:
       decision: >-
         the command line over the engine, its file store and the Topos
@@ -118,6 +122,10 @@ depcheck:
         latere.ai/x/topos: through importer/topos
         latere.ai/x/pkg: verdict, atomicfile, errwriter, and llmdialect through Topos's session package
         gonum.org/v1/gonum: the engine's linear algebra
+        latere.ai/x/sdk-go: through importer/topos
+        github.com/goccy/go-yaml: through importer/topos
+        github.com/yuin/goldmark: through importer/topos
+        golang.org/x/net: through importer/topos
     latere.ai/x/limen/cmd/limend:
       decision: >-
         the server over the engine and its file store, verifying tokens

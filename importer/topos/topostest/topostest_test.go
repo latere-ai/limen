@@ -25,7 +25,7 @@ func TestWriteReadsBack(t *testing.T) {
 	if len(ids) != 2 {
 		t.Fatalf("ids %v", ids)
 	}
-	st, err := dir.Open(data)
+	st, err := dir.Open(context.Background(), data)
 	if err != nil {
 		t.Fatal(err)
 	}

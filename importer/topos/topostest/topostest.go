@@ -65,11 +65,11 @@ var Start = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 // Write writes the sessions into dataDir and returns their ids in order.
 func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 	t.Helper()
-	st, err := dir.Open(dataDir)
+	ctx := context.Background()
+	st, err := dir.Open(ctx, dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
 	at := Start
 	tick := func() time.Time {
 		at = at.Add(time.Second)

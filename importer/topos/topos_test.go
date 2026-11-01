@@ -184,6 +184,8 @@ func TestSkips(t *testing.T) {
 			{ToolUseID: "noname", Name: "", Verdict: "ask"},
 			{ToolUseID: "badscore", Name: "bash", Verdict: "allow", Risk: &session.Risk{Score: 7, Source: "rules/1"}},
 			{ToolUseID: "odd", Name: "bash", Verdict: "ask", Answer: "allow"},
+			// A scripted model that restarts in a new process repeats an ID.
+			{ToolUseID: "odd", Name: "bash", Verdict: "allow"},
 		},
 	})
 	var skips []topos.Skip
@@ -202,13 +204,14 @@ func TestSkips(t *testing.T) {
 		{"weird", topos.ReasonUnknownVerdict},
 		{"", topos.ReasonRedacted},
 		{"noname", topos.ReasonInvalid},
+		{"odd", topos.ReasonRepeated},
 	} {
 		if !slices.Contains(seen, want) {
 			t.Errorf("missing skip %+v in %+v", want, seen)
 		}
 	}
-	if len(seen) != 5 {
-		t.Errorf("%d skips, want 5: %+v", len(seen), seen)
+	if len(seen) != 6 {
+		t.Errorf("%d skips, want 6: %+v", len(seen), seen)
 	}
 	got := byID(rs)
 	if r, ok := got["badscore"]; !ok || len(r.Action.Signals) != 0 {
