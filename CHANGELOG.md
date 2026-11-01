@@ -11,6 +11,13 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- The conformance suite has the case `Certificate`. An implementation
+  must count the most recent audits that the person approved, back to the
+  first denial. It must also need the number of audits that the claim of
+  the organization gives.
+
 ### Changed
 
 - The documents describe Limen in production. The integration page

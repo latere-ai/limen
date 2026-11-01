@@ -67,6 +67,7 @@ var rules = []rule{
 	{"LaterAnswersNeverEstimate", laterAnswersNeverEstimate},
 	{"Sources", sources},
 	{"Learned", learned},
+	{"Certificate", certificate},
 	{"PendingAndPages", pendingAndPages},
 	{"CasesNeverReturnInput", casesNeverReturnInput},
 	{"ForgetIsScoped", forgetIsScoped},
@@ -465,6 +466,44 @@ func learned(t *testing.T, target Target) {
 	answer(t, s, a.Key, true)
 	fa := reliability(t, s, limen.OfLearned).FalseAllow
 	expect(t, value(fa) == 0 && fa.Reviews == 1 && fa.Audits == 1, "%+v", fa)
+}
+
+// certificate: the certificate counts the most recent audited allows the
+// person approved, back to the first denial, and needs the size of the
+// organization's claim (paper, Proposition 5(b)). A review with
+// probability one is no audit, and an allow nobody saw is no review.
+func certificate(t *testing.T, target Target) {
+	s := target.New(t)
+	c := reliability(t, s, limen.OfApplied).Certificate
+	expect(t, c.Alpha == limen.DefaultCertify.Alpha && c.Delta == limen.DefaultCertify.Delta && c.Needed == 300 && c.Clean == 0 && !c.Holds,
+		"with the default claim and no audits: %+v", c)
+	claim := limen.Certify{Alpha: 0.5, Delta: 0.5}
+	_, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.DefaultCosts, AuditRate: 0.05, Certify: claim})
+	must(t, err)
+	for _, step := range []struct {
+		id      string
+		verdict limen.Verdict
+		prob    float64
+		approve *bool
+	}{
+		{"ct1", limen.Flag, 0.05, new(true)},
+		{"ct2", limen.Flag, 0.05, new(false)},
+		{"ct3", limen.Flag, 0.05, new(true)},
+		{"ct4", limen.Flag, 1, new(true)},
+		{"ct5", limen.Allow, 0.05, nil},
+		{"ct6", limen.Flag, 0.05, new(true)},
+	} {
+		a := action(step.id)
+		decide(t, s, a, step.verdict, step.prob, "test/1")
+		if step.approve != nil {
+			answer(t, s, a.Key, *step.approve)
+		}
+	}
+	needed, err := limen.CertificationSize(claim.Alpha, claim.Delta)
+	must(t, err)
+	c = reliability(t, s, limen.OfApplied).Certificate
+	expect(t, c.Alpha == claim.Alpha && c.Delta == claim.Delta && c.Clean == 2 && c.Needed == needed && c.Holds,
+		"certificate %+v, want 2 clean audits of %d needed", c, needed)
 }
 
 // pendingAndPages: the review queue holds shown actions with no review;
