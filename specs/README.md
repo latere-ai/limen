@@ -73,5 +73,6 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | drafted |
 
 The order of building is the order of the numbers except where a spec's
-`depends_on` says otherwise. 007 is not built; it is the rule every
-deployment of the others follows.
+`depends_on` says otherwise. 007 is not code; it is the rule a
+deployment of the others follows, amended on 2026-11-01 for hosted
+Topos, where Limen decides only where it has evidence about the person.
