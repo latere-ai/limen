@@ -371,6 +371,51 @@ func TestReplayRecordValidate(t *testing.T) {
 	}
 }
 
+// The request types of explanations (spec 009) report every field at
+// fault in one error, as the others do, and nothing for a valid value.
+func TestExplanationQueries(t *testing.T) {
+	if err := key.Validate(); err != nil {
+		t.Error(err)
+	}
+	if fields := fieldsOf(t, Key{}.Validate(), CodeInvalidQuery); !slices.Equal(fields, []string{"org", "subject", "action_id"}) {
+		t.Errorf("empty key: %v", fields)
+	}
+	if err := (LearnedQuery{Org: "o", Subject: "s", Kind: "tool"}).Validate(); err != nil {
+		t.Error(err)
+	}
+	if fields := fieldsOf(t, LearnedQuery{Agent: "agt_1"}.Validate(), CodeInvalidQuery); !slices.Equal(fields, []string{"org", "subject"}) {
+		t.Errorf("empty learned query: %v", fields)
+	}
+
+	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	good := PreviewRequest{Org: "o", Subject: "s", From: from, To: from.Add(time.Hour), Costs: DefaultCosts, AuditRate: 0.05}
+	if err := good.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		edit   func(*PreviewRequest)
+		code   Code
+		fields []string
+	}{
+		{func(r *PreviewRequest) { r.Org, r.Subject = "", "" }, CodeInvalidQuery, []string{"org", "subject"}},
+		{func(r *PreviewRequest) { r.From = time.Time{} }, CodeInvalidQuery, []string{"from"}},
+		{func(r *PreviewRequest) { r.To = time.Time{} }, CodeInvalidQuery, []string{"to"}},
+		{func(r *PreviewRequest) { r.To = r.From }, CodeInvalidQuery, []string{"to"}},
+		{func(r *PreviewRequest) { r.AuditRate = 1.5 }, CodeInvalidQuery, []string{"audit_rate"}},
+		{func(r *PreviewRequest) { r.AuditRate = math.NaN() }, CodeInvalidQuery, []string{"audit_rate"}},
+		// Every field at fault in one error, the costs checked only after.
+		{func(r *PreviewRequest) { r.Subject, r.AuditRate, r.Costs.Ask = "", -1, 0 }, CodeInvalidQuery, []string{"subject", "audit_rate"}},
+		{func(r *PreviewRequest) { r.Costs.Ask = 0 }, CodeInvalidProfile, []string{"costs.ask"}},
+		{func(r *PreviewRequest) { r.Costs = Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1} }, CodeAskTooCostly, []string{"costs.false_allow"}},
+	} {
+		r := good
+		c.edit(&r)
+		if fields := fieldsOf(t, r.Validate(), c.code); !slices.Equal(fields, c.fields) {
+			t.Errorf("%+v: fields %v, want %v", r, fields, c.fields)
+		}
+	}
+}
+
 // Every code has a status and a fixed sentence.
 func TestErrorTable(t *testing.T) {
 	codes := Codes()
