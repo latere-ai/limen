@@ -120,7 +120,8 @@ from an authorization endpoint.
 
 A platform that has its own permissions can answer for `limend`. Set
 `LIMEN_AUTHORIZER_URL` to its authorization endpoint. Then the endpoint
-decides each request, and `LIMEN_ADMINS` does not apply.
+decides each request. Do not set `LIMEN_ADMINS` with it. If both are
+set, `limend` does not start and stops with exit code 2.
 
 A hosted server keeps the ledger in a directory, as a server for one
 person does. Only one process can use a ledger directory. In a container
