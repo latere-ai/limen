@@ -1,12 +1,12 @@
 ---
 title: "Engine: the time axis, the open-set featurizer, the additive GP-probit, fitting off the hot path, versions, the store"
-status: drafted
+status: in-progress
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [engine/, engine/kernel/, engine/gp/, engine/featurize/, engine/store/]
 effort: large
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -180,8 +180,7 @@ costs one kernel row, `O(n d)`, a dot product for the mean, and one
 triangular solve for the variance, `O(n^2)`: about a quarter of a
 million multiply-adds at `n` = 512. The budget is a 99th percentile of
 5 milliseconds in process for a subject whose snapshot is in memory,
-excluding store latency, and 50 milliseconds through `limend` with
-Postgres.
+excluding store latency, and 50 milliseconds through `limend`.
 
 ### Fitting off the hot path
 
@@ -206,6 +205,9 @@ cap. An evicted model's next prediction loads its stored snapshot
 labels with the same arithmetic, so their snapshots agree once each has
 fitted the same answers; until then two replicas may differ by the
 answers one has not fitted, which the five-second target bounds.
+*Amended 2026-11-01:* this holds once a store that more than one process
+shares exists. Until then one process owns a ledger directory, and a
+hosted `limend` runs as one replica.
 
 ### Versions
 
@@ -230,6 +232,15 @@ and the operator switches after a replay comparison
 One interface with three implementations: memory (tests and the stub's
 tier), file (a self-hosted single process), Postgres (hosted).
 
+*Amended 2026-11-01:* two implementations are built, memory and file.
+The file store is also the hosted store: a hosted `limend` keeps its
+ledger directory on a persistent volume, with one replica, because one
+process owns a directory. A store that more than one `limend` shares
+replaces the Postgres store. It is planned on Storage
+([Arca](https://github.com/latere-ai/arca)) after Limen is open source,
+and is not built. The tables below are the records every store keeps;
+the indexes are for a shared store.
+
 | Table | Key | Columns |
 |---|---|---|
 | `subjects` | org, subject | `next_t` |
@@ -247,14 +258,16 @@ subject's rows from every table in one transaction, or its directory.
 
 ### What is ported and what is rewritten
 
-From `github.com/changkun/trustcalib/go`:
+From [`github.com/changkun/trustcalib` at tag
+`v3`](https://github.com/changkun/trustcalib/tree/v3/go), under `go/`
+(the Go code is no longer on that repository's main branch):
 
 - **Ported:** `kernel` (both kernels, the RBF blocks, the time block),
   `gp` (`LaplaceGPC` fit and predict, the probit derivatives with the
   stable log CDF), and the golden fixtures `kernel_full`,
   `kernel_additive`, `laplace_fit`, `laplace_fit_additive`, `predict`,
-  `predict_additive` and `logcdf`, into `engine/kernel` and `engine/gp`
-  with their testdata.
+  `predict_additive` and `logcdf`, into `engine/kernel` and `engine/gp`,
+  with the fixtures in `engine/testdata/fixtures`.
 - **Rewritten:** the gateway (it decides, and in Limen the decision
   point decides), the featurizers (the research's taxonomy refuses any
   tool outside eighteen synthetic ones), persistence (one subject's JSON
@@ -286,3 +299,58 @@ reviewer.
 | 9 | No store holds an action's input after the prediction returns | a store test that greps every row and file for a marker in the input |
 | 10 | Models of different versions never share training data, and a version change leaves the old version serving | an engine test |
 | 11 | `engine.Engine` passes `conformance.Run` with each store | [[006-conformance]] |
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. The engine predicts, keeps the ledger
+and fits off the hot path, in process and behind `limend`, and it is in
+production behind hosted Topos. Two parts of the design are not built:
+side-by-side model versions and a store that more than one process
+shares. The spec stays `in-progress` until they are built or moved to
+their own spec.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the additive and product kernels | `engine/kernel` |
+| the Laplace GP-probit, its explanation terms and parts | `engine/gp` |
+| `features/1`, the shell reader and the labels | `engine/featurize` |
+| the service: prediction, background fitting, the snapshot cache, replay, explanations | `engine/` |
+| the store interface, the memory store, the directory store and the store contract tests | `engine/store`, `engine/store/file`, `engine/store/storetest` |
+| the golden fixtures of the research code | `engine/testdata/fixtures` |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestGolden` (kernel); `TestFitGolden`, `TestPredictGolden`, `TestLogCDFGolden` (gp), each within 1e-10 or tighter |
+| 2 | `TestGroupLayout`, `TestEmptyAction`, `TestEncodings`, `TestGroupDistanceBound`, `FuzzOf` |
+| 3 | `TestShellClasses`, `TestShellDestructive`, `TestShellOutsideWorkspace`, `TestShellPrograms`, `TestRedirection`, `TestShellDepthBound`, `FuzzReadShell` |
+| 4 | `TestLearns`, `TestForgetDropsTheModel`, `TestPrior`, `TestCostsThresholds`; the conformance case `UnknownIsAnAsk` |
+| 5 | `TestTimeCountsDecisions`; the store rules `NextT` and `NextTConcurrent` |
+| 6 | partly: `BenchmarkPredict512` measures the posterior alone, about 0.1 ms on an Apple M5 Pro |
+| 7 | partly: `TestBackgroundConverges` and `TestBackgroundFitAndReload`, with the real clock |
+| 8 | partly: `TestEvictionReloads` |
+| 9 | partly: the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestCaseContract`, `TestLabelKeepsNoInput` |
+| 10 | not built |
+| 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store) |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| three stores, Postgres for hosted | memory and directory; the directory store on a volume is the hosted store | one process serves a ledger until a shared store exists (amended above) |
+| the counter is incremented in one store transaction | `NextT` is its own store call, and the directory store rebuilds the counter from the largest `t` when it opens | the engine serializes the operations on one subject, so a store needs atomic single calls only |
+| the receive time orders the review queue | the cases and the queue are in the order of `t` | `t` is given in the order of arrival |
+| `answers` and `snapshots` tables | answers are kept inside their case; a snapshot is the fitted state with the count of answers it was fitted through | the records are per case and per subject; the count names a model ([[009-explanations]]) |
+| cases | also keep `featurizer`, `label`, `labels` and `predicted_by` | added by [[009-explanations]] |
+| a prediction never fits | true for `limend`, which fits in the background; `Options.Inline` fits in the caller's goroutine, and a replay's scratch engine uses it | a replay must learn each answer before its next prediction |
+| fitters take the oldest model first | fits run first in, first out, as each model's debounce releases it | no order was implemented; the debounce releases a model about one second after its newest answer |
+| the featurizer's encodings | the program-class group has unit length, the attribute group at most `1/sqrt 2`, the signal group at most 1; the shell reader also reads `sh -c`, `eval` and `find -exec`, and knows more wrappers, destructive forms and protected paths | recorded in the `engine/featurize` package documentation |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| criterion 10: versions that never share data, and an old version that serves while a new one fits | the cache is keyed by organization and subject; only `features/1` and version 1 exist |
+| a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source |
+| the tests that criteria 6 to 9 name: a fit counter and a p99 on the reference runner, a fake clock with the five-second bound, a memory budget test, a search of every stored file for an input marker | the behavior is in place; the named tests are not |

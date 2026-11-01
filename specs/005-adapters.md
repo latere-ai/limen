@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 003-http-api.md]
 affects: [cmd/limen-hook/, client/]
 effort: medium
 created: 2026-09-28
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -120,10 +120,27 @@ so a resumed session never draws again; `Record` with its own source
 names (`topos/confirm`, `topos/progressive`), carrying the action when no
 prediction succeeded; `Answer` from its confirmation events, forwarded
 when a session resumes; and later `Cases` with `pending` for its review
-list, which is not built. Hosted runners are not wired yet. Its shadow and
-confirm modes record their own verdicts while Limen predicts, which the
-ledger weights correctly because the probability comes from the
-recorded decision ([[007-evidence-gates]]).
+list, which is not built. Its shadow and confirm modes record their own
+verdicts while Limen predicts, which the ledger weights correctly
+because the probability comes from the recorded decision
+([[007-evidence-gates]]).
+
+*Amended 2026-11-01:* hosted sessions are wired. From Topos v0.63.0
+(Topos spec 099), `toposd` decides every hosted session's calls through
+the same `Decider`, with its own identity-provider token
+(`TOPOS_DECISIONS_AUDIENCE`) or `TOPOS_DECISIONS_TOKEN`. Topos v0.66.0
+adds `TOPOS_DECISIONS_MODE`: `shadow` (the rules decide and Limen only
+learns), `learned` (Limen's suggestion decides a `progressive` call only
+where it has evidence about the person, its `allow`, its `block` and a
+`split` ask, and the rules and the risk score decide an `unsure` ask or
+a call Limen does not answer), and `decide` (the behavior above, and the
+default). A hosted session on a person's own computer decides
+`progressive` as `confirm`. In `confirm` mode a prediction waits at most
+300 milliseconds and the decision is sent in the background; the two
+second bound is `progressive`'s. From v0.66.0 Topos also sends a
+person's answer to a network approval as an answer to the call whose
+connection it refused. Hosted Topos runs in `learned` mode against a
+hosted `limend` since 2026-11-01 ([[007-evidence-gates]], Amendments).
 
 ### Any other harness, over HTTP
 
@@ -153,3 +170,35 @@ drawn.
 | 4 | The hook sends an answer only when both an approval and a denial are observable for the release it targets | review at validation, recorded in the Outcome |
 | 5 | A `flag` appears in the subject's pending cases after the hook allows the action | an e2e test against `limend` |
 | 6 | A harness that implements `verdict.Decide` in another language agrees with the Go function on a shared table of cases | a published table in `docs/` and the `verdict` package's tests |
+
+## Outcome
+
+Recorded on 2026-11-01. Nothing of this spec's own is built in this
+repository: `cmd/limen-hook` does not exist, and no criterion has a test
+here. The owner decided on 2026-11-01 that the hooks for Claude Code and
+Codex come after Limen is open source. The spec stays `drafted` until
+then, and its open questions on the Claude Code hook events and the
+Codex extension point stay open.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the Topos decision point, for `topos run` and for hosted sessions | Topos, `internal/decisions` (Topos specs 037 and 099); its tests include `TestLearnedDecidesWhereItHasEvidence` and `TestShadowLeavesProgressiveToTheRules` |
+| what Topos relies on from Limen: `Predict`, `Record`, `Answer`, the evidence on a prediction | this repository, [[002-contract]], [[003-http-api]], [[009-explanations]] |
+| the replay of a Topos data directory | `cmd/limen`, `importer/topos` |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| hosted runners are not wired | wired from Topos v0.63.0; `learned` mode from v0.66.0 | amended above |
+| Topos's tests use the stub | Topos tests its decision point against its own fake service over HTTP | Topos does not import this module; it speaks the HTTP API ([[006-conformance]]) |
+| `Cases` with `pending` for Topos's review list | not used by Topos | Topos's review list is not built |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| `limen-hook` for Claude Code and for Codex, and criteria 1 to 5 | deferred until after Limen is open source |
+| criterion 6: a published table of `verdict.Decide` cases in `docs/` | the Go table lives in the `verdict` package's tests; no table is published yet |

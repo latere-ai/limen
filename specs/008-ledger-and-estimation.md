@@ -1,12 +1,12 @@
 ---
 title: "Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source"
-status: drafted
+status: testing
 track: core
 depends_on: [001-architecture.md, 002-contract.md]
-affects: [estimate/, stub/, engine/, reliability.go, answer.go]
+affects: [estimate/, stub/, engine/, reliability.go, answer.go, replay.go, cmd/limen/]
 effort: medium
 created: 2026-10-02
-updated: 2026-10-02
+updated: 2026-11-01
 author: changkun
 ---
 
@@ -140,3 +140,43 @@ recorded verdict was shown.
 | 5 | `unanswered` counts shown cases without a review, and they change the value only through `r` | an `estimate/` test |
 | 6 | A certificate counts only audited allows, stops at the first denial, and holds at `needed` | an `estimate/` test at the 300-review boundary |
 | 7 | The engine and the stub return identical reports for identical ledgers | a test running both on one scripted history |
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. The records, the roles of answers,
+the estimate, the certificate and the replay are built in `estimate/`,
+shared by the engine and the stub, and the reliability reports are in
+production behind hosted Topos. Two criteria lack the tests they name.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the role of each answer, the opinions of a source, the estimate and its interval, the certificate | `estimate/` (`RowOf`, `Rate`, `Certificate`) |
+| the reports | `Ledger.Reliability` in the engine and the stub, and `GET /v1/reliability` |
+| the replay | `Admin.Replay`, `POST /v1/replays`, and `limen replay` (`cmd/limen`) |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestReviewAndPending`; the conformance cases `AnswerRoles` and `LaterAnswersNeverEstimate` |
+| 2 | `TestRate` ("weighting"); the conformance case `ReviewsWeightedByProbability` |
+| 3 | `TestRateIsUnbiased`, a seeded Monte Carlo run with a fixed tolerance of about four standard errors |
+| 4 | `TestRate` ("not estimable is null, not zero"); the conformance case `NullIsNotZero` |
+| 5 | `TestRate` ("unanswered"); the conformance case `Unanswered` |
+| 6 | partly: `TestCertificate` tests the boundary at 12 audits (alpha 0.25); the default claim is checked for `needed` 300 only |
+| 7 | partly: the engine and the stub call the same `estimate/` functions, and the suite checks each against the same values |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| with no review the interval is [0, 1] | a report has no interval when its value is `null`; [0, 1] appears when covered allows exist and none was shown | an interval goes with a value |
+| with `keep`, replayed records enter as if they had arrived live | a kept record becomes a decision with its action and no prediction, so `of=learned` finds no rows in kept history | Limen's would-be verdicts are in the `ReplayReport`, not in the ledger |
+| a case holds the action, the prediction, the decision and the answers | it also holds its `label`, the label version, and the model that predicted it (`predicted_by`) | added by [[009-explanations]] |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| criterion 6 at 300: 300 clean audits hold and 299 do not | not written |
+| criterion 7: one test that runs the engine and the stub on one history and compares their reports, the certificate included | not written |

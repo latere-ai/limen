@@ -1,6 +1,6 @@
 ---
 title: "Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model"
-status: drafted
+status: complete
 track: core
 depends_on: [003-http-api.md, 004-engine.md, 008-ledger-and-estimation.md]
 affects: [explanation.go, engine/, engine/gp/, engine/featurize/, engine/store/, server/, client/, stub/, conformance/, api/openapi.yaml, docs/]
@@ -241,7 +241,65 @@ prediction does, and none runs on a decision's path.
 kind of an ask when it decides, not when a person asks why. `Prediction`
 therefore carries `evidence_ratio` and, for an `ask`, `ask_kind`,
 computed at prediction time exactly as for an explanation and recorded
-with the prediction (criterion 11). Topos's `learned` mode reads them:
-Limen's suggestion decides where it rests on evidence (an `allow`, a
-`block`, a `split` ask) and the rules decide an `unsure` one. The
+with the prediction (criterion 11). Topos's `learned` mode reads
+`ask_kind`: Limen's suggestion decides where it rests on evidence (an
+`allow`, a `block`, a `split` ask) and the rules decide an `unsure` one,
+or an `ask` with no `ask_kind`. The
 `FailClosed` fallback, which has no model behind it, is `unsure`.
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. The three views and the evidence on a
+prediction are built, in production, and every criterion has a passing
+test in the tree. Hosted Topos decides on `ask_kind` in its `learned`
+mode ([[007-evidence-gates]], Amendments). People read the views through
+the hosted route: Latere's console and chat, the `latere oversight`
+command of [latere-cli](https://github.com/latere-ai/latere-cli), and
+the `oversight` package of
+[sdk-go](https://github.com/latere-ai/sdk-go) v0.24.0.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the types and the `Explainer` | `explanation.go` |
+| the terms of the mean and its parts | `engine/gp` |
+| the labels | `engine/featurize` |
+| the three views, the evidence on a prediction, `EvidenceCut` | `engine/explain.go`, `engine/engine.go` |
+| the stub's views | `stub/explain.go` |
+| the routes and the client | `server/`, `client/`, `api/openapi.yaml` |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestExplainSumsToTheMean` (`engine/gp`); the conformance case `Explanations` |
+| 2 | `TestExplainSumsToTheMean`, `TestExplanationIsThePrediction` |
+| 3 | `TestAskKinds`, `TestExplanationIsThePrediction` |
+| 4 | `TestExplanationAfterARefit` |
+| 5 | `TestLabelKeepsNoInput`, `TestLabel`; the conformance case `LearnedEntries` |
+| 6 | `TestPreview`; the server's `TestQueryErrors`; the conformance cases `Previews` and `PreviewErrors` |
+| 7 | `TestAuthorizerQuestions`, `TestRefusalsActOnNothing`, `TestSubjectBinding`, `TestRoutesMatchOpenAPI` |
+| 8 | the conformance cases `Explanations`, `ExplanationsOfSteeredVerdicts`, `LearnedEntries`, `Previews`, `PreviewErrors`, run for the engine, the stub and the client |
+| 9 | `TestSchemasMatchTypes`, `TestOperations`, `TestResponsesMatchErrorTable` |
+| 10 | `TestLearnedEntriesAreExplanations` |
+| 11 | `TestExplanationIsThePrediction`, `TestAskKinds`, `TestFailClosedOnError`; the conformance cases `PredictionFollowsTheProfile` and `IdempotentPredict` |
+
+### What diverges from the design as written
+
+The Amendments above record the decisions made while building. These
+divergences remain:
+
+| What it said | What was built | Why |
+|---|---|---|
+| `learned` covers the answered cases in the model's window | it covers every stored answered case, beyond the 512 the model is fitted on | a person asks about every kind of action they answered |
+| a case gets its label at prediction time | also when a decision arrives with an action and no prediction | such a case has no prediction to label it |
+| a label holds the kind and the name | a tool's label is its name alone; a shell label is `<name>: <classes>`, at most two segments and then `…`; the kind appears for other kinds | the format is `featurize.Label`'s; it keeps no input string either way |
+| no view holds the subject's lock longer than a prediction | `Explain`, `Learned` and `Preview` hold it for their whole run, and `Learned` explains each label and up to 20 trend points under it | a view reads one subject's cases consistently; no view runs on a decision's path, and its effect on a waiting prediction is not measured |
+| the views' fields | `Learned` also names its `model`, each entry carries the profile's `thresholds`, entries come most answered first, and a preview echoes its request with `records`, `answered` and `thresholds` | a client needs them to draw the views |
+| the explanation's `ask_kind` is absent for `block` | held by the same branch as for `allow`, which `TestExplanationIsThePrediction` tests; no test builds a `block` | `askKind` returns nothing for every verdict but `ask` |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| explanations of old predictions by the model that made them | one snapshot per person is kept ([[004-engine]]) |
+| counterfactual edits | kept out until a client needs them |

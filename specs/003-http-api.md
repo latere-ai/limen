@@ -1,6 +1,6 @@
 ---
 title: "HTTP API: routes, bodies, statuses, the authorizer action and resource fields per route, subject binding, limits"
-status: drafted
+status: complete
 track: core
 depends_on: [001-architecture.md, 002-contract.md]
 affects: [api/, authorizer/, client/, cmd/limend/, server/]
@@ -76,8 +76,8 @@ it acts, about a resource whose kind and fields are fixed per action:
 
 With no endpoint configured, `limend` applies the shared owner policy: a
 caller acts on cases and reports whose `subject` is the caller's own
-rendered subject, admins act on everything, and every other request is
-refused.
+rendered subject, and forgets that subject, admins act on everything,
+and every other request is refused.
 
 *Amended 2026-11-01: a person's own context.* A decision point keys the
 actions of a person with no organization by the person's rendered
@@ -187,3 +187,50 @@ was built, each written into the section it changes:
   by a person's rendered subject are that person's. Criteria 8 and 9 hold
   both.
 - *Explanations* (Routes): three routes and the code `no_case`.
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. The API is built as designed and is
+in production: a hosted `limend` serves it under
+`LIMEN_BASE_PATH=/v1/oversight` for hosted Topos and for the clients
+that show a person their explanations. Every criterion has a passing
+test in the tree.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the handler: the routes, authentication (`StaticToken`, `JWT`), the owner policy, the authorizer questions, the base path (`CheckBasePath`), the error envelope | `server/` |
+| the program, its two modes of access and its configuration | `cmd/limend` |
+| the Go client | `client/` |
+| the authorizer vocabulary | `authorizer/` |
+| the OpenAPI document and its test | `api/openapi.yaml`, `api/openapi_test.go` |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestSchemasMatchTypes`, `TestNoClosedSchemas`, `TestEnumsMatchConstants`, `TestResponsesMatchErrorTable`, `TestOperations`; the server's `TestRoutesMatchOpenAPI` |
+| 2 | `TestAuthorizerQuestions`, `TestRefusalsActOnNothing` in `server/` |
+| 3 | `TestSubjectBinding`, `TestOwnerPolicy`; end to end, `TestHostedOwnerPolicy` in `cmd/limend` |
+| 4 | `TestAnswerBy` |
+| 5 | `TestReplayLimits`, `TestReplayReadError` |
+| 6 | `TestDecoding`, `TestQueryErrors` |
+| 7 | `TestConformanceEngine`, `TestConformanceStub` in `client/` |
+| 8 | `TestBasePath` in `server/` and in `cmd/limend`, and `TestConfiguration` |
+| 9 | `TestOwnContextProfile` |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| criterion 7 runs the suite against a running `limend` | the client runs it against `server.New` behind `httptest`, the handler `limend` serves | `cmd/limend` adds only its configuration, which `TestServe`, `TestHostedOwnerPolicy` and `TestConfiguration` test on a started server |
+| the proofs of criteria 2 to 6 are `limend` handler tests | they are tests of `server/` | the handler moved to its own package so the client tests and `cmd/limend` share it |
+| a replay is bounded by its record count | the upload is also at most 256 MiB, and each line at most 1 MiB, both `body_too_large` | a record count alone does not bound the memory a line can take |
+| the owner policy covers cases and reports | it also lets a caller forget its own subject | a person's records are theirs ([[001-architecture]], invariant 8) |
+| not in the design | the server keeps a caller's `X-Request-Id` or makes one; an error that is not the contract's answers `unavailable`, and a panic `internal`; `CheckBasePath` also refuses a space and the characters `?`, `#`, `{` and `}`; the authorization endpoint's bearer comes from `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | operation details; `docs/api.md` gives the limits and the request ID, and `docs/running.md` the variables |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| a rate limit | `rate_limited` is reserved for an installation that limits in front of `limend` |
+| a `limend` that more than one process serves | the ledger is the directory store, so one process serves it until the shared store of [[004-engine]] exists |

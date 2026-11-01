@@ -1,6 +1,6 @@
 ---
 title: "Conformance suite and stub: the invariants every limen.Service holds, and an in-memory service for decision points' tests"
-status: drafted
+status: in-progress
 track: core
 depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
@@ -103,3 +103,70 @@ answers it recorded.
 | 3 | `engine.Engine` passes `conformance.Run` with each store, and `client/` against `limend` | [[004-engine]], [[003-http-api]] |
 | 4 | The stub and the engine report identical estimates for an identical ledger | [[008-ledger-and-estimation]] |
 | 5 | `conformance/` and `stub/` each have coverage at or above 90% | the `suite` gate |
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. The suite and the stub are built and
+used: the engine with both stores, the HTTP client and the stub pass
+`conformance.Run`. The spec stays `in-progress` because one listed case
+is missing and the defect-seeded tests of criterion 1 do not exist.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the suite, `Run(t, Target)` with `Steered` | `conformance/` |
+| the stub, `New(Options)` with `Predict` and `Clock` | `stub/` |
+| the runs of the suite | `TestRunAgainstTheStub`, `TestRunUnsteered` (`conformance/`); `TestConformance` (`stub/`, `engine/`); `TestConformanceInline` and `TestEngineConformance` (the engine with each store); `TestConformanceEngine` and `TestConformanceStub` (`client/`) |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | partly: every case but `Certificate` runs; no test seeds a defect |
+| 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
+| 3 | the runs above; the client runs against `server.New`, the handler `limend` serves |
+| 4 | partly: the stub and the engine share `estimate/`, and the suite checks each against the same values; no test compares the two on one ledger |
+| 5 | the `suite` gate, at 90% or more for each package |
+
+### What diverges from the design as written
+
+The cases have other names in `conformance/conformance.go`, and some
+are merged:
+
+| Case in the table | Case in the code |
+|---|---|
+| `UnknownIsAsk` | `UnknownIsAnAsk` |
+| `VerdictFollowsThresholds`, `ThresholdsFromProfile` | `PredictionFollowsTheProfile` |
+| `Idempotent`, `ActionConflict` | `IdempotentPredict` |
+| `InvalidIsAnError` | `Validation` |
+| `ActionRequiredWithoutPrediction`, `DecisionActionMustMatch` | `DecisionNeedsAnAction` |
+| `ReviewIsFirstShownAnswer`, `UnshownAnswerNeverReviews`, `LatestAnswerShown` | `AnswerRoles` |
+| `PendingQueue`, `Pagination` | `PendingAndPages` |
+| `InputNeverReturned` | `CasesNeverReturnInput` |
+| `NotEstimableIsNull` | `NullIsNotZero` |
+| `WeightsFromDecisions` | `ReviewsWeightedByProbability` |
+| `UnansweredCounted` | `Unanswered` |
+| `PerSource` | `Sources`, `Learned` |
+| `Precedence`, `Defaults` | `ProfilePrecedence`, `ProfileDefaults` |
+| `ReplayReport` | `Replay` |
+| `ForgetPerOrg` | `ForgetIsScoped` |
+| `ErrorIsAsk`, `TimeoutIsAsk` | `FailClosed` |
+| `Previews` | `Previews`, `PreviewErrors` |
+| `Certificate` | none |
+| none | `SteeredVerdicts`, `LaterAnswersNeverEstimate`, `ExplanationsOfSteeredVerdicts` |
+
+| What it said | What was built | Why |
+|---|---|---|
+| `UnknownIsAsk` checks 0.5 under saved profiles at each end of the accepted costs | `UnknownIsAnAsk` checks `ask` under the default profile | the engine's `TestLearns` and the contract tests hold 0.5 and every accepted profile ([[004-engine]]) |
+| `InvalidIsAnError` names every field at fault | `Validation` checks one named field per error | the contract tests hold the full lists ([[002-contract]]) |
+| `ReplayReport` checks the counts and the estimate | `Replay` checks the records and that nothing is kept without `keep` | the stub's `TestReplay` holds the counts for the stub alone |
+| `ForgetPerOrg` checks cases, reviews and reports | `ForgetIsScoped` checks cases | the engine's `TestForgetDropsTheModel` holds the model |
+| the fail-closed cases wrap the target | `FailClosed` wraps a failing and a hanging predictor, then records into the target | the target is not what fails |
+| a decision point's own tests use the stub (Topos's, a hook's) | Topos tests against its own fake service over HTTP; no hook exists | Topos does not import this module ([[005-adapters]]) |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| the `Certificate` case | not written; the certificate is held by `estimate/`'s `TestCertificate` alone ([[008-ledger-and-estimation]]) |
+| a broken service per case (criterion 1) | not written |
+| one test that runs the stub and the engine on one ledger (criterion 4) | not written |

@@ -1,9 +1,9 @@
 ---
 title: "Contract: the Go types, the Predictor, Ledger and Admin interfaces, the error table, fail-closed"
-status: drafted
+status: testing
 track: core
 depends_on: [001-architecture.md]
-affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go]
+affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go]
 effort: small
 created: 2026-09-28
 updated: 2026-11-01
@@ -49,6 +49,7 @@ whether or not it uses Limen.
 | `Scope`, `Profile`, `Costs`, `Certify` | what an organization states | `Profile.Validate`: org non-empty; `audit_rate` in [0, 1]; `certify` zero or with 0 < alpha <= 1 and 0 < delta < 1; then `Costs.Thresholds` |
 | `ReliabilityQuery`, `Reliability`, `Estimate`, `Certificate` | an error-rate report | `ReliabilityQuery.Validate`: org, subject and of non-empty; from and to set, to after from |
 | `ReplayRecord`, `ReplayOptions`, `ReplayReport` | a recorded action and what Limen would have suggested | `ReplayRecord.Validate`: at set; a valid action; verdict and probability held to each other as in `Decision`; a source |
+| `Explanation`, `LearnedQuery`, `Learned`, `PreviewRequest`, `Preview` and their parts | the views of [[009-explanations]] (added 2026-11-01) | `Key.Validate`, `LearnedQuery.Validate` and `PreviewRequest.Validate` report the fields at fault with `invalid_query` |
 
 ### The cost arithmetic
 
@@ -89,7 +90,8 @@ the org with the agent; the org with the kind; the org; the default.
 | `Predictor` | `Predict` | the engine, the HTTP client, the stub |
 | `Ledger` | `Record`, `Answer`, `Cases`, `Reliability` | the engine, the HTTP client, the stub |
 | `Admin` | `Profile`, `PutProfile`, `Replay`, `Forget` | the engine, the HTTP client, the stub |
-| `Service` | all three | the same |
+| `Explainer` | `Explain`, `Learned`, `Preview` ([[009-explanations]], added 2026-11-01) | the engine, the HTTP client, the stub |
+| `Service` | all four | the same |
 
 `Predictor` is the hot path and holds one method. `Ledger` is what a
 decision point writes to after it decides and what a review surface
@@ -101,8 +103,11 @@ reads; a decision point that never predicts uses the ledger alone.
 - **Idempotent prediction.** `Predict` on a key Limen has seen with the
   same action returns the first prediction unchanged. The same key with a
   different action fails with `action_conflict` (409). Limen compares
-  digests of the action as sent, input included, so the input itself is
-  never kept. A decision point cannot draw a second prediction for an
+  digests of the action without its input, because the input is never
+  kept and so cannot tell two actions apart later; a repeat that differs
+  only in its input returns the first prediction (*amended 2026-11-01*:
+  this sentence first said the digest included the input, which the code
+  never did). A decision point cannot draw a second prediction for an
   action by asking again.
 - **One decision.** `Record` on a key that has a decision fails with
   `already_decided` (409). A decision for a key Limen holds no prediction
@@ -149,8 +154,8 @@ never interpolates, and a test asserts every code has one.
 | `invalid_decision` | 400 | `Decision.Validate` fails, or a decision without an action for a key with no prediction |
 | `invalid_answer` | 400 | `Answer.Validate` fails |
 | `invalid_profile` | 400 | `Profile.Validate` fails on anything but the band rule |
-| `invalid_query` | 400 | `CaseQuery.Validate` or `ReliabilityQuery.Validate` fails |
-| `invalid_replay` | 400 | a replay record fails `ReplayRecord.Validate`; the fields name the record's line |
+| `invalid_query` | 400 | `CaseQuery.Validate`, `ReliabilityQuery.Validate`, `Key.Validate`, `LearnedQuery.Validate` or `PreviewRequest.Validate` fails, or a profile query, a forget body or a preview body is not correct |
+| `invalid_replay` | 400 | a replay record fails `ReplayRecord.Validate`; the fields name the record's index, `records[i]`, and the detail names its line |
 | `ask_too_costly` | 422 | the costs leave one half outside the ask band |
 | `action_conflict` | 409 | the key names a different action |
 | `already_decided` | 409 | a second decision for a key |
@@ -198,3 +203,49 @@ are validated strictly.
 | 8 | `FailClosed` returns an `ask` from `learned/unavailable` for the action's key on an error and on a timeout, even when the wrapped predictor ignores its context, and passes a prediction through unchanged | `service_test.go` |
 | 9 | The root package's coverage is at or above 90% | the `suite` gate |
 | 10 | The ledger rules above hold for every implementation | [[006-conformance]] |
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. Every type, rule, interface and
+error code of the design is in the module root, and the HTTP API serves
+the same contract ([[003-http-api]]). The root package reaches the
+standard library and `latere.ai/x/pkg/verdict` only.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the types and their `Validate` | `action.go`, `prediction.go`, `decision.go`, `answer.go`, `profile.go`, `reliability.go`, `replay.go`, `explanation.go` |
+| the cost arithmetic, `DefaultProfile`, `CertificationSize` | `profile.go` |
+| the interfaces and `FailClosed` | `service.go`, `explanation.go` |
+| the error table and its sentences | `errors.go` |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestCostsThresholds` |
+| 2 | `TestCostsRefusesDecidingOnNoEvidence`, `TestCostsThresholds` |
+| 3 | `TestThresholdsVerdictIsBayesOptimal`, `TestThresholdsVerdict` |
+| 4 | `TestCertificationSize` |
+| 5 | partly: `TestActionValidate`, `TestDecisionValidate`, `TestAnswerAndQueries`, `TestProfileValidate`, `TestReplayRecordValidate` |
+| 6 | `TestDecideProducesValidDecisions` |
+| 7 | partly: `TestErrorTable` |
+| 8 | `TestFailClosedOnError`, `TestFailClosedOnTimeout`, `TestFailClosedPassesAPrediction` |
+| 9 | the `suite` gate, which measures coverage across packages |
+| 10 | the conformance suite ([[006-conformance]]); the relay rule by the server's `TestAnswerBy` |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| the digest covers the action as sent, input included | the digest leaves the input out | the input is never kept, so a later comparison cannot use it; the Rules of the ledger now say so |
+| `Service` is three interfaces | `Service` also embeds the `Explainer` | added by [[009-explanations]] |
+| `Prediction` | carries `evidence_ratio` and, for an `ask`, `ask_kind`; the `FailClosed` fallback is `unsure` | added in v0.3.0 by [[009-explanations]], so a decision point can let its rules decide an `unsure` ask |
+| `invalid_query` is for the two queries; `invalid_replay` names a line | the table above lists every use | the explanation routes and the forget and profile routes reuse the code |
+| `rate_limited` (429) | the code and its sentence exist; no implementation sends it | `limend` has no rate limiter; an installation limits at its ingress |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| criterion 5: a table test that asserts every field at fault for each type | multi-field errors are asserted for `Action`, `Answer` and `ReplayRecord` only; `Key`, `LearnedQuery` and `PreviewRequest` are tested through the server and the engine; `ReliabilityQuery.Validate` names only `from` when both `from` and `to` are zero |
+| criterion 7: `CodeOf` over a wrapped `*Error` | no test wraps one with `%w` |

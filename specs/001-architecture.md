@@ -1,9 +1,9 @@
 ---
 title: "Architecture: the shared vocabulary, the ledger, the predictor, and the decision point that composes them"
-status: drafted
+status: testing
 track: core
 depends_on: []
-affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, cmd/limend/, cmd/limen-hook/, api/, docs/]
+affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, server/, cmd/limend/, cmd/limen/, importer/topos/, api/, docs/]
 effort: medium
 created: 2026-09-28
 updated: 2026-11-01
@@ -134,7 +134,7 @@ already has. Limen keeps time itself ([[004-engine]]).
 
 | Path | What it holds | Spec |
 |---|---|---|
-| module root | the contract: types, interfaces, error codes, the cost arithmetic, `FailClosed` | [[002-contract]] |
+| module root | the contract: types, interfaces, error codes, the cost arithmetic, `FailClosed`, and the `Explainer` with its views | [[002-contract]], [[009-explanations]] |
 | `authorizer/` | the action vocabulary for the shared authorizer contract | [[003-http-api]] |
 | `api/openapi.yaml` | the HTTP surface, held to the Go types by a test | [[003-http-api]] |
 | `estimate/` | the estimators, shared by the stub and the engine | [[008-ledger-and-estimation]] |
@@ -142,11 +142,14 @@ already has. Limen keeps time itself ([[004-engine]]).
 | `conformance/` | the suite every `limen.Service` passes | [[006-conformance]] |
 | `engine/kernel`, `engine/gp` | the additive kernel and the Laplace GP-probit, ported from the research | [[004-engine]] |
 | `engine/featurize` | the open-set featurizer | [[004-engine]] |
-| `engine/store` | the memory, file and Postgres stores | [[004-engine]] |
+| `engine/store` | the store interface, the memory and file stores, and the contract tests every store passes (`storetest`) | [[004-engine]] |
 | `engine/` | the in-process `limen.Service` | [[004-engine]] |
 | `client/` | the HTTP `limen.Service` | [[003-http-api]] |
-| `cmd/limend` | the server | [[003-http-api]] |
-| `cmd/limen-hook` | the decision point for hook-based harnesses | [[005-adapters]] |
+| `server/` | the HTTP handler: routes, authentication, the owner policy, the base path | [[003-http-api]] |
+| `cmd/limend` | the server program and its access configuration | [[003-http-api]] |
+| `cmd/limen` | the replay command line | [[008-ledger-and-estimation]] |
+| `importer/topos` | the reader of Topos session logs for a replay | [[007-evidence-gates]] |
+| `cmd/limen-hook` | the decision point for hook-based harnesses; not built | [[005-adapters]] |
 
 ### Deployment
 
@@ -196,8 +199,9 @@ and decides nothing about a person. A token is read by the family's shared
 verifier, `latere.ai/x/pkg/authkit/jwt`, and by nothing of Limen's own.
 
 `limend` serves one person or a hosted installation. For one person, one
-bearer, `LIMEN_TOKEN`, is that person's subject, and the shared owner
-policy decides. A hosted `limend` verifies tokens from the issuers its
+bearer, `LIMEN_TOKEN`, stands for one subject, `LIMEN_SUBJECT` (default
+`local`), and the shared owner policy decides with that subject as its
+admin. A hosted `limend` verifies tokens from the issuers its
 operator lists, `LIMEN_OIDC_ISSUERS` for `LIMEN_OIDC_AUDIENCE`, as Topos
 configures them, and reads the key sets once at start so a wrong issuer
 stops the start. It then asks the installation's authorization endpoint,
@@ -230,3 +234,50 @@ review the decision point draws.
 | 3 | `verdict.Decide` never returns a verdict more permissive than its ceiling, and its probability is positive exactly for shown verdicts drawn or forced | the `verdict` package's tests and fuzz targets |
 | 4 | Each invariant a `limen.Service` can show has a case in the conformance suite | [[006-conformance]] |
 | 5 | The engine and the client both satisfy `limen.Service` and pass the conformance suite | `conformance.Run` in `engine/` and in an e2e test against `limend` |
+
+## Outcome
+
+Recorded on 2026-11-01, at v0.3.0. Limen is in production: hosted
+[Topos](https://github.com/latere-ai/topos) v0.66.0 sends every tool call
+of a hosted session to one hosted `limend`. The architecture holds as
+designed. The decision point owns the decision, and Limen predicts and
+keeps the ledger.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| the shared vocabulary | `latere.ai/x/pkg/verdict` |
+| the contract and the explanation views | the module root ([[002-contract]], [[009-explanations]]) |
+| the ledger and the predictor | `engine/`, with the memory and directory stores ([[004-engine]]) |
+| the estimates | `estimate/` ([[008-ledger-and-estimation]]) |
+| the HTTP surface | `server/`, `client/`, `cmd/limend`, `api/openapi.yaml` ([[003-http-api]]) |
+| the replay command and the Topos reader | `cmd/limen`, `importer/topos` |
+| the stub and the suite | `stub/`, `conformance/` ([[006-conformance]]) |
+| the in-process deployment | a Go decision point embeds `engine/` |
+| the HTTP deployment | hosted Topos calls one `limend`, which keeps its ledger in a directory on a volume, with one replica |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | `TestRootImports` and the `depcheck` gate |
+| 2 | review: the table above matches the tree; its open rows are `cmd/limen-hook` and the shared store of [[004-engine]] |
+| 3 | `TestDecideProducesValidDecisions` here; `TestDecide`, `TestDecideProbabilityIsTheShowFrequency` and `FuzzDecide` in `latere.ai/x/pkg/verdict` |
+| 4 | conformance cases per invariant: 2 `FailClosed`; 3 `OneDecision`, `ReviewsWeightedByProbability`; 4 `UnknownIsAnAsk`, `AskTooCostly`; 5 `CasesNeverReturnInput`, `IdempotentPredict`; 6 `AnswerRoles`, `LaterAnswersNeverEstimate`; 7 `IdempotentPredict`, `DecisionNeedsAnAction`; 8 `ForgetIsScoped`, with the model's removal in the engine's `TestForgetDropsTheModel`. Invariant 1 is the verdict package's |
+| 5 | the engine: `TestConformance`, `TestConformanceInline`, `TestEngineConformance`; the client: `TestConformanceEngine`, `TestConformanceStub` |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| the package table | `server/`, `cmd/limen` and `importer/topos` exist and were not listed; the Postgres store was listed and does not exist | the table above is corrected; the shared store is [[004-engine]]'s |
+| a failure asks (invariant 2) | Limen's fallback is an `ask` with `ask_kind` `unsure`; a decision point that lets its rules decide an `unsure` ask, as hosted Topos does in its `learned` mode, also lets them decide when Limen fails | the invariant is about Limen's suggestion, and it holds; the decision point decides, never above its ceiling, and Limen never allows ([[007-evidence-gates]], Amendments) |
+| criterion 3 is proved by the `verdict` package's tests | those tests live in `latere.ai/x/pkg`, outside this tree; an undrawn automatic verdict also carries the audit rate | the vocabulary is shared by every decision point, so its tests sit with it |
+| the client passes the suite against a running `limend` | the client runs the suite against `server.New` in `httptest`, the handler `limend` serves | `cmd/limend` adds only the configuration; its `TestServe` starts it but runs no suite |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| `cmd/limen-hook` | the hooks for Claude Code and Codex come after Limen is open source ([[005-adapters]]) |
+| a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source ([[004-engine]]) |
+| criterion 3 in this tree and criterion 5 through a started `limend` | needed before this spec is `complete` |
