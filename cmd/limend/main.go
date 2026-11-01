@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command limend serves Limen's HTTP API over a ledger kept in a
-// directory, for one person: decision points such as Topos send their
-// actions, decisions and answers to it, and it learns from them.
+// directory: decision points such as Topos send their actions, decisions
+// and answers to it, and it learns from them. It serves one person, with
+// one bearer token, or a hosted installation, with the tokens of the
+// operator's issuers (LIMEN_OIDC_ISSUERS); the two modes exclude each
+// other.
 //
 // It is configured by the environment:
 //
-//	LIMEN_TOKEN     the bearer every request carries; required
+//	LIMEN_TOKEN     the bearer every request carries, for one person
 //	LIMEN_ADDR      the address to listen on; default 127.0.0.1:7720
 //	LIMEN_DATA_DIR  the ledger's directory; default $XDG_STATE_HOME/limen,
 //	                  or ~/.local/state/limen
@@ -17,7 +20,10 @@
 //	                  ingress that forwards a public path unchanged, for
 //	                  example /v1/oversight; default none
 //
-// docs/running.md has the variables of a hosted server.
+// A hosted server sets LIMEN_OIDC_ISSUERS and LIMEN_OIDC_AUDIENCE in place
+// of LIMEN_TOKEN and LIMEN_SUBJECT, and LIMEN_AUTHORIZER_URL or LIMEN_ADMINS
+// for who may do what; docs/running.md has every variable. It keeps one
+// ledger directory, so one process serves it.
 //
 // It stops on an interrupt or a termination signal, after fitting what
 // arrived since the last fit. It exits 0 when stopped, 1 when it fails, and
