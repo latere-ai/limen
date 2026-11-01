@@ -38,7 +38,17 @@
 //     sends a live decision under "topos/<mode>" alone, so the sources of
 //     a kept replay are finer than those of a live session, and "applied"
 //     reports both;
-//   - the answer is the first user.tool_confirmation for the call.
+//   - the answer comes from the person's answers to the call, in the order
+//     Topos sends them to a decision service: each user.tool_confirmation
+//     of the call and, as Topos v0.66.0 and later send them, each
+//     confirmation of a network approval that asked about a connection the
+//     call made. A record holds one answer. For a call Topos showed (ask
+//     or flag) it is the first, which is the review Limen counts in its
+//     estimates; for a call that ran unseen it is the last, which is the
+//     label Limen learns. A later answer to a shown call that differs from
+//     the first changes the label in a live session and not in a replay.
+//     A person's message in place of an answer, and an approval that
+//     nothing waited for (a block), give no answer, as in Topos.
 //
 // A call is skipped, with the reason reported through [Options.Skipped],
 // when its event is redacted, carries no verdict (a log written before
@@ -177,26 +187,7 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			o.Skipped(Skip{SessionID: sess.ID, ToolUseID: toolUseID, Reason: reason})
 		}
 	}
-	answers := map[string]bool{}
-	for _, e := range events {
-		if e.Type != session.TypeUserToolConfirmation || e.Redacted() {
-			continue
-		}
-		var c session.UserToolConfirmation
-		// An answer to a network approval names an approval, not a call.
-		if e.Decode(&c) != nil || c.ToolUseID == "" {
-			continue
-		}
-		if _, seen := answers[c.ToolUseID]; seen {
-			continue
-		}
-		switch c.Decision {
-		case session.DecisionAllow:
-			answers[c.ToolUseID] = true
-		case session.DecisionDeny:
-			answers[c.ToolUseID] = false
-		}
-	}
+	answers := answersOf(events)
 	key := limen.Key{Org: o.Org, Subject: o.Subject}
 	if key.Org == "" {
 		key.Org = sess.Metadata["org"]
@@ -264,7 +255,11 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 		case v.Shown():
 			r.ReviewProbability = 1
 		}
-		if approve, ok := answers[u.ToolUseID]; ok {
+		if as := answers[u.ToolUseID]; len(as) > 0 {
+			approve := as[len(as)-1]
+			if v.Shown() {
+				approve = as[0]
+			}
 			r.Approve = &approve
 		}
 		if r.Validate() != nil {
@@ -277,6 +272,70 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 		}
 		kept[u.ToolUseID] = struct{}{}
 		out = append(out, r)
+	}
+	return out
+}
+
+// answersOf returns the person's answers in a session, by the tool use ID
+// of the call each answers, in the order Topos sends them to a decision
+// service (Topos spec 037). Topos sends a confirmation of an asked call
+// when it settles the call, before the call runs, and a confirmation of a
+// network approval when it settles the approval, after its
+// approval.decided, as an answer to the call whose connection raised it.
+// So the answers follow the log: a call's own confirmations, and the
+// approvals' confirmations at their approval.decided. An approval that a
+// confirmation settled and that has no approval.decided yet is answered
+// when the session goes on, so its answer comes last, in the order of the
+// approvals. Only an approval that waited for a person (verdict ask) and
+// that a confirmation settled gives an answer: Topos sends none for a
+// person's message in place of a confirmation. [session.Approvals] pairs
+// each approval with what settled it, so the importer reads the pairing
+// Topos itself uses.
+func answersOf(events []session.Event) map[string][]bool {
+	out := map[string][]bool{}
+	add := func(toolUseID, decision string) {
+		switch decision {
+		case session.DecisionAllow:
+			out[toolUseID] = append(out[toolUseID], true)
+		case session.DecisionDeny:
+			out[toolUseID] = append(out[toolUseID], false)
+		}
+	}
+	confirmed := map[string]session.Approval{}
+	var order []string
+	for _, a := range session.Approvals(events) {
+		if a.Request.Verdict != string(limen.Ask) || a.Request.ToolUseID == "" || a.Confirmation == nil {
+			continue
+		}
+		confirmed[a.Request.ApprovalID] = a
+		order = append(order, a.Request.ApprovalID)
+	}
+	settle := func(approvalID string) {
+		if a, ok := confirmed[approvalID]; ok {
+			add(a.Request.ToolUseID, a.Confirmation.Decision)
+			delete(confirmed, approvalID)
+		}
+	}
+	for _, e := range events {
+		if e.Redacted() {
+			continue
+		}
+		switch e.Type {
+		case session.TypeUserToolConfirmation:
+			var c session.UserToolConfirmation
+			// A confirmation that names no call answers an approval.
+			if e.Decode(&c) == nil && c.ToolUseID != "" {
+				add(c.ToolUseID, c.Decision)
+			}
+		case session.TypeApprovalDecided:
+			var d session.ApprovalDecided
+			if e.Decode(&d) == nil {
+				settle(d.ApprovalID)
+			}
+		}
+	}
+	for _, id := range order {
+		settle(id)
 	}
 	return out
 }

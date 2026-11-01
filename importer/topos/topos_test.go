@@ -165,26 +165,61 @@ func TestOverrides(t *testing.T) {
 	}
 }
 
-// Calls that cannot become a record are skipped with their reason, and
-// unknown or malformed events do not stop the import.
-// An answer to a network approval carries no tool use ID and answers no
-// call, even a malformed call that carries none either.
+// Topos v0.66.0 and later send a person's confirmation of a network
+// approval to a decision service as an answer to the call whose connection
+// raised it, and the importer reads it so. For a call Topos showed, the
+// record's answer is the first, its review; for a call that ran unseen, the
+// last, the label Limen learns. A message in place of a confirmation, an
+// approval nothing waited for, and a confirmation of an approval that names
+// no call or no approval give no answer.
 func TestApprovalAnswers(t *testing.T) {
 	data := t.TempDir()
+	rate := 0.05
 	topostest.Write(t, data, topostest.Session{
 		Initiator: "u",
-		Raw:       []topostest.Raw{{Type: session.TypeUserToolConfirmation, Payload: `{"approval_id":"apr_1","decision":"allow"}`}},
-		Calls:     []topostest.Call{{ToolUseID: "", Name: "bash", Verdict: "ask"}},
+		Raw:       []topostest.Raw{{Type: session.TypeUserToolConfirmation, Payload: `{"approval_id":"apr_unknown","decision":"allow"}`}},
+		Calls: []topostest.Call{
+			{ToolUseID: "ran", Name: "bash", Verdict: "allow", Mode: "confirm", Approvals: []topostest.Approval{
+				{Host: "a.example.com", Answer: "allow"}, {Host: "b.example.com", Answer: "deny"},
+			}},
+			{ToolUseID: "asked", Name: "bash", Verdict: "ask", Mode: "confirm", Answer: "allow", Approvals: []topostest.Approval{
+				{Host: "c.example.com", Answer: "deny"},
+			}},
+			{ToolUseID: "flagged", Name: "bash", Verdict: "flag", Mode: "progressive", ReviewProbability: &rate, Approvals: []topostest.Approval{
+				{Host: "d.example.com", Answer: "deny"},
+			}},
+			{ToolUseID: "unanswered", Name: "bash", Verdict: "allow", Mode: "confirm", Approvals: []topostest.Approval{
+				{Host: "e.example.com", Message: "Use the mirror."}, {Host: "f.example.com", Verdict: "block", Answer: "allow"}, {Host: "g.example.com"},
+			}},
+			{ToolUseID: "unsettled", Name: "bash", Verdict: "allow", Mode: "confirm", Approvals: []topostest.Approval{
+				{Host: "h.example.com", Answer: "deny", Unsettled: true},
+			}},
+			{ToolUseID: "", Name: "bash", Verdict: "ask", Approvals: []topostest.Approval{{Host: "i.example.com", Answer: "allow"}}},
+		},
 	})
 	rs, err := collect(t, data, topos.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rs) != 1 || rs[0].Approve != nil {
-		t.Errorf("an approval answered a call: %+v", rs)
+	if len(rs) != 6 {
+		t.Fatalf("%d records, want 6", len(rs))
+	}
+	got := byID(rs)
+	yes, no := true, false
+	for id, want := range map[string]*bool{"ran": &no, "asked": &yes, "flagged": &no, "unanswered": nil, "unsettled": &no, "": nil} {
+		r, ok := got[id]
+		if !ok {
+			t.Errorf("%q: no record", id)
+			continue
+		}
+		if (r.Approve == nil) != (want == nil) || (r.Approve != nil && *r.Approve != *want) {
+			t.Errorf("%q: approve %v, want %v", id, r.Approve, want)
+		}
 	}
 }
 
+// Calls that cannot become a record are skipped with their reason, and
+// unknown or malformed events do not stop the import.
 func TestSkips(t *testing.T) {
 	data := t.TempDir()
 	topostest.Write(t, data, topostest.Session{

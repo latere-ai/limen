@@ -537,7 +537,12 @@ Each tool call that has a verdict becomes one record:
 - The review probability is the recorded probability. A log from before
   Topos v0.11.0 has no probability. Then the probability is 1 for an `ask`
   or a `flag`, and 0 for an `allow` or a `block`.
-- The answer is the first confirmation of the call by the person.
+- The answer comes from the confirmations of the call by the person.
+  From Topos v0.66.0, it also comes from the confirmations of the network
+  approvals that the call caused. A record has one answer. For a call
+  that the person saw (`ask` or `flag`), it is the first answer, which is
+  the review. For a call that ran without the person, it is the last
+  answer, which the model learns.
 
 Thus, after `limen replay topos --keep`, the ledger gives the error rate
 of each type of rule. Topos itself records a live decision with the
@@ -554,11 +559,16 @@ each:
 - A call with the same tool call identifier as an earlier call in its
   session.
 
-A replay does not use the answers to network approvals. In a log, such an
-answer has no tool call. Because of this, a replay of a session can have
-fewer answers than the ledger of hosted Topos. A replay reads only a data
-directory on your computer. It does not read the sessions of hosted
-Topos.
+A command can connect to a host outside the network of the session. Then
+Topos asks you for a network approval. From Topos v0.66.0, Topos sends
+your answer to the approval to Limen as an answer to the call that made
+the connection. A replay reads these answers in the same way. A message
+in place of an answer is not an answer. Topos can send more than one
+answer for a call, and the model learns the last answer. A replay keeps
+one answer for each call. Because of this, for a call that you saw, the
+model of a replay can learn a different answer than the model of Topos.
+A replay reads only a data directory on your computer. It does not read
+the sessions of hosted Topos.
 
 ### Claude Code and Codex
 

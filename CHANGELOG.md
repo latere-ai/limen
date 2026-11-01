@@ -27,6 +27,11 @@ the commit log.
   example `topos/confirm/always_allow`. `<rule>` is the type of rule that
   decided the call. Thus the ledger gives the error rate of each type of
   rule. A decision from an earlier log keeps the source `topos/<mode>`.
+- `limen replay topos` reads an answer to a network approval as an answer
+  to the call that made the connection, as Topos v0.66.0 sends it. A
+  record has one answer. For a call that a person saw, it is the first
+  answer, which is the review. For a call that ran without a person, it is
+  the last answer, which the model learns.
 
 ## v0.3.0 - 2026-11-01
 
