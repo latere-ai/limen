@@ -272,6 +272,12 @@ func TestDecisionValidate(t *testing.T) {
 			t.Errorf("%+v: fields %v, want %s", c.d, fields, c.field)
 		}
 	}
+	// Every field at fault, in one error.
+	all := Decision{Verdict: "deny", ReviewProbability: -1, Action: &Action{Key: key}}
+	want := []string{"org", "subject", "action_id", "verdict", "review_probability", "source", "action.kind", "action.name", "action.effect", "action"}
+	if fields := fieldsOf(t, all.Validate(), CodeInvalidDecision); !slices.Equal(fields, want) {
+		t.Errorf("every field at fault: %v, want %v", fields, want)
+	}
 }
 
 // What verdict.Decide returns is always a valid decision.
@@ -305,6 +311,9 @@ func TestAnswerAndQueries(t *testing.T) {
 		if CodeOf(q.Validate()) != CodeInvalidQuery {
 			t.Errorf("%+v: %v", q, q.Validate())
 		}
+	}
+	if fields := fieldsOf(t, CaseQuery{Limit: -1}.Validate(), CodeInvalidQuery); !slices.Equal(fields, []string{"org", "subject", "limit"}) {
+		t.Errorf("every field of a case query at fault: %v", fields)
 	}
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	good := ReliabilityQuery{Org: "o", Subject: "s", Of: OfApplied, From: from, To: from.Add(time.Hour)}
@@ -356,6 +365,12 @@ func TestProfileValidate(t *testing.T) {
 		if got := CodeOf(p.Validate()); got != c.code {
 			t.Errorf("%s: code %q, want %q", c.name, got, c.code)
 		}
+	}
+	// Every field at fault, in one error; the costs only once the rest is
+	// valid.
+	all := Profile{AuditRate: -1, Certify: Certify{Alpha: 0.01, Delta: 1}, Costs: Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}}
+	if fields := fieldsOf(t, all.Validate(), CodeInvalidProfile); !slices.Equal(fields, []string{"org", "audit_rate", "certify"}) {
+		t.Errorf("every field of a profile at fault: %v", fields)
 	}
 }
 
