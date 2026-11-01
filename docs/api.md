@@ -102,12 +102,14 @@ The response is the prediction:
   "subject": "https://issuer.example|usr_42",
   "action_id": "ses_9f/toolu_01",
   "verdict": "ask",
-  "approve": 0.6,
+  "approve": 0.58,
   "uncertainty": 0.71,
+  "evidence_ratio": 0.84,
+  "ask_kind": "split",
   "thresholds": {"allow_above": 0.9, "block_below": 0.25},
   "profile": {"org": "org_7"},
   "audit_rate": 0.05,
-  "source": "learned/3",
+  "source": "learned/1",
   "reason": "The approval probability is 0.58, between the block threshold (0.25) and the allow threshold (0.90). Limen suggests ask."
 }
 ```
@@ -384,7 +386,7 @@ model.
   "thresholds": {"allow_above": 0.95, "block_below": 0.2},
   "mean": 0.31,
   "parts": {"action": 0.52, "recent": -0.18, "interaction": -0.03},
-  "evidence_ratio": 0.64,
+  "evidence_ratio": 0.84,
   "ask_kind": "split",
   "evidence": [
     {"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z", "approve": true, "share": 0.21},

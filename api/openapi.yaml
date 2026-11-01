@@ -767,7 +767,7 @@ components:
         source:
           type: string
           examples:
-          - learned/3
+          - learned/1
         reason:
           type: string
           description: One sentence for the person who reads the record. Never shown to an agent.
