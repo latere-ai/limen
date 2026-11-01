@@ -167,6 +167,24 @@ func TestOverrides(t *testing.T) {
 
 // Calls that cannot become a record are skipped with their reason, and
 // unknown or malformed events do not stop the import.
+// An answer to a network approval carries no tool use ID and answers no
+// call, even a malformed call that carries none either.
+func TestApprovalAnswers(t *testing.T) {
+	data := t.TempDir()
+	topostest.Write(t, data, topostest.Session{
+		Initiator: "u",
+		Raw:       []topostest.Raw{{Type: session.TypeUserToolConfirmation, Payload: `{"approval_id":"apr_1","decision":"allow"}`}},
+		Calls:     []topostest.Call{{ToolUseID: "", Name: "bash", Verdict: "ask"}},
+	})
+	rs, err := collect(t, data, topos.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rs) != 1 || rs[0].Approve != nil {
+		t.Errorf("an approval answered a call: %+v", rs)
+	}
+}
+
 func TestSkips(t *testing.T) {
 	data := t.TempDir()
 	topostest.Write(t, data, topostest.Session{

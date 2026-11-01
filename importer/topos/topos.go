@@ -170,7 +170,8 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			continue
 		}
 		var c session.UserToolConfirmation
-		if e.Decode(&c) != nil {
+		// An answer to a network approval names an approval, not a call.
+		if e.Decode(&c) != nil || c.ToolUseID == "" {
 			continue
 		}
 		if _, seen := answers[c.ToolUseID]; seen {

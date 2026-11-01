@@ -69,13 +69,21 @@ The packages:
 
 The programs:
 
-- `limend`, the server. It supplies the API for one person and keeps the
-  ledger on disk. `LIMEN_TOKEN`, `LIMEN_ADDR`, `LIMEN_DATA_DIR`, and
-  `LIMEN_SUBJECT` configure it. Its container image runs it as a user
-  that is not root, with the ledger in a volume.
+- `limend`, the server. It keeps the ledger on disk. It runs in one of two
+  modes:
+  - For one person: `LIMEN_TOKEN` and `LIMEN_SUBJECT` configure it.
+  - Hosted: it accepts tokens from the issuers in `LIMEN_OIDC_ISSUERS` for
+    `LIMEN_OIDC_AUDIENCE`. An authorization endpoint
+    (`LIMEN_AUTHORIZER_URL`) or the owner policy with `LIMEN_ADMINS`
+    decides each request.
+
+  Its container image runs it as a user that is not root, with the ledger
+  in a volume.
 - `limen`, the command line. `limen replay topos` replays a Topos data
-  directory. `limen replay file` replays a file of records. Each replay
-  shows what Limen would suggest.
+  directory, from Topos v0.11.0 to v0.62.0. `limen replay file` replays a
+  file of records. Each replay shows what Limen would suggest. A replay
+  skips a call that repeats the ID of an earlier call in its session, and
+  an answer to a network approval.
 
 The documents:
 

@@ -404,6 +404,11 @@ data directory of Topos. A replay does not need the server:
 limen replay topos
 ```
 
+A replay opens the data directory with the session store of Topos. If the
+directory has logs from a Topos version before v0.60.0, the store updates
+them to the current format one time. This is the same update that Topos
+does when it opens the directory.
+
 For a new person, Limen suggests `ask`. It suggests `allow` or `block`
 only after the answers of the person support it. Usually, auto mode asks
 about a type of call until it has approximately 30 or more answers for
