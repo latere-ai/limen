@@ -40,7 +40,7 @@ whether or not it uses Limen.
 | `Key` | names one action in every record: `org`, `subject`, `action_id` | all three non-empty; the decision point keeps `action_id` unique within the org and subject |
 | `Action` | one proposed action, as the decision point observes it | `Validate` reports every field at fault in one `*Error` with `invalid_action`: the key; `kind` and `name` non-empty; `effect` one of none, read, write, external; `input` valid JSON when present; `actor.kind`, `target.kind` and `environment.kind` non-empty when the struct is present; `target.sensitivity` in [0, 1]; at most 64 `attributes`, keys non-empty, values strings, booleans or finite numbers; each signal with a source and a valid verdict, a score in [0, 1], or both |
 | `Actor`, `Target`, `Environment`, `Signal` | parts of an action | as above |
-| `Prediction` | Limen's opinion: `verdict` (allow, ask or block), `approve`, `uncertainty`, `thresholds`, `profile` (the scope that applied), `audit_rate`, `source`, `reason` | `verdict` equals `thresholds.Verdict(approve)`; `source` is `learned/<version>`, or `learned/unavailable` for the `FailClosed` fallback, whose numbers are zero and mean nothing |
+| `Prediction` | Limen's opinion: `verdict` (allow, ask or block), `approve`, `uncertainty`, `evidence_ratio`, `ask_kind` for an ask (`unsure` or `split`, [[009-explanations]]), `thresholds`, `profile` (the scope that applied), `audit_rate`, `source`, `reason` | `verdict` equals `thresholds.Verdict(approve)`; `source` is `learned/<version>`, or `learned/unavailable` for the `FailClosed` fallback, whose numbers are zero and mean nothing |
 | `Thresholds` | `allow_above` and `block_below` in approval probability | derived by `Costs.Thresholds`; `Verdict(p)` is allow above `allow_above`, block below `block_below`, ask between with both ends included, and ask for a probability outside [0, 1] or NaN |
 | `Decision` | what the decision point applied: `verdict`, `review_probability`, `source`, and `action` when Limen holds no prediction | `Validate`: the key; a valid verdict; the probability in [0, 1], positive for `flag` and `ask`, below one for `allow` and `block`; a non-empty source; an action, when present, valid and under the same key |
 | `Answer` | a person's decision about an action: `approve`, and `by` when relayed | `Validate`: the key. No time and no kind: Limen stamps the time and derives the role |
@@ -129,7 +129,8 @@ reads; a decision point that never predicts uses the ledger alone.
 `FailClosed(p, timeout, report)` wraps a `Predictor`. When `Predict`
 errors or does not return within `timeout`, the wrapper returns, with a
 nil error, a prediction for the action's key whose verdict is `ask` and
-whose source is `learned/unavailable`, and hands the error to `report`.
+whose source is `learned/unavailable` and whose ask kind is `unsure`, and
+hands the error to `report`.
 The wrapper waits on a goroutine, so a predictor that ignores its
 context cannot hold the decision point past the timeout. Because Limen
 may hold no record of the action, the decision point sends the action

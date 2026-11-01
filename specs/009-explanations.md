@@ -206,6 +206,7 @@ prediction does, and none runs on a decision's path.
 | 8 | The engine, the stub and the HTTP client agree on every field of the three views that no model decides: the key, the thresholds, the verdict as the thresholds' verdict, an ask's kind, the labels and their counts, and every count of a preview; by the model that predicted it, an explanation repeats the prediction; an unknown action is `no_case` | the conformance suite |
 | 9 | `api/openapi.yaml` describes the three routes and types, held to the Go types by the existing test | `api` tests |
 | 10 | Each entry of `learned` carries the `evidence_ratio` of an explanation at the entry's point, and `ask_kind` `unsure` or `split` by the same cut when its verdict is `ask`, absent otherwise | an `engine` test that compares each entry with the posterior at its point |
+| 11 | A prediction carries the `evidence_ratio` and `ask_kind` of the explanation the same model gives at the same point, recorded with it; the `FailClosed` fallback is `unsure` | an `engine` test, the conformance suite, and the contract test of `FailClosed` |
 
 ## Amendments
 
@@ -235,3 +236,12 @@ prediction does, and none runs on a decision's path.
   `LIMEN_BASE_PATH`, which serves these routes under a public prefix, and
   profiles of a person's own context, which the person may read and
   write.
+
+**2026-11-01, the evidence on a prediction.** A decision point needs the
+kind of an ask when it decides, not when a person asks why. `Prediction`
+therefore carries `evidence_ratio` and, for an `ask`, `ask_kind`,
+computed at prediction time exactly as for an explanation and recorded
+with the prediction (criterion 11). Topos's `learned` mode reads them:
+Limen's suggestion decides where it rests on evidence (an `allow`, a
+`block`, a `split` ask) and the rules decide an `unsure` one. The
+`FailClosed` fallback, which has no model behind it, is `unsure`.

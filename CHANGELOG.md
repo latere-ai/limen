@@ -11,6 +11,14 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- A prediction has `evidence_ratio`, and for an `ask` also `ask_kind`
+  (`unsure` or `split`), the same values as its explanation. A decision
+  point can use them when it decides. For example, its rules can decide
+  an `unsure` ask, and a `split` ask stays with the person. The
+  `FailClosed` fallback has the kind `unsure`.
+
 ## v0.2.0 - 2026-11-01
 
 ### Added

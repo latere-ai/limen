@@ -117,6 +117,8 @@ The response is the prediction:
 | `verdict` | The suggested verdict: `allow`, `ask`, or `block`. It is never `flag`. Only the decision point applies `flag`. |
 | `approve` | The approval probability. |
 | `uncertainty` | The uncertainty of the approval probability. An action that is not similar to an earlier action has a high value. |
+| `evidence_ratio` | The evidence ratio of the prediction, from 0 to 1. A value near 0 tells that the person has few answers about actions like this one. |
+| `ask_kind` | Only for an `ask`: `unsure` or `split`. A decision point can let its rules decide an `unsure` ask and keep a `split` ask for the person. |
 | `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow`. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
 | `profile` | The scope of the cost profile that applies. |
 | `audit_rate` | The audit rate of the cost profile. |
