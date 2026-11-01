@@ -13,8 +13,9 @@
 # The image namespace is the repository owner's, so a fork's tag publishes
 # under the fork's. Each job is granted only what its stage needs, and runs
 # where the organization's runner policy says (latere-ai/ci, README,
-# Runners): for this private repository the self-hosted runner, or a hosted
-# one while it is offline.
+# Runners): a public repository on GitHub's hosted runner, ubuntu-latest,
+# and a private one on the self-hosted runner, each falling back to the
+# other while its own is unavailable.
 name: release
 
 on:
@@ -47,11 +48,10 @@ jobs:
         for arch in amd64 arm64; do
           CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$ldflags" -o "dist/limend_linux_${arch}" ./cmd/limend
         done
-      # A verify run still going refuses the release at once: a job that
-      # waited would hold one of the self-hosted runner's two slots while
-      # the run it waits for queues for the other, and two releases at once
-      # would hold both. The stage prints the command that re-runs the
-      # release once verify is green.
+      # A verify run still going refuses the release at once rather than
+      # waiting, so a release never holds a runner the run it waits for
+      # needs. The stage prints the command that re-runs the release once
+      # verify is green.
       wait_minutes: "0"
 
   publish:

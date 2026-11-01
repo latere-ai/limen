@@ -19,9 +19,9 @@ concurrency:
 
 jobs:
   # Every job runs where the organization's runner policy says (latere-ai/ci,
-  # README, Runners): for this private repository the self-hosted runner,
-  # which carries Docker, git, jq and curl, or a hosted one while it is
-  # offline.
+  # README, Runners): a public repository on GitHub's hosted runner,
+  # ubuntu-latest, and a private one on the self-hosted runner, each falling
+  # back to the other while its own is unavailable.
   gate:
     if: "!startsWith(github.ref, 'refs/tags/')"
     uses: latere-ai/ci/.github/workflows/lateregate.yml@v1
