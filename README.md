@@ -27,14 +27,23 @@ rules, a language model that examines actions, and Limen itself.
 >   research code. It keeps the ledger in memory or in a directory. It
 >   updates the models in the background, not while a decision waits.
 > - The server, `limend`, and its HTTP client. The server supplies the API
->   for one person and keeps the ledger on disk.
+>   for one person, or for many persons in hosted mode. In hosted mode, it
+>   verifies the tokens of your issuers and asks your authorization
+>   endpoint or the owner policy. It keeps the ledger on disk. It can also
+>   supply the API under a second prefix, for a public route
+>   (`LIMEN_BASE_PATH`).
+> - Explanations for the person: why Limen suggests a verdict for one
+>   action, what the model learned about the person, and a preview of a
+>   different cost profile. The parts of each explanation are exact for
+>   the model.
 > - The `limen` command. It replays recorded decisions, for example from a
 >   Topos data directory.
 > - A stub service for tests, and the conformance tests that each
 >   implementation must pass.
 >
-> These parts are not ready: a store for a hosted installation, and hooks
-> for Claude Code and Codex. The [specs](specs/README.md) describe them.
+> These parts are not ready: a store that more than one server can share,
+> and hooks for Claude Code and Codex. The [specs](specs/README.md)
+> describe them.
 
 ## The problem
 
@@ -290,10 +299,10 @@ the configuration of the server.
 
 | Page | Contents |
 |---|---|
-| [Integration](docs/integrating.md) | For authors of a decision point: the three calls, actions, your rules, records, answers, a safe start, and notes for each agent harness |
+| [Integration](docs/integrating.md) | For authors of a decision point: the three calls, actions, your rules, records, answers, explanations, a safe start, and notes for each agent harness |
 | [The ledger](docs/ledger.md) | What Limen records, the meaning of the review probability, and how Limen calculates the error rate of each source |
 | [API](docs/api.md) | Each HTTP route, its request and its response, the errors, and the permission that each route needs |
-| [Running limend](docs/running.md) | The configuration of the server, its ledger directory, and how to run it in a container |
+| [Running limend](docs/running.md) | The configuration of the server for one person or hosted, a public route, its ledger directory, and how to run it in a container |
 | [OpenAPI](api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document |
 | [Principles](docs/principles.md) | The rules that each implementation obeys, and the reasons for them |
 | [Theory](docs/theory.md) | The model, the decision rule, forgetting, the estimates, and what you can know about a judge |
