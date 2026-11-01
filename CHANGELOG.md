@@ -11,6 +11,18 @@ the commit log.
 
 ## Unreleased
 
+### Changed
+
+- The documents describe Limen in production. The integration page
+  tells how a decision point can use `ask_kind`: its rules decide an
+  `unsure` ask, and the person decides a `split` ask. It also gives the
+  modes of hosted Topos (`TOPOS_DECISIONS_MODE`) and what a replay of a
+  Topos data directory reads. The theory page gives the evidence ratio.
+  The page on running `limend` gives the release files, `go install`,
+  how to check the server, and its logs. Each spec records what is
+  built.
+- `SECURITY.md` names the supported versions: v0.3 and v0.2.
+
 ## v0.3.0 - 2026-11-01
 
 ### Added
