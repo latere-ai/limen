@@ -15,6 +15,28 @@ each person in the background, not while a decision waits.
 
 ## Get limend
 
+Each release on the
+[releases page](https://github.com/latere-ai/limen/releases) attaches
+these files:
+
+- `limend_linux_amd64` and `limend_linux_arm64`, the server for Linux.
+- `checksums.txt`, the SHA-256 checksums of the files, and
+  `checksums.txt.sigstore.json`, its signature.
+- `sbom-limen.spdx.json`, the bill of materials of the image.
+
+A release also publishes the image `ghcr.io/latere-ai/limen:<tag>`. The
+image has a signature, a bill of materials, and a provenance attestation.
+The image runs `limend` as a user that is not root.
+
+To install the two programs with Go 1.27 or newer, run:
+
+```sh
+go install latere.ai/x/limen/cmd/limend@latest
+go install latere.ai/x/limen/cmd/limen@latest
+```
+
+A program from `go install` shows the version `dev`.
+
 To build the two programs from a checkout of this repository, run:
 
 ```sh
@@ -26,10 +48,6 @@ This command writes the server, `out/limend`, and the replay command,
 came from.
 
 To run the server without a build first, run `go run ./cmd/limend`.
-
-A release tag publishes the image `ghcr.io/latere-ai/limen:<tag>`. The
-image has a signature, a bill of materials, and a provenance attestation.
-The image runs `limend` as a user that is not root.
 
 To see the build of the server, run `limend -version`. It shows the tag,
 the commit, and the date.
@@ -100,6 +118,15 @@ from an authorization endpoint.
 > **Warning:** A subject in `LIMEN_ADMINS` can read and change the ledger
 > of each person. Add only the service that runs your decision point.
 
+A platform that has its own permissions can answer for `limend`. Set
+`LIMEN_AUTHORIZER_URL` to its authorization endpoint. Then the endpoint
+decides each request, and `LIMEN_ADMINS` does not apply.
+
+A hosted server keeps the ledger in a directory, as a server for one
+person does. Only one process can use a ledger directory. In a container
+platform, run one replica, and put the ledger directory on a persistent
+volume. A store that more than one server can share is not ready.
+
 ## The ledger directory
 
 One process owns a ledger directory. While one process holds the
@@ -126,6 +153,13 @@ To make a backup of the ledger, do these steps:
 1. Stop `limend`.
 2. Copy the ledger directory.
 3. Start `limend` again.
+
+## Logs and telemetry
+
+`limend` writes its messages to the standard output and the standard
+error. It writes a log line for each response with a status of 500 or
+more, with the details for a developer. `limend` sends no telemetry. It
+ignores the `OTEL_*` environment variables.
 
 ## Start and stop limend
 
@@ -157,6 +191,20 @@ To stop the server, send an interrupt (Ctrl-C) or a termination signal.
 | 0 | `limend` stopped correctly. |
 | 1 | `limend` failed. |
 | 2 | The configuration has an error. |
+
+## Check that limend runs
+
+`limend` has no health route. Each route needs a bearer token. To check
+the server, use one of these methods:
+
+- Open a TCP connection to the port of `limend`. `limend` opens the port
+  after it opens the ledger directory. If it cannot read the key set of an
+  issuer, it stops.
+- Send a request with a token, for example
+  `GET /v1/profiles?org=<org>`. Status 200 tells you that the server
+  answers and can read the ledger.
+
+In Kubernetes, use a `tcpSocket` probe for readiness and for liveness.
 
 ## Run limend in a container
 
