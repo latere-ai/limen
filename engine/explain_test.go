@@ -93,6 +93,36 @@ func TestExplanationIsThePrediction(t *testing.T) {
 	}
 }
 
+// Spec 009, criteria 3 and 11: a block, like an allow, has no kind of ask,
+// on the prediction and on its explanation, and its strongest evidence is
+// on its side: three denials and two approvals.
+func TestBlockHasNoAskKind(t *testing.T) {
+	e := taught(t, 15)
+	a := bash("s", "probe", "rm -rf dist")
+	p, err := e.Predict(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := e.Explain(ctx, a.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Verdict != limen.Block || p.AskKind != "" || x.Verdict != limen.Block || x.AskKind != "" {
+		t.Fatalf("a familiar recursive delete: predicted %s %q, explained %s %q", p.Verdict, p.AskKind, x.Verdict, x.AskKind)
+	}
+	ups, downs := 0, 0
+	for _, ev := range x.Evidence {
+		if ev.Approve {
+			ups++
+		} else {
+			downs++
+		}
+	}
+	if downs != 3 || ups != 2 || x.Evidence[0].Approve {
+		t.Errorf("evidence of a block: %d against, %d for: %+v", downs, ups, x.Evidence)
+	}
+}
+
 // Spec 009, criterion 3: an ask on no evidence is unsure, an ask on
 // evidence that disagrees is split, and an allow or a block has no kind.
 func TestAskKinds(t *testing.T) {
