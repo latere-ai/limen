@@ -14,9 +14,17 @@ we give it in the release notes.
 
 ## Supported versions
 
-Limen has no release yet. The contract in the module root is a
-pre-release and can change. After the first release, we fix the two most
-recent minor release series.
+We fix vulnerabilities in the two most recent minor release series.
+
+| Version | Supported |
+|---|---|
+| v0.3.x | Yes |
+| v0.2.x | Yes |
+| v0.1.x | No |
+
+A fix comes in a new patch release of each supported series. Before
+v1.0.0, the contract in the module root can change in a minor release.
+The [CHANGELOG](CHANGELOG.md) names each incompatible change.
 
 ## What is a vulnerability
 
