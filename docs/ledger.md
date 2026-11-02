@@ -114,9 +114,9 @@ blocks are the actions for which it gave `block`. A signal that has only a
 score has no allows and no blocks. Its rates are always `null`.
 
 Give each source a name in the form `<kind>/<name>`, and do not change the
-name. A name can have more parts. For example, a replay of Topos logs
-names a decision `topos/confirm/always_allow`: the mode of Topos and the
-type of rule that decided. The ledger reports under the full name, for
+name. A name can have more parts. For example, Topos v0.68.0 and a
+replay of Topos logs name a decision `topos/confirm/always_allow`: the
+mode of Topos and the type of rule that decided. The ledger reports under the full name, for
 each person and each period of time. A report for `topos/confirm` does
 not include the decisions of `topos/confirm/always_allow`.
 

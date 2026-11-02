@@ -15,14 +15,17 @@ states. Limen also records each decision and each answer. From these
 records, Limen calculates the error rate of each source of decisions: your
 rules, a language model that examines actions, and Limen itself.
 
-> **Status: in production.** Limen v0.3.0 decides live actions for
-> persons. Hosted [Topos](https://github.com/latere-ai/topos) v0.66.0 and
-> later sends each tool call of a hosted session to Limen. The suggested
+> **Status: in production.** Limen v0.5.1 decides live actions for
+> persons. Hosted [Topos](https://github.com/latere-ai/topos) v0.68.0
+> sends each tool call of a hosted session to Limen. The suggested
 > verdict of Limen decides a call only if Limen has evidence about the
 > person. For the other calls, the rules of Topos decide, and Limen learns
-> from the answers. [Integration](docs/integrating.md#topos) gives the
-> details. For your own decision point, start with a
-> [replay](#replay-recorded-decisions) of recorded decisions.
+> from the answers. If an organization owns the agent of a session, the
+> cost profile of that organization applies to the calls of the session.
+>
+> [Integration](docs/integrating.md#topos) gives the details. For your own
+> decision point, start with a [replay](#replay-recorded-decisions) of
+> recorded decisions.
 >
 > These parts are ready:
 >
@@ -38,14 +41,15 @@ rules, a language model that examines actions, and Limen itself.
 >   can also supply the API under a second prefix, for a public route
 >   (`LIMEN_BASE_PATH`).
 > - Explanations for the person: why Limen suggests a verdict for one
->   action, what the model learned about the person, and a preview of a
->   different cost profile. The parts of each explanation are exact for
->   the model. Each prediction tells if an `ask` comes from few answers,
->   or from answers that leave the approval probability in the ask range.
-> - Cost profiles for an organization: a cost profile for each kind of
->   action or agent that you can remove again, and a cost profile of a
->   person that only makes the cost profile of the organization stricter
->   for that person.
+>   action, and what the model learned about the person. A preview shows
+>   what a different cost profile would do. The parts of each explanation
+>   are exact for the model. Each prediction tells if an `ask` comes from
+>   few answers, or from answers that leave the approval probability in
+>   the ask range.
+> - Cost profiles for an organization: one for the organization, and one
+>   for each kind of action or agent. You can remove a cost profile again.
+>   A person can save a cost profile that only makes the cost profile of
+>   the organization stricter for that person.
 > - The report of an organization: the counts and the error rates of its
 >   agents by week, for all its persons together. A number shows only if
 >   it comes from 5 or more persons, and a week that a report showed does
@@ -55,10 +59,18 @@ rules, a language model that examines actions, and Limen itself.
 > - A stub service for tests, and the conformance tests that each
 >   implementation must pass.
 >
-> These parts are not ready: a store that more than one server can share,
-> and hooks for Claude Code and Codex. Until there is a shared store, one
-> `limend` process serves each ledger. The [specs](specs/README.md)
-> describe these parts.
+> We plan to add these parts after Limen is open source:
+>
+> - Hooks for Claude Code and Codex.
+> - A store that more than one server can share, on
+>   [Arca](https://github.com/latere-ai/arca).
+> - Two model versions side by side. Then you can compare a new model with
+>   the current model before you change to the new model.
+> - A table of cases for `verdict.Decide`, for a decision point in a
+>   different language.
+>
+> Until there is a shared store, one `limend` process serves each ledger.
+> The [specs](specs/README.md) describe these parts.
 
 ## The problem
 

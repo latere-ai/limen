@@ -11,6 +11,22 @@ the commit log.
 
 ## Unreleased
 
+### Changed
+
+- The integration page tells how hosted Topos v0.68.0 sets the
+  organization of a call with `TOPOS_DECISIONS_ORG`. With `agent`, a call
+  of an agent that an organization owns goes to Limen with the ID of that
+  organization. Then the cost profiles of that organization apply. Each
+  `agent.tool_use` event records the organization as `decision_org`.
+- The integration page gives the source of a decision of Topos v0.68.0
+  and later: `topos/<mode>/<rule>`, also for a live decision.
+- `SECURITY.md` names the supported versions: v0.5 and v0.4.
+- The README tells which parts come after Limen is open source:
+  - The hooks for Claude Code and Codex.
+  - A store that more than one server can share.
+  - Two model versions side by side.
+  - A table of cases for `verdict.Decide`.
+
 ## v0.5.1 - 2026-11-02
 
 ### Fixed
@@ -105,16 +121,16 @@ the commit log.
 - `limen replay topos` reads logs up to Topos v0.66.0. A decision from a
   log of Topos v0.65.0 or later has the source `topos/<mode>/<rule>`, for
   example `topos/confirm/always_allow`. `<rule>` is the type of rule that
-  decided the call. Thus the ledger gives the error rate of each type of
-  rule. A decision from an earlier log keeps the source `topos/<mode>`.
+  decided the call. Because of this, the ledger gives the error rate of
+  each type of rule. A decision from an earlier log keeps the source `topos/<mode>`.
 - `limen replay topos` reads an answer to a network approval as an answer
   to the call that made the connection, as Topos v0.66.0 sends it. A
   record has one answer. For a call that a person saw, it is the first
   answer, which is the review. For a call that ran without a person, it is
   the last answer, which the model learns.
 - A call in `limen replay topos` has the attribute `attended`, as Topos
-  v0.56.0 and later send it with each call. Thus a replay calculates the
-  same features as the live session.
+  v0.56.0 and later send it with each call. Because of this, a replay
+  calculates the same features as the live session.
 
 ### Fixed
 

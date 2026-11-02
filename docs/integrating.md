@@ -387,13 +387,14 @@ value of `of` is one of these sources:
 
 `GET /v1/reports?org=...&from=...&to=...` gives the counts and the error
 rates of the actions of an organization, for all its persons together, by
-week. In Go, it is the `Reporter` interface of each `limen.Service`. A
-week shows its numbers only after it closed, and only if 5 or more persons
-took part. A number that comes from reviews shows only if the reviews
-come from 5 or more persons and no person gave more than one half of them.
-A week that a report showed never changes. The
+week. In Go, it is the `Reporter` interface of each `limen.Service`. The
 [API](api.md#reports-of-an-organization) describes the fields and the
 rules.
+
+A week shows its numbers only after it closed, and only if 5 or more
+persons took part. A number that comes from reviews has a second rule. It
+shows only if 5 or more persons gave the reviews, and no person gave more
+than one half of them. A week that a report showed never changes.
 
 A decision point does not read the report. Give `report.read` only to the
 persons who manage the organization.
@@ -401,9 +402,12 @@ persons who manage the organization.
 ## Explanations for the person
 
 Three routes show a person what Limen learned from their answers:
-`GET /v1/explanations` for one action, `GET /v1/learned` for each type of
-action, and `POST /v1/previews` for a different cost profile. In Go, they
-are the `Explainer` interface of each `limen.Service`. The
+
+- `GET /v1/explanations`, for one action.
+- `GET /v1/learned`, for each type of action.
+- `POST /v1/previews`, for a different cost profile.
+
+In Go, they are the `Explainer` interface of each `limen.Service`. The
 [API](api.md#explanations) describes the fields.
 
 > **Warning:** Show an explanation only to the person. Never put an
@@ -478,8 +482,14 @@ that uses Limen. Topos can use any decision service that has this API.
 
 The rules of Topos give the ceiling, and `verdict.Decide` combines the
 verdicts. Topos records each decision with the tool call of the session.
-The source of a decision is `topos/confirm` or `topos/progressive`. Topos
-sends the confirmations of the person as answers.
+Topos sends the confirmations of the person as answers.
+
+From Topos v0.68.0, the source of a decision is `topos/<mode>/<rule>`.
+`<mode>` is `confirm` or `progressive`. `<rule>` tells what decided the
+call. For example, `always_allow` is a pattern of the permitted list,
+`score` is the risk score, and `learned` is the suggested verdict of
+Limen. A decision without a `<rule>` has the source `topos/<mode>`.
+Before v0.68.0, the source was `topos/confirm` or `topos/progressive`.
 
 #### Topos on your computer
 
@@ -543,6 +553,31 @@ From v0.66.0, Topos also sends the answer of a person to a network
 approval. The answer goes to Limen as an answer to the call whose
 connection Topos refused.
 
+`TOPOS_DECISIONS_ORG` sets the organization of each call in Limen. Topos
+v0.68.0 added this variable.
+
+| `TOPOS_DECISIONS_ORG` | The `org` of a call |
+|---|---|
+| `initiator` (the default) | The context of the person who started the session. |
+| `agent` | The ID of the organization that owns the agent of the session. If no organization owns the agent, the context of the person who started the session. |
+
+The organization of a call sets which cost profiles apply to the call,
+and which report of an organization counts it. The person of a call is
+always the person who started the session. Each `agent.tool_use` event
+of Topos records the organization of its call as `decision_org`. To read
+the records of a call in Limen, for example its explanation, use
+`decision_org` as `org`. An event without `decision_org` is in the
+context of the person, or Topos did not send its call to Limen.
+
+The answers of a person in an organization and in the context of the
+person are separate. An answer in one does not change a suggestion in
+the other. Set `agent` only after your authorization endpoint lets Topos
+send the calls of an organization, and your clients read `decision_org`.
+
+> **Warning:** If you change `TOPOS_DECISIONS_ORG` while a call waits for
+> a person, Limen does not get the answer to that call. Use the same value
+> in each `toposd` process.
+
 The Topos
 [configuration](https://github.com/latere-ai/topos/blob/main/docs/configuration.md)
 page gives the token settings, `TOPOS_DECISIONS_TOKEN` or
@@ -574,10 +609,9 @@ Each tool call that has a verdict becomes one record:
   which Topos also sends with each call. The attribute is `false` if a
   trigger, not a person, started the turn of the call.
 - The verdict is the recorded verdict of Topos, with the source
-  `topos/<mode>/<rule>`. `<rule>` is the type of rule that decided the
-  call, for example `always_allow` for a pattern of the permitted list, or
-  `score` for the risk score. Topos v0.65.0 and later record the type of
-  rule. For a log from an earlier version, the source is `topos/<mode>`.
+  `topos/<mode>/<rule>` ([Topos](#topos)). Topos v0.65.0 and later record
+  `<rule>` in the log. For a log from an earlier version, the source is
+  `topos/<mode>`.
 - The review probability is the recorded probability. A log from before
   Topos v0.11.0 has no probability. Then the probability is 1 for an `ask`
   or a `flag`, and 0 for an `allow` or a `block`.
@@ -588,9 +622,9 @@ Each tool call that has a verdict becomes one record:
   the review. For a call that ran without the person, it is the last
   answer, which the model learns.
 
-Thus, after `limen replay topos --keep`, the ledger gives the error rate
-of each type of rule. Topos itself records a live decision with the
-source `topos/<mode>`.
+Because of this, after `limen replay topos --keep`, the ledger gives the
+error rate of each type of rule. From v0.68.0, Topos sends each live
+decision with the same source. Before v0.68.0, it sent `topos/<mode>`.
 
 A replay does not include these calls. The report gives the number of
 each:
@@ -607,18 +641,21 @@ A command can connect to a host outside the network of the session. Then
 Topos asks you for a network approval. From Topos v0.66.0, Topos sends
 your answer to the approval to Limen as an answer to the call that made
 the connection. A replay reads these answers in the same way. A message
-in place of an answer is not an answer. Topos can send more than one
-answer for a call, and the model learns the last answer. A replay keeps
-one answer for each call. Because of this, for a call that you saw, the
-model of a replay can learn a different answer than the model of Topos.
+in place of an answer is not an answer.
+
+Topos can send more than one answer for a call, and the model learns the
+last answer. A replay keeps one answer for each call. Because of this,
+for a call that you saw, the model of a replay can learn a different
+answer than the model of Topos.
+
 A replay reads only a data directory on your computer. It does not read
 the sessions of hosted Topos.
 
 ### Claude Code and Codex
 
-The hooks for Claude Code and Codex do not exist yet.
-[Spec 005](../specs/005-adapters.md) describes them. These notes give
-what a hook must do.
+The hooks for Claude Code and Codex do not exist yet. We plan to add
+them after Limen is open source. [Spec 005](../specs/005-adapters.md)
+describes them. These notes give what a hook must do.
 
 **Claude Code** calls the server from a command hook. A `PreToolUse` hook
 returns allow, ask, or deny. Apply the verdicts as follows:
