@@ -212,8 +212,11 @@ each dimension, as with the classes of `features/1`.
 | other class `infra` | `unknown` | `remote` `unknown` |
 | a segment that no table names | `unknown` | each boundary `unknown` |
 
-The outside-workspace rule of `features/1` sets `crosses.machine` to
-`yes`. If no segment sets it and no segment is unknown, it is `no`.
+A boundary that a named row of the table leaves blank is `no` for that
+segment. Only the last row, a segment that no table names, makes each
+boundary `unknown`. The outside-workspace rule of `features/1` sets
+`crosses.machine` to `yes`. If no segment sets it and no segment is
+unknown, it is `no`.
 
 `crosses.public` of a `git push` is `yes` if `environment.repositories`
 is `public`, `no` if it is `private`, and `unknown` in other cases.
@@ -486,7 +489,13 @@ and weight 1 if none applies:
 | the fatigue count | 50 | `LIMEN_ANSWER_FATIGUE` |
 
 The 50 comes from the 17% and 5% measurement above, which compared the
-start of a session with 50 or more prompts. An answer with no new
+start of a session with 50 or more prompts.
+
+The fatigue rule has a cost. After 50 answered prompts in one session,
+the approvals of that session stop building the cover. The sessions
+that ask most then earn an `allow` most slowly. The cover needs
+approvals from only `min_sessions` different sessions, so the early
+answers of other sessions can still build it. An answer with no new
 fields has the time that Limen measured, no `details_opened`, and a
 position. So a quick approval from before this spec has weight 0,
 and a slower one has weight 1.
@@ -502,6 +511,10 @@ open the cover. The cap then holds the suggestion at `ask`.
 
 In model version 2, the weight also applies to the likelihood. That is
 the section [features/2 and learned/2](#features2-and-learned2).
+
+The answer to an audit gets the weight that the policy gives it, as any
+answer does. In each estimate, the same answer counts with its full
+weight `1/p`, and the policy weight does not apply there.
 
 #### The estimates do not use the weight
 
@@ -790,7 +803,7 @@ These terms go into `docs/terms.md` with the build of each part:
 | [[004-engine]] | the scope on each case, `features/2`, `learned/2`, the likelihood with weights, and the decision between a refit and criterion 10 |
 | [[006-conformance]] | `PredictionFollowsTheProfile` compares the verdict with the thresholds after the cap. New cases test the cap, the weights and the calibration report |
 | [[008-ledger-and-estimation]] | the `considered` count of the certificate, and the rule that no estimate reads the weight |
-| [[009-explanations]] | `cover` and `calibration` on an explanation, the cap in `learned` and in previews, and the reasons of an `ask`. If the owner decides it, also `split` and `short` |
+| [[009-explanations]] | `cover` and `calibration` on an explanation, and the reasons of an `ask`. The cap applies to the verdict that an explanation calculates again, to `learned`, and to previews. If the owner decides it, also `split` and `short` |
 | [[010-organizations]] | the `consent` of a profile and its meet |
 
 The cover rule is shared arithmetic, like the estimates. `estimate/`
