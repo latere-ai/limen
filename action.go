@@ -110,7 +110,9 @@ type Actor struct {
 	// Kind is "agent", "service" or "person".
 	Kind string `json:"kind"`
 	ID   string `json:"id,omitempty"`
-	// Session is the run the action belongs to, when there is one.
+	// Session is the run the action belongs to, when there is one, such
+	// as an agent's session. The answer minimum counts the sessions of a
+	// person's approvals by it ([SessionOf]).
 	Session string `json:"session,omitempty"`
 }
 

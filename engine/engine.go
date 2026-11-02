@@ -79,6 +79,13 @@ type Options struct {
 	// CacheBytes bounds the fitted models held in memory; zero is 1 GiB. An
 	// evicted model is loaded from the store on its next prediction.
 	CacheBytes int64
+	// MinAllows and MinSessions are the answer minimum of the contract: an
+	// allow the thresholds give stays an ask until the person has approved
+	// actions with the same label MinAllows times, in MinSessions sessions.
+	// Zero is the contract's value, [limen.MinAllows] and
+	// [limen.MinSessions]; a negative value is no minimum for that count.
+	MinAllows   int
+	MinSessions int
 }
 
 type subjectKey struct{ org, subject string }
@@ -91,6 +98,9 @@ type Engine struct {
 	opts    gp.Options
 	inline  int
 	debounc time.Duration
+	// minAllows and minSessions are the answer minimum the engine applies,
+	// zero for no minimum.
+	minAllows, minSessions int
 
 	locksMu sync.Mutex
 	locks   map[subjectKey]*sync.Mutex
@@ -136,6 +146,9 @@ func build(o Options) *Engine {
 		reports: map[string]*sync.Mutex{},
 		models:  newCache(cmp.Or(o.CacheBytes, 1<<30)),
 		stop:    make(chan struct{}),
+
+		minAllows:   minimumOf(o.MinAllows, limen.MinAllows),
+		minSessions: minimumOf(o.MinSessions, limen.MinSessions),
 	}
 	if e.st == nil {
 		e.st = store.NewMemory()
@@ -241,6 +254,18 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 	post := m.post.Load()
 	pr := post.Predict(kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
 	v := prof.Thresholds.Verdict(pr.Approve)
+	why := reason(pr.Approve, prof.Thresholds, post.Len())
+	var held limen.Minimum
+	if e.holds(v) {
+		// The allow is held to the answer minimum. A failure to count the
+		// approvals holds it with none counted, so a store that fails here
+		// never lets an action run on its own.
+		cases, cerr := e.st.Cases(ctx, a.Org, a.Subject)
+		v, held = limen.Hold(v, e.tally(cases, label(c)))
+		if held.Held() {
+			why = heldReason(pr.Approve, prof.Thresholds, held, cerr == nil)
+		}
+	}
 	er := evidenceRatio(pr.Var, post.Kernel().Var())
 	p := limen.Prediction{
 		Key:           a.Key,
@@ -253,7 +278,8 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		Profile:       prof.Scope,
 		AuditRate:     prof.AuditRate,
 		Source:        Source,
-		Reason:        reason(pr.Approve, prof.Thresholds, post.Len()),
+		Reason:        why,
+		Minimum:       held,
 	}
 	c.Prediction = &p
 	by := post.answers
@@ -280,6 +306,40 @@ func reason(approve float64, t limen.Thresholds, answers int) string {
 		return fmt.Sprintf("The approval probability is %.*f, between the block threshold (%.*f) and the allow threshold (%.*f). Limen suggests ask.",
 			d, approve, d, t.BlockBelow, d, t.AllowAbove)
 	}
+}
+
+// heldReason is the reason of an allow the answer minimum turned into an
+// ask: the approvals counted and the minimum they miss, or, when counted
+// is false, that the approvals could not be counted.
+func heldReason(approve float64, t limen.Thresholds, m limen.Minimum, counted bool) string {
+	d := digits(approve, t.AllowAbove, t.BlockBelow)
+	s := fmt.Sprintf("The approval probability is %.*f, above the allow threshold (%.*f). ", d, approve, d, t.AllowAbove)
+	switch {
+	case !counted:
+		return s + "Limen could not count the approvals of this person for this label. Limen suggests ask."
+	case m.Allows == 0:
+		s += "The person has not approved an action with this label. "
+	default:
+		s += fmt.Sprintf("The person approved actions with this label %s, in %s. ", plural(m.Allows, "time"), plural(m.Sessions, "session"))
+	}
+	var need string
+	switch {
+	case m.MinSessions == 0:
+		need = plural(m.MinAllows, "approval") + " or more"
+	case m.MinAllows == 0:
+		need = "approvals in " + plural(m.MinSessions, "session") + " or more"
+	default:
+		need = plural(m.MinAllows, "approval") + " or more, in " + plural(m.MinSessions, "session") + " or more,"
+	}
+	return s + "Limen needs " + need + " before it suggests allow. Limen suggests ask."
+}
+
+// plural is n and the word, with an s for any n but one.
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return strconv.Itoa(n) + " " + word + "s"
 }
 
 // digits is the number of decimals, two or more, at which p and every
@@ -621,8 +681,10 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 			}
 		}
 	}
-	// Inline, so the scratch engine runs no fitter and needs no Close.
-	scratch := build(Options{Store: mem, Inline: 8, MaxLabels: e.opts.MaxLabels})
+	// Inline, so the scratch engine runs no fitter and needs no Close. It
+	// holds allows to this engine's answer minimum.
+	scratch := build(Options{Store: mem, Inline: 8, MaxLabels: e.opts.MaxLabels,
+		MinAllows: optionOf(e.minAllows), MinSessions: optionOf(e.minSessions)})
 
 	report := limen.ReplayReport{Records: len(recs), Would: map[limen.Verdict]int{}, Kept: o.Keep}
 	var rows []estimate.Row

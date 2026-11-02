@@ -40,3 +40,34 @@ func TestDigitsAtMost(t *testing.T) {
 		t.Errorf("digits = %d, want 6", d)
 	}
 }
+
+// The reason of an allow the answer minimum held names the approvals and
+// the sessions counted and the minimum they miss, in the words of
+// docs/terms.md, for each part of the minimum an operator can turn off.
+func TestHeldReason(t *testing.T) {
+	th := limen.Thresholds{AllowAbove: 0.65, BlockBelow: 0.35}
+	const head = "The approval probability is 0.73, above the allow threshold (0.65). "
+	cases := []struct {
+		m       limen.Minimum
+		counted bool
+		want    string
+	}{
+		{limen.Minimum{Allows: 1, Sessions: 1, MinAllows: 3, MinSessions: 2}, true,
+			"The person approved actions with this label 1 time, in 1 session. Limen needs 3 approvals or more, in 2 sessions or more, before it suggests allow. Limen suggests ask."},
+		{limen.Minimum{Allows: 4, Sessions: 1, MinAllows: 3, MinSessions: 2}, true,
+			"The person approved actions with this label 4 times, in 1 session. Limen needs 3 approvals or more, in 2 sessions or more, before it suggests allow. Limen suggests ask."},
+		{limen.Minimum{MinAllows: 1, MinSessions: 2}, true,
+			"The person has not approved an action with this label. Limen needs 1 approval or more, in 2 sessions or more, before it suggests allow. Limen suggests ask."},
+		{limen.Minimum{Allows: 2, Sessions: 2, MinAllows: 3}, true,
+			"The person approved actions with this label 2 times, in 2 sessions. Limen needs 3 approvals or more before it suggests allow. Limen suggests ask."},
+		{limen.Minimum{Allows: 5, Sessions: 1, MinSessions: 2}, true,
+			"The person approved actions with this label 5 times, in 1 session. Limen needs approvals in 2 sessions or more before it suggests allow. Limen suggests ask."},
+		{limen.Minimum{MinAllows: 3, MinSessions: 2}, false,
+			"Limen could not count the approvals of this person for this label. Limen suggests ask."},
+	}
+	for _, c := range cases {
+		if got := heldReason(0.729, th, c.m, c.counted); got != head+c.want {
+			t.Errorf("heldReason(%+v, %v):\n got %q\nwant %q", c.m, c.counted, got, head+c.want)
+		}
+	}
+}

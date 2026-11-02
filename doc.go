@@ -12,7 +12,9 @@
 //
 //   - The [Predictor] predicts, for the person on whose behalf the action
 //     runs, the probability that they would approve it, and suggests a
-//     verdict from the costs their organization states ([Prediction]).
+//     verdict from the costs their organization states ([Prediction]),
+//     never an allow before the person's approvals meet the answer
+//     minimum ([MinAllows], [MinSessions]).
 //   - The decision point decides. It composes the suggestion with the
 //     ceiling its deterministic rules leave open and with random review
 //     sampling (latere.ai/x/pkg/verdict.Decide), applies the verdict, and
@@ -52,7 +54,8 @@
 // interfaces, the error codes, and the pure functions that define the
 // contract's arithmetic: the thresholds a cost profile implies
 // ([Costs.Thresholds]), the verdict an approval probability implies
-// ([Thresholds.Verdict]), the number of clean reviews a certificate needs
+// ([Thresholds.Verdict]), the answer minimum that holds an allow
+// ([Hold]), the number of clean reviews a certificate needs
 // ([CertificationSize]), the meet of two cost profiles ([Stricter]), and
 // the fail-closed wrapper every decision point
 // should put around a predictor ([FailClosed]). It imports the standard

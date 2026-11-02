@@ -6,6 +6,7 @@ package stub_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"strings"
 	"sync"
@@ -163,6 +164,8 @@ func seq(rs ...limen.ReplayRecord) iter.Seq2[limen.ReplayRecord, error] {
 	}
 }
 
+// A replay's report follows the steered predictions, here with no answer
+// minimum so that one record is an allow.
 func TestReplay(t *testing.T) {
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	yes, no := true, false
@@ -171,7 +174,7 @@ func TestReplay(t *testing.T) {
 			return 0.99, 0
 		}
 		return 0.01, 0
-	}})
+	}, MinAllows: -1, MinSessions: -1})
 	if _, err := s.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}, AuditRate: 0.05}); err != nil {
 		t.Fatal(err)
 	}
@@ -281,5 +284,44 @@ func TestReportKeepsItsCopy(t *testing.T) {
 	again, err := s.Report(ctx, q)
 	if err != nil || again.Weeks[0].Total.Subjects != 5 {
 		t.Errorf("a write to a returned week reached the stub: %+v, %v", again.Weeks[0].Total, err)
+	}
+}
+
+// A replay into a scratch stub holds its would-be allows to this stub's
+// answer minimum: a history of approvals in one session allows nothing,
+// over two sessions it allows, and with the minimum off it allows at once.
+func TestReplayIsHeld(t *testing.T) {
+	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	history := func(sessions int) []limen.ReplayRecord {
+		var rs []limen.ReplayRecord
+		for i := range 4 {
+			a := act(fmt.Sprintf("r%d", i))
+			a.Actor = &limen.Actor{Kind: "agent", Session: fmt.Sprintf("ses-%d", i%sessions)}
+			rs = append(rs, limen.ReplayRecord{At: at.Add(time.Duration(i) * time.Minute), Action: a, Verdict: limen.Ask, ReviewProbability: 1, Source: "r", Approve: new(true)})
+		}
+		return rs
+	}
+	allow := func(limen.Action) (float64, float64) { return 0.99, 0 }
+	for _, c := range []struct {
+		o        stub.Options
+		sessions int
+		want     int
+	}{
+		{stub.Options{Predict: allow}, 1, 0},
+		{stub.Options{Predict: allow}, 2, 1},
+		{stub.Options{Predict: allow, MinAllows: -1, MinSessions: -1}, 1, 4},
+		{stub.Options{Predict: allow, MinAllows: 1, MinSessions: 1}, 1, 3},
+	} {
+		rep, err := stub.New(c.o).Replay(ctx, seq(history(c.sessions)...), limen.ReplayOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.Would[limen.Allow] != c.want {
+			t.Errorf("%d sessions, minimum %d and %d: %d allows, want %d", c.sessions, c.o.MinAllows, c.o.MinSessions, rep.Would[limen.Allow], c.want)
+		}
+	}
+	p, err := stub.New(stub.Options{Predict: allow}).Predict(ctx, act("p"))
+	if err != nil || p.Verdict != limen.Ask || !strings.Contains(p.Reason, "held by the answer minimum: 0 of 3 approvals, 0 of 2 sessions") {
+		t.Errorf("a held prediction: %+v, %v", p, err)
 	}
 }

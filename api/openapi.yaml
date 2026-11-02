@@ -794,6 +794,7 @@ components:
           type: string
         session:
           type: string
+          description: The run the action belongs to, for example an agent's session. The answer minimum counts the sessions of a person's approvals by it; an action without it counts as a session of its own. Limen never reads a session out of action_id.
       required: [kind]
     Target:
       type: object
@@ -853,6 +854,7 @@ components:
           type: string
         verdict:
           $ref: "#/components/schemas/Suggestion"
+          description: The verdict the thresholds give approve, except that an allow whose label misses the answer minimum is an ask, with minimum set.
         approve:
           $ref: "#/components/schemas/Probability"
           description: The probability that the subject approves the action.
@@ -867,7 +869,7 @@ components:
           description: The share of the prior variance at the action that the subject's answers removed.
         ask_kind:
           $ref: "#/components/schemas/AskKind"
-          description: Present when verdict is ask. unsure means evidence_ratio is below 0.5, so the ask rests on little evidence and more answers can move it. split means evidence_ratio is 0.5 or more and approve is still inside the ask band, on answers that disagree or that agree but not yet past the thresholds; more answers that agree can still move it out.
+          description: Present when verdict is ask. unsure means evidence_ratio is below 0.5, so the ask rests on little evidence and more answers can move it. split means evidence_ratio is 0.5 or more and approve is still inside the ask band, on answers that disagree or that agree but not yet past the thresholds; more answers that agree can still move it out. An ask the answer minimum made from an allow takes its kind from evidence_ratio the same way.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
         profile:
@@ -881,8 +883,31 @@ components:
           - learned/1
         reason:
           type: string
-          description: One sentence for the person who reads the record. Never shown to an agent.
+          description: One sentence for the person who reads the record. Never shown to an agent. For an ask the answer minimum made from an allow, it gives the approvals and the sessions counted and the minimum they miss.
+        minimum:
+          $ref: "#/components/schemas/Minimum"
       required: [org, subject, action_id, verdict, approve, uncertainty, evidence_ratio, thresholds, profile, audit_rate, source, reason]
+    Minimum:
+      type: object
+      description: Present only when the answer minimum turned the allow the thresholds give into an ask. Limen suggests allow for an action only after the person has approved actions with the same label min_allows times or more, in min_sessions sessions or more; by default 3 approvals in 2 sessions. An action counts when its latest answer approves. An interim rule, until a consent design replaces it.
+      properties:
+        allows:
+          type: integer
+          minimum: 0
+          description: The person's actions with the label whose latest answer approves.
+        sessions:
+          type: integer
+          minimum: 0
+          description: The distinct sessions of those actions, by actor.session; an action without one is a session of its own.
+        min_allows:
+          type: integer
+          minimum: 0
+          description: The approvals the server needs, 3 unless its operator set another number. 0 is no minimum.
+        min_sessions:
+          type: integer
+          minimum: 0
+          description: The sessions the server needs, 2 unless its operator set another number. 0 is no minimum.
+      required: [allows, sessions, min_allows, min_sessions]
     Thresholds:
       type: object
       description: Above allow_above is an allow, below block_below a block, and everything between, both ends included, an ask.
@@ -1232,8 +1257,14 @@ components:
           minimum: 0
         verdict:
           $ref: "#/components/schemas/Suggestion"
+          description: The verdict the thresholds give approve, held to the answer minimum by the person's approvals now.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
+        minimum:
+          $ref: "#/components/schemas/Minimum"
+        reason:
+          type: string
+          description: One sentence for the person, saying why verdict is what it is, as a prediction's reason does. An older server does not send it.
         mean:
           type: number
           description: The model's latent mean at the action; approve is its probit after the uncertainty.
@@ -1275,6 +1306,7 @@ components:
           minimum: 0
         verdict:
           $ref: "#/components/schemas/Suggestion"
+          description: The verdict the thresholds give approve, held to the answer minimum.
         evidence_ratio:
           type: number
           minimum: 0
@@ -1283,6 +1315,8 @@ components:
           $ref: "#/components/schemas/AskKind"
         thresholds:
           $ref: "#/components/schemas/Thresholds"
+        minimum:
+          $ref: "#/components/schemas/Minimum"
       required: [label, kind, name, approved, denied, approve, uncertainty, verdict, evidence_ratio, thresholds]
     TrendPoint:
       type: object

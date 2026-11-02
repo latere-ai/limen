@@ -36,8 +36,8 @@ func taught(t *testing.T, n int) *engine.Engine {
 	e := engine.New(engine.Options{Inline: 1, Clock: c.Now})
 	t.Cleanup(func() { e.Close() })
 	for i := range n {
-		answer(t, e, bash("s", fmt.Sprintf("t-%d", i), "go test ./..."), true)
-		answer(t, e, bash("s", fmt.Sprintf("r-%d", i), "rm -rf build"), false)
+		answer(t, e, across(bash("s", fmt.Sprintf("t-%d", i), "go test ./..."), i), true)
+		answer(t, e, across(bash("s", fmt.Sprintf("r-%d", i), "rm -rf build"), i), false)
 	}
 	return e
 }
@@ -181,13 +181,13 @@ func TestSplitOnAnswersThatAgree(t *testing.T) {
 	if err != nil || math.Abs(th.AllowAbove-0.9) > 1e-12 || math.Abs(th.BlockBelow-0.25) > 1e-12 {
 		t.Fatalf("Careful's thresholds: %+v, %v", th, err)
 	}
-	publish := func(id string) limen.Action {
-		return limen.Action{Org: "o", Subject: "s", ActionID: id, Actor: &limen.Actor{Kind: "agent", ID: "agt", Session: "ses"},
-			Kind: "tool", Name: "publish", Effect: limen.EffectExternal}
+	publish := func(id string, i int) limen.Action {
+		return across(limen.Action{Org: "o", Subject: "s", ActionID: id, Actor: &limen.Actor{Kind: "agent", ID: "agt"},
+			Kind: "tool", Name: "publish", Effect: limen.EffectExternal}, i)
 	}
-	answer(t, e, publish("a-0"), true)
-	answer(t, e, publish("a-1"), true)
-	probe := publish("probe")
+	answer(t, e, publish("a-0", 0), true)
+	answer(t, e, publish("a-1", 1), true)
+	probe := publish("probe", 0)
 	p, err := e.Predict(ctx, probe)
 	if err != nil {
 		t.Fatal(err)
@@ -222,8 +222,8 @@ func TestSplitOnAnswersThatAgree(t *testing.T) {
 		if p.AskKind != limen.AskSplit {
 			t.Fatalf("after %d approvals: %+v", i, p)
 		}
-		answer(t, e, publish(fmt.Sprintf("a-%d", i)), true)
-		if p, err = e.Predict(ctx, publish(fmt.Sprintf("probe-%d", i))); err != nil {
+		answer(t, e, publish(fmt.Sprintf("a-%d", i), i), true)
+		if p, err = e.Predict(ctx, publish(fmt.Sprintf("probe-%d", i), i)); err != nil {
 			t.Fatal(err)
 		}
 	}

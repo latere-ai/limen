@@ -14,8 +14,10 @@ const SourceUnavailable = "learned/unavailable"
 type Prediction struct {
 	Key
 	// Verdict is the suggestion, [Allow], [Ask] or [Block]:
-	// Thresholds.Verdict(Approve). The decision point composes it with its
-	// ceiling and review sampling before applying anything.
+	// Thresholds.Verdict(Approve), except that an allow whose label misses
+	// the answer minimum ([MinAllows], [MinSessions]) is an ask, with
+	// Minimum set. The decision point composes it with its ceiling and
+	// review sampling before applying anything.
 	Verdict Verdict `json:"verdict"`
 	// Approve is the posterior predictive probability that the subject
 	// approves the action, given every answer Limen has from them.
@@ -35,7 +37,9 @@ type Prediction struct {
 	// answers that agree can still move a split ask out of the band. A
 	// decision point can let the rules decide an unsure ask and keep a
 	// split one, which rests on the person's own answers and not on too
-	// few of them (spec 009). Empty for an allow or a block.
+	// few of them (spec 009). An ask the answer minimum made from an allow
+	// takes its kind from EvidenceRatio the same way. Empty for an allow or
+	// a block.
 	AskKind string `json:"ask_kind,omitempty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a
@@ -52,6 +56,11 @@ type Prediction struct {
 	// Reason is one sentence for the person who reads the record, saying
 	// why the suggestion is what it is. It is never shown to an agent.
 	Reason string `json:"reason"`
+	// Minimum is set when the answer minimum turned the allow the
+	// thresholds give into this ask: the person's approvals of actions
+	// with the label, or the sessions they came from, are too few. It is
+	// the zero value otherwise.
+	Minimum Minimum `json:"minimum,omitzero"`
 }
 
 // Thresholds place an approval probability on the verdict scale: above

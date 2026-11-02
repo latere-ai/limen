@@ -10,9 +10,9 @@
 // learning: idempotent predictions keyed by the action's key, one decision
 // per action, answers whose role follows from the decision, profiles with
 // their precedence, the built-in default and a person's own profile met
-// with the organization's, reliability reports and the reports of
-// organizations computed with latere.ai/x/limen/estimate, kept weeks,
-// replays and forgetting. Its predictions
+// with the organization's, the answer minimum, reliability reports and the
+// reports of organizations computed with latere.ai/x/limen/estimate, kept
+// weeks, replays and forgetting. Its predictions
 // come from [Options.Predict], which by default knows nothing, so every
 // action is an ask. It passes latere.ai/x/limen/conformance.
 package stub
@@ -47,6 +47,11 @@ type Options struct {
 	Predict func(limen.Action) (approve, uncertainty float64)
 	// Clock stamps every record. Nil is time.Now.
 	Clock func() time.Time
+	// MinAllows and MinSessions are the answer minimum, as the engine's
+	// options of the same names: zero is [limen.MinAllows] and
+	// [limen.MinSessions], and a negative value no minimum for that count.
+	MinAllows   int
+	MinSessions int
 }
 
 // Service is the in-memory service. The zero value is not usable; call
@@ -54,6 +59,8 @@ type Options struct {
 type Service struct {
 	predict func(limen.Action) (float64, float64)
 	clock   func() time.Time
+	// minAllows and minSessions are the answer minimum, zero for none.
+	minAllows, minSessions int
 
 	mu       sync.Mutex
 	seq      int
@@ -94,6 +101,9 @@ func New(o Options) *Service {
 		cases:    map[limen.Key]*entry{},
 		profiles: map[limen.Scope]limen.Profile{},
 		weeks:    map[weekKey][]byte{},
+
+		minAllows:   minimumOf(o.MinAllows, limen.MinAllows),
+		minSessions: minimumOf(o.MinSessions, limen.MinSessions),
 	}
 	if s.predict == nil {
 		s.predict = func(limen.Action) (float64, float64) { return 0.5, 1 }
@@ -153,14 +163,14 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 	}
 	p := s.effectiveLocked(limen.ScopeOf(a), a.Subject)
 	approve, uncertainty := s.predict(a)
-	v := p.Thresholds.Verdict(approve)
+	v, held := s.holdLocked(p.Thresholds.Verdict(approve), a.Org, a.Subject, e.label)
 	pr := limen.Prediction{
 		Key: a.Key, Verdict: v, Approve: approve, Uncertainty: uncertainty,
 		// The stub's predictor knows no answers' variance: every ask is
 		// unsure, as its explanations say.
 		AskKind:    kindOf(v),
 		Thresholds: p.Thresholds, Profile: p.Scope, AuditRate: p.AuditRate, Source: Source,
-		Reason: fmt.Sprintf("approval %.2f against the ask band %.2f to %.2f", approve, p.Thresholds.BlockBelow, p.Thresholds.AllowAbove),
+		Reason: reasonOf(approve, p.Thresholds, held), Minimum: held,
 	}
 	e.prediction = &pr
 	n := s.answersLocked(a.Org, a.Subject)
@@ -459,7 +469,7 @@ func (s *Service) Replay(ctx context.Context, records iter.Seq2[limen.ReplayReco
 	target := s
 	if !o.Keep {
 		s.mu.Lock()
-		target = New(Options{Predict: s.predict, Clock: s.clock})
+		target = New(Options{Predict: s.predict, Clock: s.clock, MinAllows: optionOf(s.minAllows), MinSessions: optionOf(s.minSessions)})
 		maps.Copy(target.profiles, s.profiles)
 		s.mu.Unlock()
 	}

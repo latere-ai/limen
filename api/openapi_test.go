@@ -110,7 +110,7 @@ var schemaTypes = map[string]any{
 	"PreviewRequest": limen.PreviewRequest{}, "Preview": limen.Preview{},
 	"Report": limen.Report{}, "WeekReport": limen.WeekReport{}, "ReportCell": limen.ReportCell{},
 	"AgentCell": limen.AgentCell{}, "VerdictCounts": limen.VerdictCounts{}, "FlagReviews": limen.FlagReviews{},
-	"SourceRates": limen.SourceRates{},
+	"SourceRates": limen.SourceRates{}, "Minimum": limen.Minimum{},
 }
 
 func TestSchemasMatchTypes(t *testing.T) {

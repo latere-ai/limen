@@ -125,6 +125,19 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 	post := m.post.Load()
 	ex := post.Explain(point(c, c.T))
 	v := th.Verdict(ex.Approve)
+	var cases []store.Case
+	if len(ex.Contributions) > 0 || e.holds(v) {
+		if cases, err = e.st.Cases(ctx, k.Org, k.Subject); err != nil {
+			return limen.Explanation{}, err
+		}
+	}
+	why := reason(ex.Approve, th, post.Len())
+	var held limen.Minimum
+	if e.holds(v) {
+		if v, held = limen.Hold(v, e.tally(cases, label(c))); held.Held() {
+			why = heldReason(ex.Approve, th, held, true)
+		}
+	}
 	out := limen.Explanation{
 		Key:           k,
 		Model:         post.ref(),
@@ -132,6 +145,8 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 		Uncertainty:   math.Sqrt(ex.Var),
 		Verdict:       v,
 		Thresholds:    th,
+		Minimum:       held,
+		Reason:        why,
 		Mean:          ex.Mean,
 		Parts:         parts(ex),
 		EvidenceRatio: ex.EvidenceRatio,
@@ -142,10 +157,6 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 		out.PredictedBy = &limen.ModelRef{Source: c.Prediction.Source, Answers: *c.PredictedBy}
 	}
 	if len(ex.Contributions) > 0 {
-		cases, err := e.st.Cases(ctx, k.Org, k.Subject)
-		if err != nil {
-			return limen.Explanation{}, err
-		}
 		out.Evidence = evidence(ex, cases, v)
 	}
 	return out, nil
@@ -226,19 +237,28 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 		now = max(now, c.T+1)
 	}
 	// One entry per label, at its most recent answered case, which the
-	// cases' order of T makes the last one seen.
+	// cases' order of T makes the last one seen. The approvals of a label
+	// are tallied over every kind, as a prediction tallies them.
 	type group struct {
 		rep              store.Case
 		approved, denied int
 	}
 	groups := map[string]*group{}
+	tallies := map[string]*limen.Tally{}
 	var order []string
 	for _, c := range cases {
 		a, ok := latest(c)
-		if !ok || (q.Kind != "" && c.Action.Kind != q.Kind) {
+		if !ok {
 			continue
 		}
 		l := label(c)
+		if tallies[l] == nil {
+			tallies[l] = &limen.Tally{}
+		}
+		tallies[l].Add(c.Action, c.Answers)
+		if q.Kind != "" && c.Action.Kind != q.Kind {
+			continue
+		}
 		g := groups[l]
 		if g == nil {
 			g = &group{}
@@ -260,12 +280,16 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 		}
 		ex := post.Explain(point(g.rep, now))
 		v := prof.Thresholds.Verdict(ex.Approve)
+		var held limen.Minimum
+		if e.holds(v) {
+			v, held = limen.Hold(v, tallies[l].Minimum(e.minAllows, e.minSessions))
+		}
 		out.Entries = append(out.Entries, limen.LearnedEntry{
 			Label: l, Kind: g.rep.Action.Kind, Name: g.rep.Action.Name,
 			Approved: g.approved, Denied: g.denied,
 			Approve: ex.Approve, Uncertainty: math.Sqrt(ex.Var), Verdict: v,
 			EvidenceRatio: ex.EvidenceRatio, AskKind: askKind(v, ex.EvidenceRatio),
-			Thresholds: prof.Thresholds,
+			Thresholds: prof.Thresholds, Minimum: held,
 		})
 	}
 	slices.SortStableFunc(out.Entries, func(a, b limen.LearnedEntry) int {

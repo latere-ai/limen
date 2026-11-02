@@ -59,6 +59,7 @@ var rules = []rule{
 	{"UnknownIsAnAsk", unknownIsAnAsk},
 	{"PredictionFollowsTheProfile", predictionFollowsTheProfile},
 	{"SteeredVerdicts", steeredVerdicts},
+	{"AnswerMinimum", answerMinimum},
 	{"ProfilePrecedence", profilePrecedence},
 	{"ProfileDefaults", profileDefaults},
 	{"AskTooCostly", askTooCostly},
@@ -272,7 +273,7 @@ func predictionFollowsTheProfile(t *testing.T, target Target) {
 	saved, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.Costs{FalseAllow: 20, FalseBlock: 5, Ask: 1}, AuditRate: 0.1})
 	must(t, err)
 	p := predict(t, s, action("p1"))
-	expect(t, p.Verdict == p.Thresholds.Verdict(p.Approve), "verdict %q, the thresholds give %q for %v", p.Verdict, p.Thresholds.Verdict(p.Approve), p.Approve)
+	followsTheMinimum(t, "prediction", p.Approve, p.Verdict, p.Thresholds, p.Minimum)
 	expect(t, p.EvidenceRatio >= 0 && p.EvidenceRatio <= 1, "evidence ratio %v outside [0, 1]", p.EvidenceRatio)
 	switch p.Verdict {
 	case limen.Ask:
@@ -286,15 +287,137 @@ func predictionFollowsTheProfile(t *testing.T, target Target) {
 }
 
 // steeredVerdicts: approvals on either side of the default thresholds give
-// allow, ask and block.
+// allow, ask and block, once the person's approvals meet the answer
+// minimum.
 func steeredVerdicts(t *testing.T, target Target) {
 	if target.Steered == nil {
 		t.Skip("the target learns its predictions; Target.Steered is nil")
 	}
 	for approve, want := range map[float64]limen.Verdict{0.97: limen.Allow, 0.5: limen.Ask, 0.1: limen.Block} {
 		s := target.Steered(t, func(limen.Action) (float64, float64) { return approve, 0.1 })
+		meetTheMinimum(t, s, "s")
 		p := predict(t, s, action("s1"))
 		expect(t, p.Verdict == want && p.Approve == approve, "approve %v: %+v, want %q", approve, p, want)
+	}
+}
+
+// followsTheMinimum checks a verdict against the thresholds and the answer
+// minimum: it is the thresholds' verdict with no minimum set, or an ask in
+// place of their allow with a minimum set that is not met.
+func followsTheMinimum(t *testing.T, what string, approve float64, v limen.Verdict, th limen.Thresholds, m limen.Minimum) {
+	t.Helper()
+	if !m.Held() {
+		expect(t, v == th.Verdict(approve), "%s: verdict %q, the thresholds give %q for %v", what, v, th.Verdict(approve), approve)
+		return
+	}
+	expect(t, v == limen.Ask && th.Verdict(approve) == limen.Allow && !m.Met(),
+		"%s: verdict %q with the minimum %+v, the thresholds give %q for %v", what, v, m, th.Verdict(approve), approve)
+}
+
+// in is the action id in the session ses; an empty ses is no session.
+func in(id, ses string) limen.Action {
+	a := action(id)
+	a.Actor.Session = ses
+	return a
+}
+
+// approved records an ask for a and the person's answer to it.
+func approved(t *testing.T, s limen.Service, a limen.Action, approve bool) {
+	t.Helper()
+	decide(t, s, a, limen.Ask, 1, "test/1")
+	answer(t, s, a.Key, approve)
+}
+
+// meetTheMinimum approves limen.MinAllows actions with the label of
+// action, spread over limen.MinSessions sessions, so that the answer
+// minimum no longer holds an allow of that label. Their ids start with
+// prefix.
+func meetTheMinimum(t *testing.T, s limen.Service, prefix string) {
+	t.Helper()
+	for i := range max(limen.MinAllows, limen.MinSessions) {
+		approved(t, s, in(prefix+"-min-"+strconv.Itoa(i), "ses_min_"+strconv.Itoa(i%max(limen.MinSessions, 1))), true)
+	}
+}
+
+// answerMinimum: an allow the thresholds give is an ask until the person
+// has approved actions with the same label limen.MinAllows times, in
+// limen.MinSessions sessions, and the ask names the counts. A denial never
+// counts, nor an approval a later denial replaced, nor an approval of
+// another label; an action with no session counts as its own session; a
+// block is never changed. An explanation and a learned entry hold the
+// same. A learned target is held to the rule on whatever it predicts.
+func answerMinimum(t *testing.T, target Target) {
+	steered := target.Steered != nil
+	var s limen.Service
+	if steered {
+		s = target.Steered(t, func(a limen.Action) (float64, float64) {
+			if strings.HasPrefix(a.ActionID, "amb") {
+				return 0.1, 0.1
+			}
+			return 0.97, 0.1
+		})
+	} else {
+		s = target.New(t)
+		// The lowest allow threshold a profile can have short of 1/2, so
+		// that a learned target allows on few approvals.
+		_, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.Costs{FalseAllow: 2.001, FalseBlock: 2.001, Ask: 1}, AuditRate: 0.05})
+		must(t, err)
+	}
+	probes := 0
+	check := func(allows, sessions int) {
+		t.Helper()
+		probes++
+		a := in("amp"+strconv.Itoa(probes), "ses_1")
+		p := predict(t, s, a)
+		what := "after " + strconv.Itoa(allows) + " approvals in " + strconv.Itoa(sessions) + " sessions"
+		followsTheMinimum(t, what, p.Approve, p.Verdict, p.Thresholds, p.Minimum)
+		want := limen.Minimum{Allows: allows, Sessions: sessions, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}
+		if p.Thresholds.Verdict(p.Approve) == limen.Allow && !want.Met() {
+			expect(t, p.Verdict == limen.Ask && p.Minimum == want && p.Reason != "", "%s: %+v, want an ask held by %+v", what, p, want)
+		}
+		if steered {
+			v := limen.Allow
+			if !want.Met() {
+				v = limen.Ask
+			}
+			expect(t, p.Verdict == v, "%s: verdict %q, want %q", what, p.Verdict, v)
+		}
+		x, err := s.Explain(ctx, a.Key)
+		must(t, err)
+		followsTheMinimum(t, what+", the explanation", x.Approve, x.Verdict, x.Thresholds, x.Minimum)
+		expect(t, !x.Minimum.Held() || (x.Minimum == want && x.Reason != ""), "%s: the explanation is held by %+v with the reason %q, want %+v", what, x.Minimum, x.Reason, want)
+	}
+	check(0, 0)
+	approved(t, s, in("am1", "ses_1"), true)
+	check(1, 1)
+	approved(t, s, in("am2", "ses_1"), true)
+	approved(t, s, in("am3", "ses_1"), true)
+	check(3, 1)
+	approved(t, s, in("amd", "ses_2"), false)
+	approved(t, s, command("amo", "ls -la"), true)
+	check(3, 1)
+	approved(t, s, in("amn", ""), true)
+	check(4, 2)
+	answer(t, s, key("amn"), false)
+	check(3, 1)
+	approved(t, s, in("am4", "ses_2"), true)
+	check(4, 2)
+
+	l, err := s.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject})
+	must(t, err)
+	for _, e := range l.Entries {
+		followsTheMinimum(t, "entry "+e.Label, e.Approve, e.Verdict, e.Thresholds, e.Minimum)
+	}
+	if steered {
+		b := predict(t, s, in("amb1", "ses_1"))
+		expect(t, b.Verdict == limen.Block && !b.Minimum.Held(), "a block with no approvals: %+v", b)
+		f := target.Steered(t, func(limen.Action) (float64, float64) { return 0.97, 0.1 })
+		approved(t, f, in("amf", "ses_1"), true)
+		l, err := f.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject})
+		must(t, err)
+		want := limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}
+		expect(t, len(l.Entries) == 1 && l.Entries[0].Verdict == limen.Ask && l.Entries[0].Minimum == want,
+			"the learned entry of one approval: %+v, want an ask held by %+v", l.Entries, want)
 	}
 }
 
@@ -493,6 +616,7 @@ func learned(t *testing.T, target Target) {
 		t.Skip("the target learns its predictions; Target.Steered is nil")
 	}
 	s := target.Steered(t, func(limen.Action) (float64, float64) { return 0.97, 0.1 })
+	meetTheMinimum(t, s, "le")
 	a := action("le1")
 	p := predict(t, s, a)
 	require(t, p.Verdict == limen.Allow, "prediction %+v, want an allow", p)
@@ -676,10 +800,12 @@ func command(id, cmd string) limen.Action {
 }
 
 // consistent checks the fields of a verdict every model must agree on: it
-// is the thresholds' verdict, and only an ask has a kind of uncertainty.
-func consistent(t *testing.T, what string, approve, ratio float64, v limen.Verdict, kind string, th limen.Thresholds) {
+// is the thresholds' verdict, or an ask in place of their allow when the
+// answer minimum says it held it, and only an ask has a kind of
+// uncertainty.
+func consistent(t *testing.T, what string, approve, ratio float64, v limen.Verdict, kind string, th limen.Thresholds, m limen.Minimum) {
 	t.Helper()
-	expect(t, v == th.Verdict(approve), "%s: verdict %q, the thresholds give %q for %v", what, v, th.Verdict(approve), approve)
+	followsTheMinimum(t, what, approve, v, th, m)
 	expect(t, ratio >= 0 && ratio <= 1, "%s: evidence ratio %v outside [0, 1]", what, ratio)
 	if v == limen.Ask {
 		expect(t, kind == limen.AskUnsure || kind == limen.AskSplit, "%s: an ask of kind %q", what, kind)
@@ -703,7 +829,7 @@ func explanations(t *testing.T, target Target) {
 	x, err := s.Explain(ctx, a.Key)
 	must(t, err)
 	require(t, x.Key == a.Key && x.Model.Source != "" && x.Evidence != nil, "explanation %+v", x)
-	consistent(t, "explanation", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+	consistent(t, "explanation", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
 	expect(t, x.Thresholds == p.Thresholds, "thresholds %+v, the prediction's %+v", x.Thresholds, p.Thresholds)
 	require(t, x.PredictedBy != nil && *x.PredictedBy == x.Model && x.Model.Answers == 0, "predicted by %+v, explained by %+v", x.PredictedBy, x.Model)
 	expect(t, math.Abs(x.Approve-p.Approve) < 1e-9 && math.Abs(x.Uncertainty-p.Uncertainty) < 1e-9 && x.Verdict == p.Verdict,
@@ -720,7 +846,7 @@ func explanations(t *testing.T, target Target) {
 	for _, k := range []limen.Key{a.Key, b.Key} {
 		x, err := s.Explain(ctx, k)
 		must(t, err)
-		consistent(t, "explanation "+k.ActionID, x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+		consistent(t, "explanation "+k.ActionID, x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
 		expect(t, x.Model.Answers <= 2, "a model fitted through %d of 2 answers", x.Model.Answers)
 		if x.Parts != nil {
 			sum := x.Parts.Action + x.Parts.Recent + x.Parts.Interaction
@@ -744,11 +870,12 @@ func explanationsOfSteeredVerdicts(t *testing.T, target Target) {
 	}
 	for approve, want := range map[float64]limen.Verdict{0.97: limen.Allow, 0.5: limen.Ask, 0.1: limen.Block} {
 		s := target.Steered(t, func(limen.Action) (float64, float64) { return approve, 0.1 })
+		meetTheMinimum(t, s, "es")
 		predict(t, s, action("es1"))
 		x, err := s.Explain(ctx, key("es1"))
 		must(t, err)
 		expect(t, x.Verdict == want && x.Approve == approve, "approve %v: %+v, want %q", approve, x, want)
-		consistent(t, "steered", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds)
+		consistent(t, "steered", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
 	}
 }
 
@@ -787,7 +914,7 @@ func learnedEntries(t *testing.T, target Target) {
 	for _, e := range l.Entries {
 		got[e.Label] = [2]int{e.Approved, e.Denied}
 		labels = append(labels, e.Label)
-		consistent(t, "entry "+e.Label, e.Approve, e.EvidenceRatio, e.Verdict, e.AskKind, e.Thresholds)
+		consistent(t, "entry "+e.Label, e.Approve, e.EvidenceRatio, e.Verdict, e.AskKind, e.Thresholds, e.Minimum)
 		want, _ := saved.Costs.Thresholds()
 		expect(t, e.Kind == "tool" && e.Name == "bash" && e.Thresholds == want, "entry %+v, want the thresholds %+v of the agent's profile", e, want)
 		expect(t, !strings.Contains(e.Label, "secret") && !strings.Contains(e.Label, "origin"), "label %q holds input", e.Label)

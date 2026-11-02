@@ -219,6 +219,15 @@ var defects = []defect{
 			return p, err
 		}
 	}},
+	{"AnswerMinimum", "an allow ignores the answer minimum", func(f *faulty) {
+		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+			p, err := f.Service.Predict(ctx, a)
+			if p.Minimum.Held() {
+				p.Verdict, p.AskKind, p.Minimum = limen.Allow, "", limen.Minimum{}
+			}
+			return p, err
+		}
+	}},
 	{"ProfilePrecedence", "the profile of an agent is never found", func(f *faulty) {
 		f.profile = func(ctx context.Context, sc limen.Scope) (limen.Profile, error) {
 			sc.Agent = ""

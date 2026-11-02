@@ -42,7 +42,8 @@ const (
 	AskUnsure = "unsure"
 	// AskSplit is an ask on evidence: the person's answers removed half
 	// of the prior variance at the action or more, and the approval
-	// probability is still inside the profile's ask band. The answers
+	// probability is still inside the profile's ask band, or above it with
+	// too few approvals for the answer minimum ([Minimum]). The answers
 	// disagree, or agree but not yet strongly enough for the thresholds,
 	// as two approvals of one action can under a 0.90 allow threshold.
 	// More answers that agree can still move it out of the band; answers
@@ -78,11 +79,18 @@ type Explanation struct {
 	PredictedBy *ModelRef `json:"predicted_by,omitempty"`
 	// Approve, Uncertainty and Verdict are the prediction Model makes for
 	// the action, at the action's own time, under Thresholds: those of the
-	// recorded prediction, or of the profile that applies now.
+	// recorded prediction, or of the profile that applies now. Verdict is
+	// held to the answer minimum by the person's approvals now, as a
+	// prediction is, with Minimum set when it turned an allow into an ask.
 	Approve     float64    `json:"approve"`
 	Uncertainty float64    `json:"uncertainty"`
 	Verdict     Verdict    `json:"verdict"`
 	Thresholds  Thresholds `json:"thresholds"`
+	Minimum     Minimum    `json:"minimum,omitzero"`
+	// Reason is one sentence for the person, saying why Verdict is what
+	// it is, as a prediction's reason does. An implementation from before
+	// it leaves it empty.
+	Reason string `json:"reason,omitempty"`
 	// Mean is the latent mean; Parts split it and sum to it, and are absent
 	// for a model whose kernel has no parts.
 	Mean  float64 `json:"mean"`
@@ -158,7 +166,9 @@ type Learned struct {
 
 // LearnedEntry is one kind of action the person has answered, and what the
 // model suggests for it now: at its most recent case, moved to the
-// person's current time, under the profile that applies to it.
+// person's current time, under the profile that applies to it, and held
+// to the answer minimum, with Minimum set when it turned an allow into an
+// ask.
 // EvidenceRatio and AskKind are an explanation's at that point, so a scale
 // can draw an unsure ask apart from a split one. A split entry has answers
 // that disagree only when Approved and Denied are both above zero.
@@ -174,6 +184,7 @@ type LearnedEntry struct {
 	EvidenceRatio float64    `json:"evidence_ratio"`
 	AskKind       string     `json:"ask_kind,omitempty"`
 	Thresholds    Thresholds `json:"thresholds"`
+	Minimum       Minimum    `json:"minimum,omitzero"`
 }
 
 // TrendPoint is the shared tolerance part at one point of a person's

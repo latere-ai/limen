@@ -34,6 +34,54 @@ func (s *Service) answersLocked(org, subject string) int64 {
 	return n
 }
 
+// holdLocked applies the answer minimum to v, the verdict the thresholds
+// give an action with the label l of the subject in org, with the
+// approvals the stub holds now.
+func (s *Service) holdLocked(v limen.Verdict, org, subject, l string) (limen.Verdict, limen.Minimum) {
+	if v != limen.Allow || (s.minAllows == 0 && s.minSessions == 0) {
+		return v, limen.Minimum{}
+	}
+	var t limen.Tally
+	for _, e := range s.cases {
+		if e.action.Org == org && e.action.Subject == subject && e.label == l {
+			t.Add(e.action, e.answers)
+		}
+	}
+	return limen.Hold(v, t.Minimum(s.minAllows, s.minSessions))
+}
+
+// reasonOf is the stub's reason: the approval against the ask band, and
+// the answer minimum when it held an allow.
+func reasonOf(approve float64, th limen.Thresholds, held limen.Minimum) string {
+	r := fmt.Sprintf("approval %.2f against the ask band %.2f to %.2f", approve, th.BlockBelow, th.AllowAbove)
+	if held.Held() {
+		r += fmt.Sprintf(", held by the answer minimum: %d of %d approvals, %d of %d sessions",
+			held.Allows, held.MinAllows, held.Sessions, held.MinSessions)
+	}
+	return r
+}
+
+// minimumOf is the minimum an option sets: zero is the contract's value
+// def, and a negative value no minimum.
+func minimumOf(option, def int) int {
+	switch {
+	case option == 0:
+		return def
+	case option < 0:
+		return 0
+	}
+	return option
+}
+
+// optionOf is the option that sets the minimum n: no minimum is a
+// negative option.
+func optionOf(n int) int {
+	if n == 0 {
+		return -1
+	}
+	return n
+}
+
 func probit(p float64) float64 { return math.Sqrt2 * math.Erfinv(2*p-1) }
 
 func kindOf(v limen.Verdict) string {
@@ -63,11 +111,11 @@ func (s *Service) Explain(ctx context.Context, k limen.Key) (limen.Explanation, 
 	if e.prediction != nil {
 		approve, uncertainty, th = e.prediction.Approve, e.prediction.Uncertainty, e.prediction.Thresholds
 	}
-	v := th.Verdict(approve)
+	v, held := s.holdLocked(th.Verdict(approve), k.Org, k.Subject, e.label)
 	out := limen.Explanation{
 		Key: k, Model: limen.ModelRef{Source: Source, Answers: s.answersLocked(k.Org, k.Subject)},
-		Approve: approve, Uncertainty: uncertainty, Verdict: v, Thresholds: th,
-		Mean: probit(approve), AskKind: kindOf(v), Evidence: []limen.Evidence{},
+		Approve: approve, Uncertainty: uncertainty, Verdict: v, Thresholds: th, Minimum: held,
+		Reason: reasonOf(approve, th, held), Mean: probit(approve), AskKind: kindOf(v), Evidence: []limen.Evidence{},
 	}
 	if e.predictedBy != nil {
 		out.PredictedBy = &limen.ModelRef{Source: Source, Answers: *e.predictedBy}
@@ -114,10 +162,10 @@ func (s *Service) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Lear
 		g := groups[l]
 		approve, uncertainty := s.predict(g.rep.action)
 		th := s.effectiveLocked(limen.Scope{Org: q.Org, Kind: g.rep.action.Kind, Agent: q.Agent}, q.Subject).Thresholds
-		v := th.Verdict(approve)
+		v, held := s.holdLocked(th.Verdict(approve), q.Org, q.Subject, l)
 		out.Entries = append(out.Entries, limen.LearnedEntry{
 			Label: l, Kind: g.rep.action.Kind, Name: g.rep.action.Name, Approved: g.approved, Denied: g.denied,
-			Approve: approve, Uncertainty: uncertainty, Verdict: v, AskKind: kindOf(v), Thresholds: th,
+			Approve: approve, Uncertainty: uncertainty, Verdict: v, AskKind: kindOf(v), Thresholds: th, Minimum: held,
 		})
 	}
 	slices.SortStableFunc(out.Entries, func(a, b limen.LearnedEntry) int {

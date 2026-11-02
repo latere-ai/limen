@@ -81,6 +81,14 @@ func bash(subject, id, command string) limen.Action {
 	}
 }
 
+// across moves a to one of two sessions by i, as the answers of a person
+// who works across sessions arrive, so the answer minimum lets an allow
+// through once enough of them approve.
+func across(a limen.Action, i int) limen.Action {
+	a.Actor.Session = fmt.Sprintf("ses-%d", i%2)
+	return a
+}
+
 // decide records the decision a decision point under the default profile
 // would make with no review draw, and returns whether the person sees it.
 func decide(t *testing.T, s limen.Service, a limen.Action, p limen.Prediction) bool {
@@ -107,7 +115,7 @@ func TestLearns(t *testing.T) {
 			cmd     string
 			approve bool
 		}{{"go test ./...", true}, {"rm -rf build", false}} {
-			a := bash("s", fmt.Sprintf("%s-%d", step.cmd, i), step.cmd)
+			a := across(bash("s", fmt.Sprintf("%s-%d", step.cmd, i), step.cmd), i)
 			p, err := e.Predict(ctx, a)
 			if err != nil {
 				t.Fatal(err)
@@ -157,7 +165,7 @@ func train(t *testing.T, s limen.Service, subject string, n int) {
 func trainIDs(t *testing.T, s limen.Service, subject, prefix string, n int) {
 	t.Helper()
 	for i := range n {
-		a := bash(subject, fmt.Sprintf("%s-%d", prefix, i), "go test ./...")
+		a := across(bash(subject, fmt.Sprintf("%s-%d", prefix, i), "go test ./..."), i)
 		if _, err := s.Predict(ctx, a); err != nil {
 			t.Fatal(err)
 		}
@@ -269,7 +277,7 @@ func TestReplayLearnsInOrder(t *testing.T) {
 	var rs []limen.ReplayRecord
 	for i := range 60 {
 		rs = append(rs, limen.ReplayRecord{
-			At: start.Add(time.Duration(i) * time.Minute), Action: bash("s", fmt.Sprintf("r-%d", i), "go test ./..."),
+			At: start.Add(time.Duration(i) * time.Minute), Action: across(bash("s", fmt.Sprintf("r-%d", i), "go test ./..."), i),
 			Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Approve: &yes,
 		})
 	}
