@@ -36,6 +36,12 @@ complete. Spec 004 is at `testing`: a second model version beside the
 first and a shared store are not built. Spec 005's hooks are not built,
 and spec 007 is a rule for deployments.
 
+Spec 004 was amended on 2026-11-02 with the answer minimum, an interim
+safety rule until a consent spec replaces it: Limen suggests `allow` only
+after the person approved actions with the same label 3 times in 2
+sessions, and the conformance case `AnswerMinimum` holds every
+implementation to it.
+
 The owner decided on 2026-11-02 what comes after Limen is open source:
 the hooks for Claude Code and Codex (005, criteria 1 to 5), a published
 table of `verdict.Decide` cases (005, criterion 6), the shared store on

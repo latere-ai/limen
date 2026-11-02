@@ -175,6 +175,29 @@ to error estimates, not to the posterior ([[008-ledger-and-estimation]]).
    `thresholds.Verdict(approve)`, and store the case with its digest,
    features and prediction in one transaction.
 
+*Amended 2026-11-02:* an interim safety rule, the answer minimum, sits
+between the verdict of step 6 and the store, until a consent spec
+replaces it. One approval of a publish gave `approve` 0.729 and an evidence ratio
+of 0.54, so under an allow threshold of 0.65 the next publish ran on its
+own after a single answer. Now an `allow` the thresholds give becomes an
+`ask` unless the person has approved actions with the same label at
+least `limen.MinAllows` (3) times, in at least `limen.MinSessions` (2)
+distinct sessions. A case counts when its latest answer approves; its
+session is `actor.session`, and a case without one is its own session
+(`limen.SessionOf`); only the subject's cases in the org count. The
+prediction carries the counts in `minimum` and says them in `reason`,
+and its `ask_kind` follows the evidence ratio as before, so the owner's
+case is a `split` ask that hosted Topos shows the person. `block` and
+`ask` never change. Explanations, learned entries and replays apply the
+same rule; previews and reliability estimates read the recorded
+predictions and do not. `engine.Options` and `limend`
+(`LIMEN_MIN_ALLOWS`, `LIMEN_MIN_SESSIONS`) set the minimums, 0 turning a
+part off for tests. A failure to read the cases holds the allow with none
+counted. The count reads the subject's cases, so an allow the thresholds
+give costs a scan of them on the hot path; a per-subject index is left
+for the consent spec. The rule is part of the contract
+([[006-conformance]], case `AnswerMinimum`), so the stub keeps it too.
+
 A prediction never fits. Against a snapshot of `n` training cases it
 costs one kernel row, `O(n d)`, a dot product for the mean, and one
 triangular solve for the variance, `O(n^2)`: about a quarter of a
@@ -352,6 +375,7 @@ until they are built or moved to their own spec.
 | `answers` and `snapshots` tables | answers are kept inside their case; a snapshot is the fitted state with the count of answers it was fitted through | the records are per case and per subject; the count names a model ([[009-explanations]]) |
 | cases | also keep `featurizer`, `label`, `labels` and `predicted_by` | added by [[009-explanations]] |
 | a prediction never fits | true for `limend`, which fits in the background; `Options.Inline` fits in the caller's goroutine, and a replay's scratch engine uses it | a replay must learn each answer before its next prediction |
+| a prediction suggests `thresholds.Verdict(approve)` | an `allow` below the answer minimum is an `ask` with `minimum` set (amended above) | one approval is not a pattern; interim until the consent spec |
 | fitters take the oldest model first | fits run first in, first out, as each model's debounce releases it | no order was implemented; the debounce releases a model about one second after its newest answer |
 | the featurizer's encodings | the program-class group has unit length, the attribute group at most `1/sqrt 2`, the signal group at most 1; the shell reader also reads `sh -c`, `eval` and `find -exec`, and knows more wrappers, destructive forms and protected paths | recorded in the `engine/featurize` package documentation |
 

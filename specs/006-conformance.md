@@ -86,6 +86,18 @@ profile, a person's own profile and the report of an organization,
 listed in that spec. A case that needs a closed week runs against
 `Clocked`, and a target without it skips that case.
 
+*Amended 2026-11-02:* the answer minimum, an interim rule amended into
+[[004-engine]] (Predicting), is part of the contract, so the stub keeps
+it. The case `AnswerMinimum` holds a steered target to the exact
+verdicts and counts (an allow is an ask with `minimum` until 3
+approvals of the label in 2 sessions; a denial, a replaced approval and
+another label never count; an action without a session is its own; a
+block never changes) and a learned target to the rule on whatever it
+predicts. Every case that checks a verdict accepts an ask in place of
+the thresholds' allow only with `minimum` set and not met, and the
+steered cases that expect an allow first approve enough actions to meet
+the minimum.
+
 ### The stub
 
 ```go
@@ -129,7 +141,7 @@ test in the tree.
 
 | # | Proof in the tree |
 |---|---|
-| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 44 cases, the 29 of this spec and the 15 of [[010-organizations]], in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
+| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 45 cases, the 29 of this spec, the 15 of [[010-organizations]] and `AnswerMinimum` (amended above), in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above |
 | 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same; `TestEngineAndStubReportOrganizationsAlike` does the same for the report of an organization |
@@ -162,6 +174,7 @@ are merged:
 | `Certificate` | `Certificate` |
 | none | `SteeredVerdicts`, `LaterAnswersNeverEstimate`, `ExplanationsOfSteeredVerdicts` |
 | the 15 cases of [[010-organizations]] | the same names, from `ProfileRemoved` to `ReportNamesNoPerson` |
+| the answer minimum (amended above) | `AnswerMinimum` |
 
 | What it said | What was built | Why |
 |---|---|---|
