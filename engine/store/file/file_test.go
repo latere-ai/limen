@@ -8,8 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -313,6 +315,10 @@ func TestLock(t *testing.T) {
 		func() error { _, _, err := s.Snapshot(ctx, "o", "s", "1"); return err }(),
 		s.PutSnapshot(ctx, "o", "s", "1", nil),
 		s.Forget(ctx, "o", "s"),
+		s.DeleteProfile(ctx, limen.Scope{Org: "o"}),
+		func() error { _, err := s.Subjects(ctx, "o"); return err }(),
+		func() error { _, _, err := s.WeekReport(ctx, "o", storetest.Monday); return err }(),
+		s.PutWeekReport(ctx, "o", storetest.Week(storetest.Monday)),
 	}
 	for i, err := range errs {
 		if !errors.Is(err, file.ErrClosed) {
@@ -351,6 +357,100 @@ func TestAwkwardNames(t *testing.T) {
 		if p, ok, _ := s.Profile(ctx, limen.Scope{Org: n}); !ok || p.AuditRate != float64(i)/100 {
 			t.Errorf("profile of %q is %+v", n, p)
 		}
+		if subs, err := s.Subjects(ctx, n); err != nil || !slices.Equal(subs, []string{n}) {
+			t.Errorf("subjects of %q are %q, %v", n, subs, err)
+		}
+	}
+	for _, n := range names {
+		if err := s.PutWeekReport(ctx, n, storetest.Week(storetest.Monday)); err != nil {
+			t.Fatalf("week of %q: %v", n, err)
+		}
+	}
+	for _, n := range names {
+		if _, ok, err := s.WeekReport(ctx, n, storetest.Monday); !ok || err != nil {
+			t.Errorf("week of %q: %v, %v", n, ok, err)
+		}
+	}
+}
+
+// A meta.json or a kept week that does not parse fails loudly, and a
+// subject's directory a crash left before its meta.json is no subject.
+func TestDamagedReports(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	defer func() { _ = s.Close() }()
+	for _, c := range []store.Case{storetest.Case("o", "s", "a", 0), storetest.Case("p", "t", "b", 0)} {
+		if err := s.Put(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "subjects", "o", "crashed"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subjects", "o", "stray"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if subs, err := s.Subjects(ctx, "o"); err != nil || !slices.Equal(subs, []string{"s"}) {
+		t.Errorf("subjects %v, %v", subs, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subjects", "p", "t", "meta.json"), []byte(`{"org":"o","subject":"t"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Subjects(ctx, "p"); err == nil {
+		t.Error("a meta.json of another organization was listed")
+	}
+	if err := os.Remove(filepath.Join(dir, "subjects", "p", "t", "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subjects", "p", "t", "meta.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Subjects(ctx, "p"); err == nil {
+		t.Error("a meta.json that is a directory was read")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subjects", "q"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Subjects(ctx, "q"); err == nil {
+		t.Error("an organization's directory that is a file was listed")
+	}
+
+	if err := s.PutWeekReport(ctx, "o", storetest.Week(storetest.Monday)); err != nil {
+		t.Fatal(err)
+	}
+	weeks, _ := filepath.Glob(filepath.Join(dir, "reports", "o", "*.json"))
+	if len(weeks) != 1 {
+		t.Fatalf("weeks: %v", weeks)
+	}
+	if err := os.WriteFile(weeks[0], []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.WeekReport(ctx, "o", storetest.Monday); err == nil {
+		t.Error("a damaged week loaded")
+	}
+	if err := os.Remove(weeks[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(weeks[0], 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.WeekReport(ctx, "o", storetest.Monday); err == nil {
+		t.Error("a week that is a directory was read")
+	}
+	if err := s.PutWeekReport(ctx, "o", storetest.Week(storetest.Monday)); err == nil {
+		t.Error("a week was written over a directory")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reports", "r"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutWeekReport(ctx, "r", storetest.Week(storetest.Monday)); err == nil {
+		t.Error("a week was written under a file")
+	}
+	bad := storetest.Week(storetest.Monday)
+	nan := math.NaN()
+	bad.Total.Applied.FalseAllow.Value = &nan
+	if err := s.PutWeekReport(ctx, "o", bad); err == nil {
+		t.Error("a week that cannot be encoded was kept")
 	}
 }
 
@@ -376,6 +476,9 @@ func TestDamagedProfiles(t *testing.T) {
 	}
 	if err := s.PutProfile(ctx, limen.Profile{Org: "o"}); err == nil {
 		t.Error("PutProfile over a damaged profiles file succeeded")
+	}
+	if err := s.DeleteProfile(ctx, limen.Scope{Org: "o"}); err == nil {
+		t.Error("DeleteProfile over a damaged profiles file succeeded")
 	}
 }
 

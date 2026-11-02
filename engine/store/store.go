@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Latere AI
 // SPDX-License-Identifier: Apache-2.0
 
-// Package store is where the engine keeps the ledger, the cost profiles
-// and the fitted models: one interface, with an in-memory implementation
+// Package store is where the engine keeps the ledger, the cost profiles,
+// the fitted models and the kept weeks of the reports of organizations: one interface, with an in-memory implementation
 // here and a file store in store/file for one process, self-hosted or
 // hosted on a volume (spec 004). A store that more than one server shares
 // is not built.
@@ -79,11 +79,24 @@ type Store interface {
 	// when there is none.
 	Profile(ctx context.Context, s limen.Scope) (limen.Profile, bool, error)
 	PutProfile(ctx context.Context, p limen.Profile) error
+	// DeleteProfile removes the profile saved for exactly this scope, and
+	// nothing else. It is idempotent.
+	DeleteProfile(ctx context.Context, s limen.Scope) error
+	// Subjects returns, sorted, the subjects of the organization that have
+	// a case: the persons a report of the organization reads.
+	Subjects(ctx context.Context, org string) ([]string, error)
+	// WeekReport returns the kept week of the organization that starts at
+	// from, and false when none is kept.
+	WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error)
+	// PutWeekReport keeps a closed week of the organization, under its
+	// From. A kept week holds no person's record, so Forget leaves it.
+	PutWeekReport(ctx context.Context, org string, w limen.WeekReport) error
 	// Snapshot returns a model's stored state, and false when there is none.
 	Snapshot(ctx context.Context, org, subject, version string) ([]byte, bool, error)
 	PutSnapshot(ctx context.Context, org, subject, version string, state []byte) error
 	// Forget deletes every case, the counter and every snapshot of the
-	// subject in the organization. It is idempotent.
+	// subject in the organization. It is idempotent. It leaves the
+	// profiles, which the engine removes, and the kept weeks.
 	Forget(ctx context.Context, org, subject string) error
 	Close() error
 }

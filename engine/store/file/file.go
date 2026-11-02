@@ -11,6 +11,7 @@
 //	<dir>/subjects/<org>/<subject>/meta.json     the org and subject, for a reader
 //	<dir>/subjects/<org>/<subject>/cases.ndjson  the subject's case log
 //	<dir>/subjects/<org>/<subject>/snapshots/<version>.snap
+//	<dir>/reports/<org>/<week>.json              a kept week of a report, named by its first day
 //
 // Names are encoded so that any string is a safe path element on a case
 // insensitive file system: lowercase letters, digits and '-' stay, every
@@ -30,8 +31,10 @@
 //
 // The counter of [store.Store.NextT] lives in memory and resumes after a
 // reopen at one past the largest ordinal the log holds, so an ordinal a
-// stored case holds is never handed out again. Profiles and snapshots are
-// written whole, to a temporary file that is synced and renamed.
+// stored case holds is never handed out again. Profiles, snapshots and
+// kept weeks are written whole, to a temporary file that is synced and
+// renamed. Forget removes a subject's directory and leaves the kept weeks,
+// which hold no person's record.
 //
 // One process owns a directory. Open takes an exclusive lock on LOCK and
 // fails with [ErrLocked] while another process, or another open store in
@@ -56,6 +59,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"latere.ai/x/pkg/atomicfile"
 
@@ -432,7 +436,7 @@ func (s *Store) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, boo
 }
 
 // PutProfile implements [store.Store]: the organization's file is written
-// whole, sorted by scope, so it reads the same however it was built.
+// whole.
 func (s *Store) PutProfile(ctx context.Context, p limen.Profile) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -449,12 +453,19 @@ func (s *Store) PutProfile(ctx context.Context, p limen.Profile) error {
 	next := make(map[limen.Scope]limen.Profile, len(ps)+1)
 	maps.Copy(next, ps)
 	next[p.Scope] = p
-	list := make([]limen.Profile, 0, len(next))
-	for _, v := range next {
+	return s.writeProfiles(p.Org, next)
+}
+
+// writeProfiles writes the organization's file whole, sorted by scope, so
+// it reads the same however it was built, and keeps ps as its profiles.
+// The caller holds s.mu.
+func (s *Store) writeProfiles(org string, ps map[limen.Scope]limen.Profile) error {
+	list := make([]limen.Profile, 0, len(ps))
+	for _, v := range ps {
 		list = append(list, v)
 	}
 	slices.SortFunc(list, func(a, b limen.Profile) int {
-		return strings.Compare(a.Kind+"\x00"+a.Agent, b.Kind+"\x00"+b.Agent)
+		return strings.Compare(a.Kind+"\x00"+a.Agent+"\x00"+a.Subject, b.Kind+"\x00"+b.Agent+"\x00"+b.Subject)
 	})
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
@@ -464,10 +475,132 @@ func (s *Store) PutProfile(ctx context.Context, p limen.Profile) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("file store: create %s: %w", dir, err)
 	}
-	if err := s.write(filepath.Join(dir, encode(p.Org)+".json"), data); err != nil {
-		return fmt.Errorf("file store: write profiles of %s: %w", p.Org, err)
+	if err := s.write(filepath.Join(dir, encode(org)+".json"), data); err != nil {
+		return fmt.Errorf("file store: write profiles of %s: %w", org, err)
 	}
-	s.profiles[p.Org] = next
+	s.profiles[org] = ps
+	return nil
+}
+
+// DeleteProfile implements [store.Store]: the organization's file is
+// written whole without the scope, as a save writes it.
+func (s *Store) DeleteProfile(ctx context.Context, sc limen.Scope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	ps, err := s.orgProfiles(sc.Org)
+	if err != nil {
+		return err
+	}
+	if _, ok := ps[sc]; !ok {
+		return nil
+	}
+	next := maps.Clone(ps)
+	delete(next, sc)
+	return s.writeProfiles(sc.Org, next)
+}
+
+// Subjects implements [store.Store]: the subjects whose directory under
+// the organization holds a meta.json, read from it, since a directory's
+// name may be a hash.
+func (s *Store) Subjects(ctx context.Context, org string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return nil, ErrClosed
+	}
+	dir := filepath.Join(s.dir, "subjects", encode(org))
+	entries, err := os.ReadDir(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return []string{}, nil
+	case err != nil:
+		return nil, fmt.Errorf("file store: list %s: %w", dir, err)
+	}
+	out := []string{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, e.Name(), "meta.json")
+		data, err := os.ReadFile(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			// A directory that a crash left before its meta.json holds no
+			// case.
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("file store: read %s: %w", path, err)
+		}
+		var meta struct{ Org, Subject string }
+		if err := json.Unmarshal(data, &meta); err != nil || meta.Org != org {
+			return nil, fmt.Errorf("file store: %s does not name a subject of %s", path, org)
+		}
+		out = append(out, meta.Subject)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+func (s *Store) weekPath(org string, from time.Time) string {
+	return filepath.Join(s.dir, "reports", encode(org), from.UTC().Format("2006-01-02")+".json")
+}
+
+// WeekReport implements [store.Store].
+func (s *Store) WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return limen.WeekReport{}, false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return limen.WeekReport{}, false, ErrClosed
+	}
+	path := s.weekPath(org, from)
+	data, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return limen.WeekReport{}, false, nil
+	case err != nil:
+		return limen.WeekReport{}, false, fmt.Errorf("file store: read %s: %w", path, err)
+	}
+	var w limen.WeekReport
+	if err := json.Unmarshal(data, &w); err != nil {
+		return limen.WeekReport{}, false, fmt.Errorf("file store: %s does not parse: %w", path, err)
+	}
+	return w, true, nil
+}
+
+// PutWeekReport implements [store.Store]: the week is written whole.
+func (s *Store) PutWeekReport(ctx context.Context, org string, w limen.WeekReport) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	path := s.weekPath(org, w.From)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("file store: create %s: %w", filepath.Dir(path), err)
+	}
+	if err := s.write(path, data); err != nil {
+		return fmt.Errorf("file store: write the week %s: %w", path, err)
+	}
 	return nil
 }
 

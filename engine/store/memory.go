@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sync"
+	"time"
 
 	"latere.ai/x/limen"
 )
@@ -15,6 +16,11 @@ import (
 type subjectKey struct{ org, subject string }
 
 type snapshotKey struct{ org, subject, version string }
+
+type weekKey struct {
+	org  string
+	from int64
+}
 
 // Memory is a [Store] in memory, for tests and for a replay that keeps
 // nothing. It copies every value in and out, so a caller's later writes
@@ -26,6 +32,7 @@ type Memory struct {
 	next      map[subjectKey]int64
 	profiles  map[limen.Scope]limen.Profile
 	snapshots map[snapshotKey][]byte
+	weeks     map[weekKey][]byte
 }
 
 // NewMemory returns an empty in-memory store.
@@ -36,6 +43,7 @@ func NewMemory() *Memory {
 		next:      map[subjectKey]int64{},
 		profiles:  map[limen.Scope]limen.Profile{},
 		snapshots: map[snapshotKey][]byte{},
+		weeks:     map[weekKey][]byte{},
 	}
 }
 
@@ -131,6 +139,64 @@ func (m *Memory) PutProfile(ctx context.Context, p limen.Profile) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.profiles[p.Scope] = p
+	return nil
+}
+
+// DeleteProfile implements [Store].
+func (m *Memory) DeleteProfile(ctx context.Context, s limen.Scope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.profiles, s)
+	return nil
+}
+
+// Subjects implements [Store].
+func (m *Memory) Subjects(ctx context.Context, org string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []string{}
+	for k := range m.order {
+		if k.org == org {
+			out = append(out, k.subject)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// WeekReport implements [Store].
+func (m *Memory) WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return limen.WeekReport{}, false, err
+	}
+	m.mu.Lock()
+	b, ok := m.weeks[weekKey{org, from.UnixNano()}]
+	m.mu.Unlock()
+	if !ok {
+		return limen.WeekReport{}, false, nil
+	}
+	var w limen.WeekReport
+	return w, true, json.Unmarshal(b, &w)
+}
+
+// PutWeekReport implements [Store].
+func (m *Memory) PutWeekReport(ctx context.Context, org string, w limen.WeekReport) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	b, err := json.Marshal(w)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.weeks[weekKey{org, w.From.UnixNano()}] = b
 	return nil
 }
 

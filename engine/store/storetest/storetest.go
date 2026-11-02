@@ -78,6 +78,10 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"NextT", nextT},
 		{"NextTConcurrent", nextTConcurrent},
 		{"Profiles", profiles},
+		{"PersonProfiles", personProfiles},
+		{"DeleteProfile", deleteProfile},
+		{"Subjects", subjects},
+		{"WeekReports", weekReports},
 		{"Snapshots", snapshots},
 		{"Forget", forget},
 		{"Canceled", canceled},
@@ -273,6 +277,127 @@ func profiles(t *testing.T, s store.Store) {
 	expect(t, p.Costs.Ask == 1.5, "replacing one scope changed another: %+v", p)
 }
 
+// person is the subject of a person's own profile and cases, with a pipe
+// and a slash, as a rendered subject has.
+const person = "https://issuer.example|usr_42"
+
+func personProfiles(t *testing.T, s store.Store) {
+	org := limen.Scope{Org: "o"}
+	mine := limen.Scope{Org: "o", Subject: person}
+	theirs := limen.Scope{Org: "o", Subject: "s"}
+	must(t, s.PutProfile(ctx, profile(org, 1)))
+	must(t, s.PutProfile(ctx, profile(mine, 1.5)))
+	_, ok, err := s.Profile(ctx, theirs)
+	must(t, err)
+	expect(t, !ok, "another person's profile is found")
+	for _, c := range []struct {
+		s    limen.Scope
+		want float64
+	}{{org, 1}, {mine, 1.5}} {
+		p, ok, err := s.Profile(ctx, c.s)
+		must(t, err)
+		expect(t, ok && p.Costs.Ask == c.want && p.Scope == c.s, "Profile(%+v) = %+v, %v", c.s, p, ok)
+	}
+}
+
+func deleteProfile(t *testing.T, s store.Store) {
+	org := limen.Scope{Org: "o"}
+	agent := limen.Scope{Org: "o", Agent: "agt"}
+	mine := limen.Scope{Org: "o", Subject: person}
+	for _, sc := range []limen.Scope{org, agent, mine} {
+		must(t, s.PutProfile(ctx, profile(sc, 1)))
+	}
+	must(t, s.DeleteProfile(ctx, agent))
+	must(t, s.DeleteProfile(ctx, agent))
+	must(t, s.DeleteProfile(ctx, limen.Scope{Org: "p"}))
+	for _, c := range []struct {
+		s  limen.Scope
+		ok bool
+	}{{org, true}, {agent, false}, {mine, true}} {
+		_, ok, err := s.Profile(ctx, c.s)
+		must(t, err)
+		expect(t, ok == c.ok, "after removing the agent's profile, Profile(%+v) is there: %v", c.s, ok)
+	}
+	must(t, s.DeleteProfile(ctx, mine))
+	must(t, s.DeleteProfile(ctx, org))
+	for _, sc := range []limen.Scope{org, mine} {
+		_, ok, err := s.Profile(ctx, sc)
+		must(t, err)
+		expect(t, !ok, "a removed profile %+v is there", sc)
+	}
+	must(t, s.PutProfile(ctx, profile(org, 2)))
+	p, ok, err := s.Profile(ctx, org)
+	must(t, err)
+	expect(t, ok && p.Costs.Ask == 2, "a profile saved after a removal: %+v, %v", p, ok)
+}
+
+func subjects(t *testing.T, s store.Store) {
+	got, err := s.Subjects(ctx, "o")
+	must(t, err)
+	expect(t, len(got) == 0 && got != nil, "an empty store lists %v", got)
+	for _, c := range []store.Case{Case("o", person, "a", 0), Case("o", person, "b", 1), Case("o", "s", "c", 0), Case("p", "x", "d", 0)} {
+		must(t, s.Put(ctx, c))
+	}
+	got, err = s.Subjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{person, "s"}), "Subjects(o) = %v", got)
+	must(t, s.Forget(ctx, "o", person))
+	got, err = s.Subjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{"s"}), "after a Forget, Subjects(o) = %v", got)
+	got, err = s.Subjects(ctx, "p")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{"x"}), "Subjects(p) = %v", got)
+}
+
+// Monday is the start of a week of a report.
+var Monday = time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
+
+// Week returns a kept week that starts at from, with every field set.
+func Week(from time.Time) limen.WeekReport {
+	denied, rate := 2, 0.25
+	cell := limen.ReportCell{Subjects: 6, Decisions: limen.VerdictCounts{Allow: 10, Flag: 3, Ask: 2, Block: 1},
+		FlagReviews: limen.FlagReviews{Reviews: 3, Denied: &denied},
+		Applied:     limen.SourceRates{FalseAllow: &limen.Estimate{Value: &rate, Interval: &[2]float64{0.1, 0.5}, Covered: 1, Reviews: 8, Audits: 5, Unanswered: 1}},
+		Learned:     limen.SourceRates{FalseBlock: &limen.Estimate{Covered: 0.5}},
+		Withheld:    []string{"applied.false_block", "learned.false_allow"}}
+	return limen.WeekReport{From: from, To: from.Add(limen.ReportWeek), State: limen.WeekReady, Total: &cell,
+		Agents: []limen.AgentCell{{Agent: "agt", ReportCell: cell}}, Other: &cell}
+}
+
+func sameWeek(a, b limen.WeekReport) bool {
+	x, err1 := json.Marshal(a)
+	y, err2 := json.Marshal(b)
+	return err1 == nil && err2 == nil && string(x) == string(y)
+}
+
+func weekReports(t *testing.T, s store.Store) {
+	_, ok, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, !ok, "an empty store keeps a week")
+	w := Week(Monday)
+	must(t, s.PutWeekReport(ctx, "o", w))
+	must(t, s.PutWeekReport(ctx, person, Week(Monday.Add(limen.ReportWeek))))
+	got, ok, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, ok && sameWeek(got, w), "round trip, found %v: %+v", ok, got)
+	for _, c := range []struct {
+		org  string
+		from time.Time
+		ok   bool
+	}{{"o", Monday.Add(limen.ReportWeek), false}, {"p", Monday, false}, {person, Monday.Add(limen.ReportWeek), true}} {
+		_, ok, err := s.WeekReport(ctx, c.org, c.from)
+		must(t, err)
+		expect(t, ok == c.ok, "WeekReport(%s, %v) found %v", c.org, c.from, ok)
+	}
+	// A kept week holds no person's record, so Forget leaves it.
+	must(t, s.Put(ctx, Case("o", "s", "a", 0)))
+	must(t, s.Forget(ctx, "o", "s"))
+	_, ok, err = s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, ok, "Forget removed a kept week")
+}
+
 func snapshot(t *testing.T, s store.Store, org, subject, version string) ([]byte, bool) {
 	t.Helper()
 	b, ok, err := s.Snapshot(ctx, org, subject, version)
@@ -306,6 +431,7 @@ func forget(t *testing.T, s store.Store) {
 	must(t, s.PutSnapshot(ctx, "o", "s", "1", []byte("x")))
 	must(t, s.PutSnapshot(ctx, "o", "other", "1", []byte("y")))
 	must(t, s.PutProfile(ctx, profile(limen.Scope{Org: "o"}, 1)))
+	must(t, s.PutProfile(ctx, profile(limen.Scope{Org: "o", Subject: "s"}, 1)))
 
 	must(t, s.Forget(ctx, "o", "s"))
 	cs := list(t, s, "o", "s")
@@ -325,6 +451,9 @@ func forget(t *testing.T, s store.Store) {
 	_, ok, err := s.Profile(ctx, limen.Scope{Org: "o"})
 	must(t, err)
 	expect(t, ok, "Forget removed the organization's profile")
+	_, ok, err = s.Profile(ctx, limen.Scope{Org: "o", Subject: "s"})
+	must(t, err)
+	expect(t, ok, "the store's Forget removed the person's profile, which the engine removes")
 	must(t, s.Forget(ctx, "o", "s"))
 	must(t, s.Forget(ctx, "o", "nobody"))
 }
@@ -334,21 +463,28 @@ func canceled(t *testing.T, s store.Store) {
 	cancel()
 	cs := Case("o", "s", "a", 0)
 	errs := map[string]error{
-		"Case":        func() error { _, _, err := s.Case(c, cs.Action.Key); return err }(),
-		"Put":         s.Put(c, cs),
-		"NextT":       func() error { _, err := s.NextT(c, "o", "s"); return err }(),
-		"Cases":       func() error { _, err := s.Cases(c, "o", "s"); return err }(),
-		"Profile":     func() error { _, _, err := s.Profile(c, limen.Scope{Org: "o"}); return err }(),
-		"PutProfile":  s.PutProfile(c, profile(limen.Scope{Org: "o"}, 1)),
-		"Snapshot":    func() error { _, _, err := s.Snapshot(c, "o", "s", "1"); return err }(),
-		"PutSnapshot": s.PutSnapshot(c, "o", "s", "1", []byte("x")),
-		"Forget":      s.Forget(c, "o", "s"),
+		"Case":          func() error { _, _, err := s.Case(c, cs.Action.Key); return err }(),
+		"Put":           s.Put(c, cs),
+		"NextT":         func() error { _, err := s.NextT(c, "o", "s"); return err }(),
+		"Cases":         func() error { _, err := s.Cases(c, "o", "s"); return err }(),
+		"Profile":       func() error { _, _, err := s.Profile(c, limen.Scope{Org: "o"}); return err }(),
+		"PutProfile":    s.PutProfile(c, profile(limen.Scope{Org: "o"}, 1)),
+		"Snapshot":      func() error { _, _, err := s.Snapshot(c, "o", "s", "1"); return err }(),
+		"PutSnapshot":   s.PutSnapshot(c, "o", "s", "1", []byte("x")),
+		"Forget":        s.Forget(c, "o", "s"),
+		"DeleteProfile": s.DeleteProfile(c, limen.Scope{Org: "o"}),
+		"Subjects":      func() error { _, err := s.Subjects(c, "o"); return err }(),
+		"WeekReport":    func() error { _, _, err := s.WeekReport(c, "o", Monday); return err }(),
+		"PutWeekReport": s.PutWeekReport(c, "o", Week(Monday)),
 	}
 	for name, err := range errs {
 		expect(t, errors.Is(err, context.Canceled), "%s under a canceled context: %v", name, err)
 	}
 	_, ok := get(t, s, cs)
 	expect(t, !ok, "a Put under a canceled context stored the case")
+	_, ok, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, !ok, "a PutWeekReport under a canceled context kept the week")
 }
 
 func copies(t *testing.T, s store.Store) {
@@ -377,6 +513,19 @@ func copies(t *testing.T, s store.Store) {
 	b[0] = 'Y'
 	b, _ = snapshot(t, s, "o", "s", "1")
 	expect(t, string(b) == "state", "a write to a returned snapshot reached the store: %q", b)
+
+	w := Week(Monday)
+	must(t, s.PutWeekReport(ctx, "o", w))
+	*w.Total.FlagReviews.Denied = 99
+	w.Agents[0].Agent = "mallory"
+	kept, _, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, *kept.Total.FlagReviews.Denied == 2 && kept.Agents[0].Agent == "agt", "a write to the caller's week reached the store")
+	kept.Agents[0].Agent = "mallory"
+	kept.Total.Withheld[0] = "x"
+	kept, _, err = s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, kept.Agents[0].Agent == "agt" && kept.Total.Withheld[0] == "applied.false_block", "a write to a returned week reached the store")
 }
 
 // RunReopen runs the persistence contract against a store that open
@@ -400,7 +549,11 @@ func keepsEverything(t *testing.T, open func(t *testing.T, dir string) store.Sto
 	cases[0].Digest = "replaced"
 	must(t, s.Put(ctx, cases[0]))
 	must(t, s.PutProfile(ctx, profile(limen.Scope{Org: "o", Kind: "tool"}, 1.5)))
+	must(t, s.PutProfile(ctx, profile(limen.Scope{Org: "o", Subject: subject}, 2)))
+	must(t, s.PutProfile(ctx, profile(limen.Scope{Org: "o", Agent: "agt"}, 1)))
+	must(t, s.DeleteProfile(ctx, limen.Scope{Org: "o", Agent: "agt"}))
 	must(t, s.PutSnapshot(ctx, "o", subject, "1", []byte("state")))
+	must(t, s.PutWeekReport(ctx, "o", Week(Monday)))
 	must(t, s.Close())
 
 	s = open(t, dir)
@@ -414,8 +567,20 @@ func keepsEverything(t *testing.T, open func(t *testing.T, dir string) store.Sto
 	p, ok, err := s.Profile(ctx, limen.Scope{Org: "o", Kind: "tool"})
 	must(t, err)
 	expect(t, ok && p.Costs.Ask == 1.5, "after a reopen the profile is %+v, %v", p, ok)
+	p, ok, err = s.Profile(ctx, limen.Scope{Org: "o", Subject: subject})
+	must(t, err)
+	expect(t, ok && p.Costs.Ask == 2, "after a reopen the person's profile is %+v, %v", p, ok)
+	_, ok, err = s.Profile(ctx, limen.Scope{Org: "o", Agent: "agt"})
+	must(t, err)
+	expect(t, !ok, "after a reopen a removed profile is back")
 	b, ok := snapshot(t, s, "o", subject, "1")
 	expect(t, ok && string(b) == "state", "after a reopen the snapshot is %q, %v", b, ok)
+	w, ok, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, ok && sameWeek(w, Week(Monday)), "after a reopen the kept week is %+v, %v", w, ok)
+	subs, err := s.Subjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(subs, []string{subject}), "after a reopen Subjects(o) = %v", subs)
 	got := next(t, s, "o", subject)
 	expect(t, got > 7, "after a reopen NextT = %d, an ordinal a stored case holds", got)
 }
@@ -425,6 +590,7 @@ func keepsForget(t *testing.T, open func(t *testing.T, dir string) store.Store) 
 	s := open(t, dir)
 	must(t, s.Put(ctx, Case("o", "s", "a", 0)))
 	must(t, s.PutSnapshot(ctx, "o", "s", "1", []byte("x")))
+	must(t, s.PutWeekReport(ctx, "o", Week(Monday)))
 	must(t, s.Forget(ctx, "o", "s"))
 	must(t, s.Close())
 	s = open(t, dir)
@@ -433,4 +599,10 @@ func keepsForget(t *testing.T, open func(t *testing.T, dir string) store.Store) 
 	expect(t, len(cs) == 0, "a forgotten subject came back after a reopen: %v", ids(cs))
 	_, ok := snapshot(t, s, "o", "s", "1")
 	expect(t, !ok, "a forgotten snapshot came back after a reopen")
+	_, ok, err := s.WeekReport(ctx, "o", Monday)
+	must(t, err)
+	expect(t, ok, "a kept week was lost with a forgotten subject")
+	subs, err := s.Subjects(ctx, "o")
+	must(t, err)
+	expect(t, len(subs) == 0, "a forgotten subject is listed after a reopen: %v", subs)
 }

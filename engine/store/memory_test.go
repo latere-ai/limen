@@ -28,6 +28,15 @@ func TestMemoryRefusesUnencodable(t *testing.T) {
 	if _, ok, _ := m.Case(context.Background(), c.Action.Key); ok {
 		t.Error("an unencodable case was stored")
 	}
+	w := storetest.Week(storetest.Monday)
+	nan := math.NaN()
+	w.Total.Applied.FalseAllow.Value = &nan
+	if err := m.PutWeekReport(context.Background(), "o", w); err == nil {
+		t.Error("kept a week that cannot be encoded")
+	}
+	if _, ok, _ := m.WeekReport(context.Background(), "o", storetest.Monday); ok {
+		t.Error("an unencodable week was kept")
+	}
 	if err := m.Close(); err != nil {
 		t.Error(err)
 	}
