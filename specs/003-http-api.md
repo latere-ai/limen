@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md]
 affects: [api/, authorizer/, client/, cmd/limend/, server/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -42,16 +42,21 @@ refuses any other at start (exit 2). The client takes the same prefix as
 | POST | `/v1/answers` | `Answer` | 204 | `case.answer` | `Ledger.Answer` |
 | GET | `/v1/cases?org&subject&action_id&pending&cursor&limit` | none | 200 `Page` | `case.list` | `Ledger.Cases` |
 | GET | `/v1/reliability?org&subject&of&from&to` | none | 200 `Reliability` | `reliability.read` | `Ledger.Reliability` |
-| GET | `/v1/profiles?org&kind&agent` | none | 200 `Profile` (the effective one) | `profile.read` | `Admin.Profile` |
+| GET | `/v1/profiles?org&kind&agent&subject` | none | 200 `Profile` (the effective one) | `profile.read` | `Admin.Profile` |
 | PUT | `/v1/profiles` | `Profile` | 200 `Profile` (as stored) | `profile.write` | `Admin.PutProfile` |
+| DELETE | `/v1/profiles?org&kind&agent&subject` | none | 204 | `profile.write` | `Admin.DeleteProfile` |
 | POST | `/v1/replays?keep` | NDJSON of `ReplayRecord` | 200 `ReplayReport` | `replay.create` | `Admin.Replay` |
 | POST | `/v1/subjects/forget` | `{"org", "subject"}` | 204 | `subject.forget` | `Admin.Forget` |
 | GET | `/v1/explanations?org&subject&action_id` | none | 200 `Explanation` | `case.list` | `Explainer.Explain` |
 | GET | `/v1/learned?org&subject&agent&kind` | none | 200 `Learned` | `case.list` | `Explainer.Learned` |
 | POST | `/v1/previews` | `PreviewRequest` | 200 `Preview` | `reliability.read` | `Explainer.Preview` |
+| GET | `/v1/reports?org&from&to` | none | 200 `Report` | `report.read` | `Reporter.Report` |
 
-The last three are [[009-explanations]]'s, added 2026-11-01 with the code
-`no_case` (404) for an explanation of an action Limen has no record of.
+The explanations, learned and previews routes are
+[[009-explanations]]'s, added 2026-11-01 with the code `no_case` (404)
+for an explanation of an action Limen has no record of. The removal of
+a profile, `subject` on the profile routes, and the reports are
+[[010-organizations]]'s, added 2026-11-02 (Amendments).
 
 Every route answers the errors of [[002-contract]] that its contract
 method can return, plus `unauthenticated`, `forbidden`, `body_too_large`
@@ -73,6 +78,7 @@ it acts, about a resource whose kind and fields are fixed per action:
 | `profile.read`, `profile.write` | `Profile` | `org`, `action_kind`, `agent` (empty when unscoped), and `subject` for a person's own context (below). The field is `action_kind`, not `kind`, because the shared authorizer's flat wire object reserves `kind` for the resource kind |
 | `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own |
 | `subject.forget` | `Subject` | `org`, `subject` |
+| `report.read` | `Report` | `org` ([[010-organizations]]) |
 
 With no endpoint configured, `limend` applies the shared owner policy: a
 caller acts on cases and reports whose `subject` is the caller's own

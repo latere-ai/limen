@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [engine/, engine/kernel/, engine/gp/, engine/featurize/, engine/store/]
 effort: large
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -246,15 +246,21 @@ the indexes are for a shared store.
 | `subjects` | org, subject | `next_t` |
 | `cases` | org, subject, action_id | `t`, `received_at`, `digest` (SHA-256 of the JSON of the action without its input, which is never kept and so cannot tell two actions apart later), `action` (without input), `features` (by featurizer version), `prediction`, `decision`, `decided_at` |
 | `answers` | org, subject, action_id, seq | `approve`, `by`, `at`, `review` |
-| `profiles` | org, kind, agent (empty when unscoped) | `costs`, `audit_rate`, `certify`, `updated_at` |
+| `profiles` | org, kind, agent (empty when unscoped), subject (empty unless a person's own profile) | `costs`, `audit_rate`, `certify`, `updated_at` |
 | `snapshots` | org, subject, version | `fitted_through_t`, `blob`, `created_at` |
+| `reports` | org, week (its first day) | the kept week as a report first showed it: `from`, `to`, `state`, `total`, `agents`, `other` |
 
 An index on (org, subject, t) serves fitting and windows; a partial
 index on cases whose decision is shown and that have no review serves the
 review queue. The file store keeps an append-only, fsynced NDJSON log of
 cases, decisions and answers per subject directory, a snapshot file per
-version, and one profiles file per organization. `Forget` removes a
-subject's rows from every table in one transaction, or its directory.
+version, one profiles file per organization, and one file per kept week.
+`Forget` removes a subject's rows from every table but `reports` in one
+transaction, or its directory.
+
+*Amended 2026-11-02:* [[010-organizations]] adds `subject` to a
+profile's key, for a person's own profile, and the `reports` table of
+kept weeks. A kept week holds no person's record, so `Forget` leaves it.
 
 ### What is ported and what is rewritten
 
@@ -307,7 +313,9 @@ ledger and fits off the hot path, in process and behind `limend`, and it
 is in production behind hosted Topos. Every criterion has a test in the
 tree. Two parts of the design are not built: a second model version
 beside the first, and a store that more than one process shares. The
-spec stays `testing` until they are built or moved to their own spec.
+owner decided on 2026-11-02 that both, and an asserted bound for
+criterion 6, come after Limen is open source. The spec stays `testing`
+until they are built or moved to their own spec.
 
 ### What was built
 
@@ -327,11 +335,11 @@ spec stays `testing` until they are built or moved to their own spec.
 | 3 | `TestShellClasses`, `TestShellDestructive`, `TestShellOutsideWorkspace`, `TestShellPrograms`, `TestRedirection`, `TestShellDepthBound`, `FuzzReadShell` |
 | 4 | `TestLearns`, `TestForgetDropsTheModel`, `TestPrior`, `TestCostsThresholds`; the conformance case `UnknownIsAnAsk` |
 | 5 | `TestTimeCountsDecisions`; the store rules `NextT` and `NextTConcurrent` |
-| 6 | `TestPredictionNeverFits`, on the fake clock of `testing/synctest`, and `TestWarmPredictionAt512` (`engine/fit_test.go`); `BenchmarkPredictWarm512` reports a 99th percentile of 2.7 ms on an Apple M5 Pro. The gate does not assert the 5 ms bound, because under the race detector a prediction takes about 63 ms |
+| 6 | `TestPredictionNeverFits`, on the fake clock of `testing/synctest`, and `TestWarmPredictionAt512` (`engine/fit_test.go`); `BenchmarkPredictWarm512` reports a 99th percentile of 2.7 ms on an Apple M5 Pro. The gate does not assert the 5 ms bound, because under the race detector a prediction takes about 63 ms. An asserted bound on a reference runner is planned after Limen is open source |
 | 7 | `TestBackgroundFitWithinFiveSeconds`, on the fake clock; also `TestBackgroundFitAndReload`. A fit takes no fake time, so the five seconds of wall time rest on the one second debounce and `BenchmarkFit512`, about 160 ms |
 | 8 | `TestCacheStaysWithinTheBudget`, `TestEvictionReloads`; one model larger than the whole budget stays alone, because a prediction needs the model it reads |
 | 9 | `TestNoFileHoldsTheInput` (`engine/store/file`), which searches every file of a ledger for a marker; also the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestLabelKeepsNoInput` |
-| 10 | partly: `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version. Two versions side by side are not built |
+| 10 | partly: `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version. Two versions side by side are not built, and are planned after Limen is open source |
 | 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store) |
 
 ### What diverges from the design as written
@@ -351,5 +359,6 @@ spec stays `testing` until they are built or moved to their own spec.
 
 | Open | Why |
 |---|---|
-| a second model version that fits beside the first, and the operator's switch after a replay comparison | only `features/1` and version 1 exist; the cache in memory is keyed by organization and subject |
+| a second model version that fits beside the first, and the operator's switch after a replay comparison (criterion 10) | planned after Limen is open source; only `features/1` and version 1 exist, and the cache in memory is keyed by organization and subject |
 | a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source |
+| an asserted 99th percentile of a prediction (criterion 6) | planned after Limen is open source; the gate runs the suite under the race detector, where a prediction takes about 63 ms |

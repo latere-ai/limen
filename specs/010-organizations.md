@@ -1,6 +1,6 @@
 ---
 title: "Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person"
-status: testing
+status: complete
 track: core
 depends_on: [002-contract.md, 003-http-api.md, 004-engine.md, 006-conformance.md, 008-ledger-and-estimation.md, 009-explanations.md]
 affects: [profile.go, service.go, report.go, authorizer/, estimate/, engine/, engine/store/, stub/, conformance/, client/, server/, api/openapi.yaml, docs/api.md, docs/terms.md, docs/integrating.md, CHANGELOG.md]
@@ -623,10 +623,14 @@ minor release, v0.5.0.
 
 ## Outcome
 
-Recorded on 2026-11-02, before the release. The three parts are built,
-and every criterion has a passing test in the tree. The spec stays
-`testing` until the release with them, v0.5.0, is in production; then it
-moves to `complete`.
+Recorded on 2026-11-02. The three parts are built, and every criterion
+has a passing test in the tree. They shipped in v0.5.0, and v0.5.1,
+which changes only the documents, is in production since 2026-11-02, in
+hosted mode behind an authorization endpoint (`LIMEN_AUTHORIZER_URL`).
+From the same day, hosted Topos v0.68.0 keys the calls of an
+organization's agents by the organization (`TOPOS_DECISIONS_ORG=agent`,
+[[005-adapters]]), so the cost profiles and the report of that
+organization apply to them.
 
 ### What was built
 

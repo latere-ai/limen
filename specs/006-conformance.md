@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -31,6 +31,7 @@ without the engine.
 type Target struct {
 	New     func(t *testing.T) limen.Service
 	Steered func(t *testing.T, predict func(limen.Action) (approve, uncertainty float64)) limen.Service
+	Clocked func(t *testing.T, now func() time.Time) limen.Service // added 2026-11-02
 }
 
 func Run(t *testing.T, target Target)
@@ -79,6 +80,12 @@ not the case, stamps time.
 | forget | `ForgetPerOrg` | after `Forget(org, subject)` the subject has no cases, reviews or reports in that org and is untouched in another |
 | fail-closed | `ErrorIsAsk`, `TimeoutIsAsk` | the target wrapped in `FailClosed` with a failing or a hanging inner predictor returns `ask` from `learned/unavailable` for the key |
 
+*Amended 2026-11-02:* [[010-organizations]] adds `Clocked`, a fresh
+service whose clock the case sets, and 15 cases for the removal of a
+profile, a person's own profile and the report of an organization,
+listed in that spec. A case that needs a closed week runs against
+`Clocked`, and a target without it skips that case.
+
 ### The stub
 
 ```go
@@ -116,16 +123,16 @@ test in the tree.
 
 | Piece | Where |
 |---|---|
-| the suite, `Run(t, Target)` with `Steered` | `conformance/` |
+| the suite, `Run(t, Target)` with `Steered` and `Clocked` | `conformance/` |
 | the stub, `New(Options)` with `Predict` and `Clock` | `stub/` |
 | the runs of the suite | `TestRunAgainstTheStub`, `TestRunUnsteered` (`conformance/`); `TestConformance` (`stub/`, `engine/`); `TestConformanceInline` and `TestEngineConformance` (the engine with each store); `TestConformance` in `cmd/limend` (the client against a started `limend`); `TestConformanceEngine` and `TestConformanceStub` (`client/`) |
 
 | # | Proof in the tree |
 |---|---|
-| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 29 cases, in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
+| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 44 cases, the 29 of this spec and the 15 of [[010-organizations]], in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above |
-| 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same |
+| 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same; `TestEngineAndStubReportOrganizationsAlike` does the same for the report of an organization |
 | 5 | the `suite` gate, at 90% or more for each package |
 
 ### What diverges from the design as written
@@ -154,6 +161,7 @@ are merged:
 | `Previews` | `Previews`, `PreviewErrors` |
 | `Certificate` | `Certificate` |
 | none | `SteeredVerdicts`, `LaterAnswersNeverEstimate`, `ExplanationsOfSteeredVerdicts` |
+| the 15 cases of [[010-organizations]] | the same names, from `ProfileRemoved` to `ReportNamesNoPerson` |
 
 | What it said | What was built | Why |
 |---|---|---|

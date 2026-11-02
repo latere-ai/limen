@@ -29,13 +29,22 @@ engine ports, is at that repository's tag
 [`v3`](https://github.com/changkun/trustcalib/tree/v3/go) and no longer
 on its main branch. A spec that cites a proposition cites that paper.
 
-Limen v0.3.0 is in production since 2026-11-01. Each spec's Outcome
-records what is built, the tests that prove it, and what is not built.
-Specs 001, 002, 003, 006, 008 and 009 are complete. Spec 004 is at
-`testing`: a second model version and a shared store are not built.
-Spec 005's hooks are not built, and spec 007 is a rule for
-deployments. Spec 010 is at `testing`: it is built, and it moves to
-`complete` when its release is in production.
+Limen is in production since 2026-11-01, at v0.5.1 since 2026-11-02.
+Each spec's Outcome records what is built, the tests that prove it, and
+what is not built. Specs 001, 002, 003, 006, 008, 009 and 010 are
+complete. Spec 004 is at `testing`: a second model version beside the
+first and a shared store are not built. Spec 005's hooks are not built,
+and spec 007 is a rule for deployments.
+
+The owner decided on 2026-11-02 what comes after Limen is open source:
+the hooks for Claude Code and Codex (005, criteria 1 to 5), a published
+table of `verdict.Decide` cases (005, criterion 6), the shared store on
+Storage ([Arca](https://github.com/latere-ai/arca)) and two model
+versions side by side (004, with criterion 10), an asserted 99th
+percentile of a prediction (004, criterion 6), the reports of the
+evidence gates (007, criteria 1 to 5), and the signals of a model judge
+(007, gate 4). The public reference of the API under `/v1/oversight` and
+the public container image come with the open.
 
 ## Layout
 
@@ -85,7 +94,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
-| [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | testing |
+| [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | complete |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a

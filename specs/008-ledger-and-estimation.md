@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md]
 affects: [estimate/, stub/, engine/, reliability.go, answer.go, replay.go, cmd/limen/]
 effort: medium
 created: 2026-10-02
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -174,6 +174,7 @@ passing test in the tree.
 | with no review the interval is [0, 1] | a report has no interval when its value is `null`; [0, 1] appears when covered allows exist and none was shown | an interval goes with a value |
 | with `keep`, replayed records enter as if they had arrived live | a kept record becomes a decision with its action and no prediction, so `of=learned` finds no rows in kept history | Limen's would-be verdicts are in the `ReplayReport`, not in the ledger |
 | a case holds the action, the prediction, the decision and the answers | it also holds its `label`, the label version, and the model that predicted it (`predicted_by`) | added by [[009-explanations]] |
+| criterion 3: the mean estimate is within three standard errors of the truth | `TestRateIsUnbiased` holds the mean of 4000 seeded draws within a fixed 0.004 of the truth, about four standard errors of that mean | a fixed bound does not depend on the draws; at four standard errors a correct estimator fails about once in 15,000 seeds, at three about once in 370 |
 
 ### What this leaves open
 

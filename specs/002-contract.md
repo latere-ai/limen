@@ -3,10 +3,10 @@ title: "Contract: the Go types, the Predictor, Ledger and Admin interfaces, the 
 status: complete
 track: core
 depends_on: [001-architecture.md]
-affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go]
+affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, report.go]
 effort: small
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -224,9 +224,9 @@ a passing test in the tree.
 
 | Piece | Where |
 |---|---|
-| the types and their `Validate` | `action.go`, `prediction.go`, `decision.go`, `answer.go`, `profile.go`, `reliability.go`, `replay.go`, `explanation.go` |
+| the types and their `Validate` | `action.go`, `prediction.go`, `decision.go`, `answer.go`, `profile.go`, `reliability.go`, `replay.go`, `explanation.go`, `report.go` |
 | the cost arithmetic, `DefaultProfile`, `CertificationSize` | `profile.go` |
-| the interfaces and `FailClosed` | `service.go`, `explanation.go` |
+| the interfaces and `FailClosed` | `service.go`, `explanation.go`, `report.go` (`Reporter`, from [[010-organizations]]) |
 | the error table and its sentences | `errors.go` |
 
 | # | Proof in the tree |

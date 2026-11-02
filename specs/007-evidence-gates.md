@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 008-ledger-and-estimation.md]
 affects: [docs/integrating.md, importer/topos/, cmd/limen/]
 effort: small
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -195,7 +195,9 @@ evidence before Limen decides.
 Recorded on 2026-11-01. This spec is a rule for deployments, not code.
 The status stays `drafted`: the first deployment followed the amendment
 above, and criteria 2, 4 and 5 need work in this repository before the
-gates can be run as written.
+gates can be run as written. The owner decided on 2026-11-02 that the
+reports of the gates, criteria 1 to 5, and the signals of a model judge
+for hosted Topos, gate 4, come after Limen is open source.
 
 ### What was built
 
@@ -209,7 +211,9 @@ gates can be run as written.
 
 | Open | Why |
 |---|---|
-| criterion 2 | some quantities the gates name are not fields: the rules' ask share and Limen's would-be ask share in shadow, gate 3's burden, the approval rate of asks, `unanswered` as a share of shown cases, and gate 4's set of misjudged commands; they need `Cases` |
-| criterion 3 | Topos's shadow mode applies its rules unchanged and draws no review, so the random review gate 2 describes does not happen there |
-| criterion 4 | no `engine/` test per stop condition; the ledger cannot show three of them: a `Decision` has no ceiling, a fallback prediction is not recorded, and a decision whose probability breaks the verdict's rule is refused at `Record` |
-| criterion 5 | neither Limen nor Topos keeps a per-subject stop; Topos's mode applies to the whole installation |
+| criterion 1 | planned after Limen is open source; it is a review of a deployment's record, and the first deployment followed the amendment above |
+| criterion 2 | planned after Limen is open source; some quantities the gates name are not fields: the rules' ask share and Limen's would-be ask share in shadow, gate 3's burden, the approval rate of asks, `unanswered` as a share of shown cases, and gate 4's set of misjudged commands; they need `Cases` |
+| criterion 3 | planned after Limen is open source; Topos's shadow mode applies its rules unchanged and draws no review, so the random review gate 2 describes does not happen there |
+| criterion 4 | planned after Limen is open source; no `engine/` test per stop condition; the ledger cannot show three of them: a `Decision` has no ceiling, a fallback prediction is not recorded, and a decision whose probability breaks the verdict's rule is refused at `Record` |
+| criterion 5 | planned after Limen is open source; neither Limen nor Topos keeps a per-subject stop; Topos's mode applies to the whole installation |
+| gate 4 for hosted Topos, the signals of a model judge | planned after Limen is open source; hosted Topos sends its risk score as a signal, not the verdict of a model judge |

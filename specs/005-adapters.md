@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 003-http-api.md]
 affects: [cmd/limen-hook/, client/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -142,6 +142,24 @@ person's answer to a network approval as an answer to the call whose
 connection it refused. Hosted Topos runs in `learned` mode against a
 hosted `limend` since 2026-11-01 ([[007-evidence-gates]], Amendments).
 
+*Amended 2026-11-02:* Topos v0.68.0 (Topos spec 100) adds
+`TOPOS_DECISIONS_ORG`, which picks the organization of each call's key
+and so which organization's profiles apply. `initiator`, the default,
+keys every call by the person's own context, the rendered subject of
+the person who started the session. `agent` keys a call of a session
+whose agent an organization owns by that organization's id, and every
+other call as `initiator`; the subject is always the person who started
+the session. Each `agent.tool_use` records the organization of its key
+as `decision_org`, so a client that reads Limen's records of a call
+reads the organization from it, and an event without it was keyed by
+the person's own context. A person's answers in an organization and in
+their own context stay apart. Hosted Topos runs with `agent` since
+2026-11-02. From v0.68.0 Topos also names the layer that decided in a
+decision's source, `topos/<mode>/<decided_by>` (for example
+`topos/progressive/learned` or `topos/confirm/always_allow`), the
+source a replay of its log gives; a decision without a layer keeps
+`topos/<mode>`.
+
 ### Any other harness, over HTTP
 
 ```
@@ -176,9 +194,10 @@ drawn.
 Recorded on 2026-11-01. Nothing of this spec's own is built in this
 repository: `cmd/limen-hook` does not exist, and no criterion has a test
 here. The owner decided on 2026-11-01 that the hooks for Claude Code and
-Codex come after Limen is open source. The spec stays `drafted` until
-then, and its open questions on the Claude Code hook events and the
-Codex extension point stay open.
+Codex come after Limen is open source, and on 2026-11-02 that the
+published table of criterion 6 comes after it too. The spec stays
+`drafted` until then, and its open questions on the Claude Code hook
+events and the Codex extension point stay open.
 
 ### What was built
 
@@ -192,7 +211,8 @@ Codex extension point stay open.
 
 | What it said | What was built | Why |
 |---|---|---|
-| hosted runners are not wired | wired from Topos v0.63.0; `learned` mode from v0.66.0 | amended above |
+| hosted runners are not wired | wired from Topos v0.63.0; `learned` mode from v0.66.0; the organization of a call's key from v0.68.0 | amended above |
+| the source names `topos/confirm` and `topos/progressive` | `topos/<mode>/<decided_by>` from Topos v0.68.0 | the ledger reports how often each layer of the rules is wrong (amended above) |
 | Topos's tests use the stub | Topos tests its decision point against its own fake service over HTTP | Topos does not import this module; it speaks the HTTP API ([[006-conformance]]) |
 | `Cases` with `pending` for Topos's review list | not used by Topos | Topos's review list is not built |
 
@@ -200,5 +220,5 @@ Codex extension point stay open.
 
 | Open | Why |
 |---|---|
-| `limen-hook` for Claude Code and for Codex, and criteria 1 to 5 | deferred until after Limen is open source |
-| criterion 6: a published table of `verdict.Decide` cases in `docs/` | the Go table lives in the `verdict` package's tests; no table is published yet |
+| `limen-hook` for Claude Code and for Codex, and criteria 1 to 5 | planned after Limen is open source |
+| criterion 6: a published table of `verdict.Decide` cases in `docs/` | planned after Limen is open source; the Go table lives in the `verdict` package's tests |
