@@ -6,7 +6,10 @@
 //
 // A prediction featurizes the action (engine/featurize), reads the
 // subject's fitted model, and suggests the verdict the effective cost
-// profile's thresholds give the approval probability. It never fits: a model
+// profile's thresholds give the approval probability, held to the answer
+// minimum (limen.MinAllows, limen.MinSessions): an allow stays an ask
+// until the subject's approvals of the action's label meet it, which a
+// prediction counts from the subject's cases. It never fits: a model
 // is an immutable [gp.Posterior] read through an atomic pointer, refitted off
 // the hot path when answers arrive, either by background fitters after a
 // debounce (the default) or, for a replay, inline once enough answers are
