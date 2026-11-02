@@ -38,8 +38,9 @@
 //     The rule within the layer (decided_by_rule) is not part of the
 //     source: it is free text, such as a pattern, and a source for each
 //     pattern divides the answers too finely for an estimate. Topos
-//     sends a live decision under "topos/<mode>" alone, so the sources of
-//     a kept replay are finer than those of a live session, and "applied"
+//     v0.68.0 and later send a live decision under the same source, and
+//     earlier versions under "topos/<mode>" alone, so the sources of a
+//     kept replay can be finer than those of a live session; "applied"
 //     reports both;
 //   - the answer comes from the person's answers to the call, in the order
 //     Topos sends them to a decision service: each user.tool_confirmation
