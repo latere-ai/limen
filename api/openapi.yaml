@@ -543,10 +543,11 @@ paths:
         the model's latent mean, the split of that mean into what the model
         knows about this kind of action and about the person lately, and
         for an ask whether it comes from too few answers (unsure) or from
-        answers that disagree (split). The explanation is by the person's
-        current model; predicted_by names the model that made the recorded
-        prediction, so a client can say the model has learned since. A
-        decision point never shows an explanation to an agent.
+        the person's answers with the probability still inside the ask
+        band (split). The explanation is by the person's current model;
+        predicted_by names the model that made the recorded prediction, so
+        a client can say the model has learned since. A decision point
+        never shows an explanation to an agent.
       x-limen-action: case.list
       x-limen-resource:
         kind: Case
@@ -866,7 +867,7 @@ components:
           description: The share of the prior variance at the action that the subject's answers removed.
         ask_kind:
           $ref: "#/components/schemas/AskKind"
-          description: Present when verdict is ask. unsure means the ask rests on little evidence, so more answers will move it; split means the answers disagree, so they will not.
+          description: Present when verdict is ask. unsure means evidence_ratio is below 0.5, so the ask rests on little evidence and more answers can move it. split means evidence_ratio is 0.5 or more and approve is still inside the ask band, on answers that disagree or that agree but not yet past the thresholds; more answers that agree can still move it out.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
         profile:
@@ -1177,7 +1178,7 @@ components:
       required: [source, answers]
     AskKind:
       type: string
-      description: The uncertainty behind a suggested ask. unsure is little evidence, which more answers will move; split is evidence that disagrees, which they will not.
+      description: The uncertainty behind a suggested ask, by the evidence ratio. unsure is below 0.5, little evidence, which more answers can move. split is 0.5 or more with the approval probability still inside the ask band; the answers disagree, or agree but not yet past the thresholds, and more answers that agree can still move it out. split alone does not say the answers disagree; an explanation's evidence with an approval and a denial of one label, or a learned entry with approved and denied both above zero, does.
       enum: [unsure, split]
     Parts:
       type: object

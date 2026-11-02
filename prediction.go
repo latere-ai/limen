@@ -29,10 +29,13 @@ type Prediction struct {
 	// action unlike any answered one, near 1 for a well-known one.
 	EvidenceRatio float64 `json:"evidence_ratio"`
 	// AskKind is [AskUnsure] or [AskSplit] when Verdict is [Ask]: whether
-	// the ask rests on little evidence, so more answers will move it, or on
-	// answers that disagree, so they will not. A decision point can let the
-	// rules decide an unsure ask and keep a split one (spec 009). Empty for
-	// an allow or a block.
+	// the ask rests on little evidence (EvidenceRatio below 0.5), or on
+	// the subject's answers with Approve still inside the ask band. Those
+	// answers disagree, or agree but not yet past the thresholds, and more
+	// answers that agree can still move a split ask out of the band. A
+	// decision point can let the rules decide an unsure ask and keep a
+	// split one, which rests on the person's own answers and not on too
+	// few of them (spec 009). Empty for an allow or a block.
 	AskKind string `json:"ask_kind,omitempty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a

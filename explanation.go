@@ -33,13 +33,24 @@ func (k Key) Validate() error {
 	return p.err(CodeInvalidQuery)
 }
 
-// The two kinds of uncertainty behind a suggested [Ask].
+// The two kinds of uncertainty behind a suggested [Ask], told apart by
+// the evidence ratio at the action (spec 009).
 const (
-	// AskUnsure is an ask on little evidence: the person's answers say
-	// little about this action, and more answers will move it.
+	// AskUnsure is an ask on little evidence: the person's answers
+	// removed less than half of the prior variance at the action, so they
+	// say little about it, and more answers can move it.
 	AskUnsure = "unsure"
-	// AskSplit is an ask on evidence: the answers say a lot and disagree,
-	// so more answers will not move it (paper, Proposition 3).
+	// AskSplit is an ask on evidence: the person's answers removed half
+	// of the prior variance at the action or more, and the approval
+	// probability is still inside the profile's ask band. The answers
+	// disagree, or agree but not yet strongly enough for the thresholds,
+	// as two approvals of one action can under a 0.90 allow threshold.
+	// More answers that agree can still move it out of the band; answers
+	// that disagree keep it there. The paper's Proposition 3 holds only in
+	// the limit of much evidence with mixed answers. AskSplit alone does
+	// not say the answers disagree: an [Explanation] whose Evidence holds
+	// an approval and a denial with one label does, as does a
+	// [LearnedEntry] with Approved and Denied both above zero.
 	AskSplit = "split"
 )
 
@@ -149,7 +160,8 @@ type Learned struct {
 // model suggests for it now: at its most recent case, moved to the
 // person's current time, under the profile that applies to it.
 // EvidenceRatio and AskKind are an explanation's at that point, so a scale
-// can draw an unsure ask apart from a split one.
+// can draw an unsure ask apart from a split one. A split entry has answers
+// that disagree only when Approved and Denied are both above zero.
 type LearnedEntry struct {
 	Label         string     `json:"label"`
 	Kind          string     `json:"kind"`
