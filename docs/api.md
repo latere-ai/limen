@@ -610,6 +610,11 @@ the first time that a report reads it. A later answer, a replay with
 `keep`, and a forget do not change a kept week. Thus two reports cannot
 show the difference of one person.
 
+> **Warning:** A replay with `keep` does not add history to a kept week.
+> If you replay the history of an organization, do the replay before you
+> read the report for those weeks. Otherwise these weeks stay as the
+> first report showed them, for example `too_few`.
+
 `total`, each entry of `agents`, and `other` have these fields:
 
 | Field | Meaning |
