@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.5.0 - 2026-11-02
+
 ### Added
 
 - `DELETE /v1/profiles?org&kind&agent&subject` removes the cost profile
