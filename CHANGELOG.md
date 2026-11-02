@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.5.1 - 2026-11-02
+
 ### Fixed
 
 - The documents gave a wrong meaning for an `ask` with `ask_kind`
