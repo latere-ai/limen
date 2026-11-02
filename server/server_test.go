@@ -501,7 +501,7 @@ func TestPersonProfileOwnership(t *testing.T) {
 		return New(svc, Options{Authenticator: StaticToken(tok, who), Authorizer: OwnerPolicy{Admins: []string{admin}}})
 	}
 	own := func(who string) limen.Profile {
-		return limen.Profile{Scope: limen.Scope{Org: "o", Subject: who}, Costs: limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}, AuditRate: 0.1}
+		return limen.Profile{Org: "o", Subject: who, Costs: limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}, AuditRate: 0.1}
 	}
 	bobs := as(bob)
 	if w := do(t, bobs, req{http.MethodPut, "/v1/profiles", body(t, own(bob))}); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"subject":"`+bob+`"`) {

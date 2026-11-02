@@ -28,7 +28,7 @@ func kase(subject, agent string, v limen.Verdict, prob float64, learned limen.Ve
 	if agent != "" {
 		a.Actor = &limen.Actor{Kind: "agent", ID: agent}
 	}
-	c := ReportCase{Case: limen.Case{Action: a, Decision: &limen.Decision{Key: k, Verdict: v, ReviewProbability: prob, Source: "rules/1"}},
+	c := ReportCase{Action: a, Decision: &limen.Decision{Key: k, Verdict: v, ReviewProbability: prob, Source: "rules/1"},
 		ReceivedAt: monday.Add(time.Hour)}
 	if learned != "" {
 		c.Prediction = &limen.Prediction{Key: k, Verdict: learned, Source: "learned/1"}
