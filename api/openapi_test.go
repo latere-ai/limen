@@ -108,6 +108,9 @@ var schemaTypes = map[string]any{
 	"ModelRef": limen.ModelRef{}, "Parts": limen.Parts{}, "Evidence": limen.Evidence{}, "Explanation": limen.Explanation{},
 	"LearnedEntry": limen.LearnedEntry{}, "TrendPoint": limen.TrendPoint{}, "Learned": limen.Learned{},
 	"PreviewRequest": limen.PreviewRequest{}, "Preview": limen.Preview{},
+	"Report": limen.Report{}, "WeekReport": limen.WeekReport{}, "ReportCell": limen.ReportCell{},
+	"AgentCell": limen.AgentCell{}, "VerdictCounts": limen.VerdictCounts{}, "FlagReviews": limen.FlagReviews{},
+	"SourceRates": limen.SourceRates{},
 }
 
 func TestSchemasMatchTypes(t *testing.T) {
@@ -177,6 +180,10 @@ func TestEnumsMatchConstants(t *testing.T) {
 	check("Suggestion", strs(at(t, schemas, "Suggestion")["enum"]),
 		string(limen.Allow), string(limen.Ask), string(limen.Block))
 	check("AskKind", strs(at(t, schemas, "AskKind")["enum"]), limen.AskUnsure, limen.AskSplit)
+	check("WeekState", strs(at(t, schemas, "WeekState")["enum"]), limen.WeekOpen, limen.WeekTooFew, limen.WeekReady)
+	for _, cell := range []string{"ReportCell", "AgentCell"} {
+		check(cell+".withheld", strs(at(t, schemas, cell, "properties", "withheld", "items")["enum"]), limen.AnswerFields()...)
+	}
 	check("Action.effect", strs(at(t, schemas, "Action", "properties", "effect")["enum"]),
 		string(limen.EffectNone), string(limen.EffectRead), string(limen.EffectWrite), string(limen.EffectExternal))
 	if ref := at(t, schemas, "Prediction", "properties", "verdict")["$ref"]; ref != "#/components/schemas/Suggestion" {

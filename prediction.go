@@ -36,7 +36,8 @@ type Prediction struct {
 	AskKind string `json:"ask_kind,omitempty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a
-	// profile can change.
+	// profile can change. Profile has the subject when the person's own
+	// profile made the organization's stricter ([Stricter]).
 	Thresholds Thresholds `json:"thresholds"`
 	Profile    Scope      `json:"profile"`
 	// AuditRate is the share of automatic verdicts the profile asks a

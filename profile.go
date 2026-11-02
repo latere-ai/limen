@@ -7,16 +7,55 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Scope is what a cost profile applies to: an organization, optionally
 // narrowed to one kind of action, one agent, or both. For an action, the
 // most specific saved profile applies, in the order kind and agent, agent,
 // kind, the organization, and then [DefaultProfile].
+//
+// A scope with Subject is one person's own profile in the organization
+// (spec 010). It has no kind and no agent, and it applies to every action
+// of that person there, only ever to make the organization's profile
+// stricter: the profile that applies to an action of the person is
+// [Stricter] of the organization's and the person's.
 type Scope struct {
 	Org   string `json:"org"`
 	Kind  string `json:"kind,omitempty"`
 	Agent string `json:"agent,omitempty"`
+	// Subject names the person whose own profile this is. In the context
+	// of a person, an org that holds a pipe, it is that org.
+	Subject string `json:"subject,omitempty"`
+}
+
+// Validate reports every field of s that breaks the contract, as one
+// [*Error] with [CodeInvalidQuery], or nil: a scope named in a query, to
+// read or remove the profile saved for it.
+func (s Scope) Validate() error {
+	var p problems
+	s.check(&p)
+	return p.err(CodeInvalidQuery)
+}
+
+// check holds a scope to its rules: an org, and for a person's own
+// profile no kind, no agent, and in the context of a person that person.
+func (s Scope) check(p *problems) {
+	if s.Org == "" {
+		p.add("org", "is empty")
+	}
+	if s.Subject == "" {
+		return
+	}
+	if s.Kind != "" {
+		p.add("kind", "is set beside subject; a person has one profile in an organization")
+	}
+	if s.Agent != "" {
+		p.add("agent", "is set beside subject; a person has one profile in an organization")
+	}
+	if strings.Contains(s.Org, "|") && s.Subject != s.Org {
+		p.add("subject", "is not org in the context of a person")
+	}
 }
 
 // ScopeOf is the most specific scope an action can match: its
@@ -33,7 +72,8 @@ func ScopeOf(a Action) Scope {
 // specific first: kind and agent, agent, kind, then the organization. The
 // first one with a saved profile applies, and [DefaultProfile] when none
 // has one. A candidate repeated because s leaves a field empty is listed
-// once.
+// once. No candidate has a subject: a person's own profile is read apart
+// and met with the organization's ([Stricter]).
 func (s Scope) Candidates() []Scope {
 	out := make([]Scope, 0, 4)
 	for _, c := range []Scope{
@@ -153,9 +193,7 @@ func (c Costs) Thresholds() (Thresholds, error) {
 // [CodeAskTooCostly]; every other problem is [CodeInvalidProfile].
 func (p Profile) Validate() error {
 	var q problems
-	if p.Org == "" {
-		q.add("org", "is empty")
-	}
+	p.check(&q)
 	if !unit(p.AuditRate) {
 		q.add("audit_rate", "is outside [0, 1]")
 	}
@@ -169,6 +207,67 @@ func (p Profile) Validate() error {
 	}
 	_, err := p.Costs.Thresholds()
 	return err
+}
+
+// Stricter is the meet of the organization's profile and a person's own:
+// each number from the profile that is stricter for it (spec 010). The
+// upper threshold is the higher one, the lower threshold the lower one,
+// the audit rate the higher one, and the claim the lower alpha and the
+// lower delta. The costs are restated with an ask of one, each error at
+// the higher of the two ratios to the ask: the upper threshold
+// 1 - ask/false_allow rises and the lower threshold ask/false_block falls
+// with its ratio, so the higher ratios give the stricter thresholds
+// (paper, Proposition 2), and the meet's costs give its thresholds to
+// rounding. Each accepted profile has both ratios above two, so the meet's
+// do too, and its ask band holds one half.
+//
+// When the person's profile is stricter in no number, Stricter returns
+// org unchanged. Otherwise the scope is org's with the person's Subject,
+// and the meet is never the default.
+func Stricter(org, person Profile) Profile {
+	oc, pc := certifyOr(org.Certify), certifyOr(person.Certify)
+	out := org
+	out.Certify = oc
+	fa, fb := org.Costs.FalseAllow/org.Costs.Ask, org.Costs.FalseBlock/org.Costs.Ask
+	changed := false
+	if person.Thresholds.AllowAbove > org.Thresholds.AllowAbove {
+		out.Thresholds.AllowAbove = person.Thresholds.AllowAbove
+		fa = person.Costs.FalseAllow / person.Costs.Ask
+		changed = true
+	}
+	if person.Thresholds.BlockBelow < org.Thresholds.BlockBelow {
+		out.Thresholds.BlockBelow = person.Thresholds.BlockBelow
+		fb = person.Costs.FalseBlock / person.Costs.Ask
+		changed = true
+	}
+	if person.AuditRate > org.AuditRate {
+		out.AuditRate = person.AuditRate
+		changed = true
+	}
+	if pc.Alpha < oc.Alpha {
+		out.Certify.Alpha = pc.Alpha
+		changed = true
+	}
+	if pc.Delta < oc.Delta {
+		out.Certify.Delta = pc.Delta
+		changed = true
+	}
+	if !changed {
+		return org
+	}
+	out.Costs = Costs{FalseAllow: fa, FalseBlock: fb, Ask: 1}
+	out.Subject = person.Subject
+	out.Default = false
+	return out
+}
+
+// certifyOr is c, or [DefaultCertify] for a zero claim, which a saved
+// profile takes.
+func certifyOr(c Certify) Certify {
+	if c == (Certify{}) {
+		return DefaultCertify
+	}
+	return c
 }
 
 // CertificationSize is the number of consecutive clean reviews that

@@ -783,7 +783,11 @@ components:
       required: [allow_above, block_below]
     Scope:
       type: object
-      description: What a profile applies to.
+      description: >-
+        What a profile applies to. A scope with subject is the person's own
+        profile in the organization: it has no kind and no agent. On a
+        prediction, subject says that the person's own profile made the
+        organization's stricter.
       properties:
         org:
           type: string
@@ -791,6 +795,9 @@ components:
           type: string
         agent:
           type: string
+        subject:
+          type: string
+          description: The person whose own profile this is. In the context of a person, an org with a pipe, it equals org.
       required: [org]
     Decision:
       type: object
@@ -877,7 +884,11 @@ components:
       required: [entries]
     Profile:
       type: object
-      description: What an organization states about errors and interruptions for the actions in a scope.
+      description: >-
+        What an organization states about errors and interruptions for the
+        actions in a scope. With subject, it is one person's own profile in
+        the organization, which only makes the organization's stricter for
+        that person: a prediction applies the meet of the two.
       properties:
         org:
           type: string
@@ -885,6 +896,9 @@ components:
           type: string
         agent:
           type: string
+        subject:
+          type: string
+          description: The person whose own profile this is. A profile with subject has no kind and no agent.
         costs:
           $ref: "#/components/schemas/Costs"
         audit_rate:
@@ -1250,6 +1264,145 @@ components:
           type: number
           description: The asks, plus the audits the audit rate would draw from the automatic verdicts.
       required: [org, subject, from, to, costs, audit_rate, thresholds, records, would, answered, allowed_denied, blocked_approved, expected_asks]
+    WeekState:
+      type: string
+      description: open until 7 days after the end of the week; too_few when it closed with fewer than 5 persons; ready when it closed with 5 or more.
+      enum: [open, too_few, ready]
+    Report:
+      type: object
+      description: >-
+        The report of an organization, one entry per week, oldest first. It
+        names no person, no action and no time finer than a week; the only
+        names in it are agent ids. A week a report showed never changes.
+      properties:
+        org:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        min_subjects:
+          type: integer
+          description: The minimum group, 5.
+        weeks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeekReport"
+      required: [org, from, to, min_subjects, weeks]
+    WeekReport:
+      type: object
+      description: >-
+        One week. An open or too_few week has from, to and state alone. A
+        ready week has total, and agents and other when it divides by
+        agent; their counts add up to those of total.
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        state:
+          $ref: "#/components/schemas/WeekState"
+        total:
+          $ref: "#/components/schemas/ReportCell"
+        agents:
+          type: array
+          description: One cell for each agent with 5 or more persons in the week, by agent id.
+          items:
+            $ref: "#/components/schemas/AgentCell"
+        other:
+          $ref: "#/components/schemas/ReportCell"
+          description: Every other case of the week, the agents with no cell of their own and the cases with no agent. Absent when there are none.
+      required: [from, to, state]
+    ReportCell:
+      type: object
+      description: >-
+        The numbers of one group of a week's cases. A field read from
+        reviews shows only when its reviews come from 5 or more persons and
+        no person gave more than half of them; otherwise it is absent and
+        its path is in withheld.
+      properties:
+        subjects:
+          type: integer
+          minimum: 5
+          description: The persons with a decided case in the cell.
+        decisions:
+          $ref: "#/components/schemas/VerdictCounts"
+        flag_reviews:
+          $ref: "#/components/schemas/FlagReviews"
+        applied:
+          $ref: "#/components/schemas/SourceRates"
+        learned:
+          $ref: "#/components/schemas/SourceRates"
+        withheld:
+          type: array
+          items:
+            type: string
+            enum: [flag_reviews.denied, applied.false_allow, applied.false_block, learned.false_allow, learned.false_block]
+      required: [subjects, decisions, flag_reviews, applied, learned, withheld]
+    AgentCell:
+      type: object
+      description: The cell of one agent, named by the actor id of its cases. Its other fields are those of ReportCell.
+      properties:
+        agent:
+          type: string
+        subjects:
+          type: integer
+          minimum: 5
+        decisions:
+          $ref: "#/components/schemas/VerdictCounts"
+        flag_reviews:
+          $ref: "#/components/schemas/FlagReviews"
+        applied:
+          $ref: "#/components/schemas/SourceRates"
+        learned:
+          $ref: "#/components/schemas/SourceRates"
+        withheld:
+          type: array
+          items:
+            type: string
+            enum: [flag_reviews.denied, applied.false_allow, applied.false_block, learned.false_allow, learned.false_block]
+      required: [agent, subjects, decisions, flag_reviews, applied, learned, withheld]
+    VerdictCounts:
+      type: object
+      description: Decided cases by the verdict applied.
+      properties:
+        allow:
+          type: integer
+          minimum: 0
+        flag:
+          type: integer
+          minimum: 0
+        ask:
+          type: integer
+          minimum: 0
+        block:
+          type: integer
+          minimum: 0
+      required: [allow, flag, ask, block]
+    FlagReviews:
+      type: object
+      properties:
+        reviews:
+          type: integer
+          minimum: 0
+          description: The cases with the verdict flag applied that have a review from before the week closed.
+        denied:
+          type: integer
+          minimum: 0
+          description: The reviews among them that denied the action. Absent when withheld.
+      required: [reviews]
+    SourceRates:
+      type: object
+      description: One source's error rates in a cell, each one estimate over every case of the cell. A review after the week closed counts as unanswered. A rate is absent when withheld; a rate with no review has value null.
+      properties:
+        false_allow:
+          $ref: "#/components/schemas/Estimate"
+        false_block:
+          $ref: "#/components/schemas/Estimate"
     ForgetRequest:
       type: object
       properties:
