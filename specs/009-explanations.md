@@ -6,7 +6,7 @@ depends_on: [003-http-api.md, 004-engine.md, 008-ledger-and-estimation.md]
 affects: [explanation.go, engine/, engine/gp/, engine/featurize/, engine/store/, server/, client/, stub/, conformance/, api/openapi.yaml, docs/]
 effort: medium
 created: 2026-11-01
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -285,6 +285,30 @@ comments:
 `TestSplitOnAnswersThatAgree` holds the case: two approvals and no
 denial under Careful are a split ask, with only approvals in its evidence
 and a learned entry with no denial, and more approvals reach an allow.
+
+**2026-11-03, consent, wave 1 of [[011-consent]].** The owner decided
+that `split` and `short` are two kinds (011, decision 7). An `ask` in the
+band at an evidence ratio of 0.5 or more is `split` if, in a family of
+the action, the latest answers of the person's answered cases in the
+window hold an approval and a denial, and `short` if they agree. The
+case of the amendment above, two approvals and no denial under Careful,
+is now `short`, and `TestShortOnAnswersThatAgree` holds it. Topos keeps
+`split` and `wider` asks for the person, and its rules decide `unsure`,
+`short` and `few`.
+
+- An explanation carries `cover`, with `nearest`: up to three approved
+  cases of the family whose scope the action exceeds, closest first.
+  `calibration` waits for wave 2.
+- The cap applies to the verdict that an explanation calculates again,
+  to each entry of `learned`, and to replays. A preview applies the
+  cover that each prediction recorded.
+- The reason of an `ask` states no probability: `unsure`, `split`,
+  `short`, `wider` and `few` each have a fixed sentence, which
+  `estimate.AskReason` gives to every implementation. An explanation
+  gives the same reason as a prediction.
+- Labels are `labels/2`, the `labels/1` label and a phrase of the scope,
+  so a learned entry is one reach of one action. A case of `labels/1`
+  keeps its label, and so its entry.
 
 ## Outcome
 

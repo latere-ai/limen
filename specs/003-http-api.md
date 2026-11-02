@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md]
 affects: [api/, authorizer/, client/, cmd/limend/, server/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -199,6 +199,17 @@ no new error code: `DELETE /v1/profiles`, asked as `profile.write` on the
 scope's `Profile`; `GET /v1/reports`, asked as the new action
 `report.read` on the new resource kind `Report` with `org`; and `subject`
 on a profile's scope, which a `Profile` resource carries.
+
+**2026-11-03.** Wave 1 of [[011-consent]] adds optional fields and no
+route, action or resource: the claims of a scope on an action, `scope`
+and `cover` on a prediction, `cover` on an explanation and a learned
+entry, the six fields of how a person answered on `POST /v1/answers`,
+on a recorded answer and on a replay record with `answered_at`,
+`consent` on a profile, and `considered` on a certificate. The sentence
+of `invalid_answer` names a value that is not permitted. `api/openapi.yaml`
+describes each one, and its test pairs the new schemas with their Go
+types and the new lists with their constants. `GET /v1/calibration`
+waits for wave 2.
 
 ## Outcome
 

@@ -6,7 +6,7 @@ depends_on: [002-contract.md, 003-http-api.md, 004-engine.md, 006-conformance.md
 affects: [profile.go, service.go, report.go, authorizer/, estimate/, engine/, engine/store/, stub/, conformance/, client/, server/, api/openapi.yaml, docs/api.md, docs/terms.md, docs/integrating.md, CHANGELOG.md]
 effort: large
 created: 2026-11-02
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -153,6 +153,14 @@ these thresholds:
 
 Each one is stricter than the one above it. The meet of two of them is
 always the stricter of the two.
+
+*Amended 2026-11-03:* a cost profile has `consent`, the settings
+`min_weight` and `min_sessions` of the cover rule of [[011-consent]]. The
+meet takes the greater of each, because a greater setting needs more
+approvals before an `allow`. The setting that applies to an action is
+the greater of the meet's and the installation's, so a profile cannot go
+below the installation. A value below 0 is refused with
+`invalid_profile`, and 0 is the setting of the installation.
 
 #### Where the meet applies
 

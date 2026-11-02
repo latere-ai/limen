@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md]
 affects: [estimate/, stub/, engine/, reliability.go, answer.go, replay.go, cmd/limen/]
 effort: medium
 created: 2026-10-02
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -117,6 +117,14 @@ recent audited allows in the window (reviewed cases in `A+` with
 first denial; `holds` is `clean >= needed`. Forced reviews (`p_i = 1`)
 do not count toward a certificate, because the claim is about the
 actions nobody was asked about.
+
+*Amended 2026-11-03:* [[011-consent]] gives an answer a weight,
+`weights/1`, for the cover rule. No estimate reads it: a review counts
+with `1/p_i` and no other weight, so each estimate stays a
+Horvitz-Thompson estimate over the reviews (Proposition 8). The
+certificate gains one count, `considered`: the audits of its clean run
+whose answer has weight 1. `clean`, `needed` and `holds` do not read
+it. A row carries `Considered`, and only the certificate reads it.
 
 ### Replay
 

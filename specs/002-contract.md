@@ -6,7 +6,7 @@ depends_on: [001-architecture.md]
 affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, report.go]
 effort: small
 created: 2026-09-28
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -211,6 +211,37 @@ are validated strictly.
 types, and `Service` embeds `Reporter`. A Go type outside this module
 that implements `limen.Service` adds the two methods. A decision point
 that uses `client/`, `engine/` or `stub/` changes nothing.
+
+**2026-11-03, consent, wave 1 of [[011-consent]].** The contract gains
+the scope of an action and the cover rule. Every new field is optional
+on the wire, so an older decision point and an older reader work as
+before.
+
+- `Action.Scope` (`ReachClaim`: `undo`, `crosses`, `contact`),
+  `Target.Class`, `Environment.Holds` and `Environment.Repositories`:
+  the claims of a decision point. A word outside a list is `unknown`,
+  not an error, so `Validate` adds no check.
+- `Prediction.Scope` (`Reach`) and `Prediction.Cover` (`Cover`), absent
+  from a `FailClosed` prediction. `Explanation.Cover` (`ExplainedCover`,
+  with `nearest`) and `LearnedEntry.Cover`.
+- The verdict of a prediction is the verdict of the thresholds after the
+  cap: an allow that is not covered is an ask of kind `wider` or `few`.
+  `AskShort`, `AskWider` and `AskFew` join `AskUnsure` and `AskSplit`,
+  and `split` needs an approval and a denial in the family.
+- `Answer`, `RecordedAnswer` and `ReplayRecord` embed `HowAnswered`
+  (`answer_ms`, `waited_ms`, `details_opened`, `suggestion_shown`,
+  `surface`, `remembered`). `Answer.Validate` refuses an `answer_ms`
+  outside [0, 86400000] and a negative `waited_ms`; a `surface` outside
+  the list is kept as none. `ReplayRecord` also gains `answered_at`.
+- `Profile.Consent` (`min_weight`, `min_sessions`), each 0 or more, and
+  `Stricter` takes the greater of each. `Certificate.Considered`.
+- `SessionOf` takes the receive time: a case without a session counts
+  as its UTC day. `MinAllows`, `Tally` and `Hold` of the interim answer
+  minimum are removed; `MinWeight` and `MinSessions` are its defaults.
+  `Minimum` and the fields `minimum` stay, deprecated and never set,
+  because a field name never changes.
+- `invalid_answer` also covers a value that is not permitted, and its
+  sentence says so.
 
 ## Outcome
 

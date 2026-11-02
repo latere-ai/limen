@@ -6,7 +6,7 @@ depends_on: [002-contract.md, 004-engine.md, 006-conformance.md, 008-ledger-and-
 affects: [action.go, answer.go, prediction.go, profile.go, explanation.go, reliability.go, replay.go, reach.go, estimate/, engine/, engine/featurize/, engine/gp/, engine/store/, stub/, conformance/, server/, client/, api/openapi.yaml, importer/topos/, cmd/limend/, docs/]
 effort: large
 created: 2026-11-02
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -187,12 +187,16 @@ Limen makes the scope in this order:
    fields of the action.
 2. Each hold bounds that reading. `egress` and `protected_refs` bound
    the reading of their dimension. `checkpoints` bounds the reading of
-   `undo`, and its test reads `crosses` after step 3.
+   `undo`, and its test reads `crosses` after step 4.
 3. Each claim of the decision point is merged with the bounded reading:
    the greater of the two, or the greatest value if they are not
    comparable. A dimension that only one side gives has the value of that
    side. A dimension that no side gives is `unknown`.
 4. `remote` is `yes` if `network`, `organization` or `public` is `yes`.
+   Each of the three reaches another system, so `remote` `no` makes each
+   of them `no`.
+5. The test of `checkpoints` reads the boundaries of step 4: it applies
+   if `crosses.machine` and `crosses.remote` are `no`.
 
 A hold bounds the reading of the input, because the reading is a worst
 case. A hold does not bound a claim, because a claim is what the decision
@@ -277,8 +281,10 @@ other named destination is `unknown`. No refspec, or `HEAD`, is
 too, so they are `primary`. The name of a ref never goes into the scope.
 Only its class does.
 
-For an action that is not a shell action, Limen reads `undo` and
-`crosses.remote` from the fields of the action. `effect` `none` or
+For a shell action, the table reads the command, and `reversible` is a
+claim of the decision point on `undo`, as `scope.undo` is. For an action
+that is not a shell action, Limen reads `undo` and `crosses.remote` from
+the fields of the action. `effect` `none` or
 `read` gives `undo` `none`. `reversible` true gives `reversible`, and
 false gives `irreversible`. `effect` `external` gives `crosses.remote`
 `yes`, and `effect` `write` gives `no`, because a write stays in the
@@ -983,3 +989,80 @@ recommendation, with decision 7 and decision 10 as below.
 | 21 | A replay of the ledger gives the would-be verdicts of version 2 beside the recorded predictions of version 1 before version 2 serves | the replay command and the record of the deployment |
 | 22 | `split` needs an approval and a denial in the family, `short` is agreeing answers, and an older client reads `short` as `unsure` | an engine test and a decision point test |
 | 23 | A replay records an answer at `answered_at` with its six fields, and the importer of Topos logs sets `answered_at` from the confirmation | an engine test and an importer test |
+
+## Outcome
+
+Wave 1 is built (2026-11-03): the scope of each case, `labels/2`, the
+cover rule with its cap on version 1, the answer fields and `weights/1`,
+`considered` on the certificate, the reasons of an `ask` without a lean,
+`cover` on predictions, explanations and learned entries, and `split`
+and `short`. Waves 2 and 3 are not built, so the status stays
+`in-progress`.
+
+### What was built
+
+| Part | Where |
+|---|---|
+| The order of each dimension, `Reach.Within` and `Exceeds`, the bounds of `crosses` with their wire form | `reach.go` |
+| The claims (`Action.Scope`, `Target.Class`, `Environment.Holds`, `Environment.Repositories`), `Prediction.Scope` and `Cover`, `ExplainedCover` with `Approval`, `LearnedEntry.Cover`, `Consent`, `HowAnswered` on answers and replay records, `ReplayRecord.AnsweredAt`, `Certificate.Considered`, the kinds `short`, `wider`, `few`, `SessionOf` by UTC day, `MinWeight`, `AnswerFloor`, `AnswerFatigue` | `action.go`, `answer.go`, `consent.go`, `explanation.go`, `prediction.go`, `profile.go`, `reliability.go`, `replay.go` |
+| The reading: the shell table per segment, the refspec class, the outside-workspace rule, the publishing commands, the field reading, the holds, the merge with the claims, `target_kind`, the families, `labels/2`, contact, and the migration of old cases | `engine/featurize/reach.go`, `shell.go` |
+| `weights/1` with the time and the position, the cover rule, `Nearest`, `Disagree`, `Judge`, `AskReason`, `Previewed`, and `Considered` on a row | `estimate/consent.go`, `estimate.go` |
+| The case keeps its scope and families; the cached model keeps a ledger of the cases; predictions, explanations, learned entries, previews, replays and the certificate apply the rule | `engine/consent.go`, `engine.go`, `explain.go`, `fit.go`, `store/store.go` |
+| The stub keeps the same rule with the same arithmetic | `stub/` |
+| `LIMEN_ANSWER_FLOOR_MS` and `LIMEN_ANSWER_FATIGUE`; `LIMEN_MIN_ALLOWS` and `LIMEN_MIN_SESSIONS` set the cover rule | `cmd/limend/main.go` |
+| The importer gives each answer the time of its confirmation | `importer/topos/topos.go` |
+| The schemas and their test | `api/openapi.yaml`, `api/openapi_test.go` |
+
+| # | Proof |
+|---|---|
+| 1 | `TestShellTable`, `TestShellChain` (`engine/featurize`) |
+| 2 | `TestRefspecClass` (`engine/featurize`), `TestStoredScopeHoldsNoInput` (`engine`) |
+| 3 | `TestClaims`, `TestHolds` (`engine/featurize`) |
+| 4 | `FuzzScopeFields` (`engine/featurize`), `TestBoundJSON`, `TestActionWithClaimsIsValid` (root), conformance `ScopeOfAnAction` |
+| 5 | `TestOrderIsAPartialOrder` (root) |
+| 6 | `TestStoredScopeHoldsNoInput` (`engine`), conformance `ScopeOfAnAction` |
+| 7 | `TestLabels2` (`engine/featurize`) |
+| 8 | `TestCover`, `TestCoverOfAChain` (`estimate`), `TestNoSessionIsItsDay` (`engine`) |
+| 9 | `TestOneApprovalIsNoPattern`, `TestCoverNeedsTwoSessions`, `TestCapNeverTouchesABlock`, `TestCoverIsPerFamily` (`engine`), conformance `CoverCapsAllow` |
+| 10 | `TestOneApprovalIsNoPattern` (`engine`): 0.729 and 0.54, `few`, and `wider` for `publish: make public` |
+| 11 | the conformance suite against the engine, `limend` with the client, and the stub; `TestEngineAndStubCoverAlike` (`engine`), which also compares the kept ledger with one loaded from the store |
+| 12 | `TestConsentOfAProfile`, `TestStricterConsentProperties` (root), `TestCoverOptions` (`engine`), conformance `ConsentOfAProfile` |
+| 13 | `TestWeights`, `TestFatigue` (`estimate`), conformance `AnswerWeights` |
+| 14 | `TestAskReasonHoldsNoNumber`, `TestReason` (`engine`), `TestAskReason` (`estimate`), conformance `AskReasons` |
+| 15 | `TestWeightsDoNotMoveEstimates` (`estimate`), `TestReliabilityCountsConsidered` (`engine`), conformance `Certificate` |
+| 20, the scope of old cases | `TestMigrated` (`engine/featurize`), `TestOldCasesMigrate` (`engine`) |
+| 22 | `TestSplitNeedsADenial`, `TestShortOnAnswersThatAgree` (`engine`). The decision point test is Topos's |
+| 23 | `TestReplayIsHeld` (`engine`, `stub`), `TestAnswersFollowTheSettlements` and the importer test of the record (`importer/topos`) |
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| a type named for the scope | the Go types are `Reach` (a prediction's `scope`) and `ReachClaim` (an action's `scope`); the JSON is `scope` | `limen.Scope` is the scope of a cost profile |
+| `cover` replaces the interim answer minimum | `minimum` and `Minimum` stay, deprecated and never set; `MinAllows`, `Tally` and `Hold` are removed | the name of a JSON field never changes |
+| a value of `consent` below 1 is refused | a value below 0 is refused, and 0 is the setting of the installation | an integer cannot tell 0 from no value; 0 can only give the stricter setting of the installation |
+| the reason of `split`: "do not settle this action" | "do not agree", and `short` has its own reason | `split` now means answers that disagree |
+| `target_class` from the refspec | `--all`, `--mirror` and `--branches` are `primary`; a destructive pattern of `features/1` is `irreversible` in any row; a segment of class `network` with no row reaches the remote; an interpreter's `-c` and an eval have the reach of their script | the reading that finds more danger |
+| the order of reading, holds and claims | written into the design above: holds bound the reading only, claims merge after, then `remote` follows the other boundaries, and `remote` `no` makes them `no`; `reversible` is a claim for a shell action | a hold bounds a worst case reading, a claim is what the decision point knows, and the checkpoint rule needs `organization`, which no row reads |
+| the phrase of `labels/2` from the first two rows that apply | row 1 holds rows 2 and 7 | "make public, public, cannot undo" says one thing three times |
+| the families from the label | the case keeps its families, every segment's | a label names two segments at most |
+| `cover.weight` for the family with the least weight | the least weight among the families that miss a setting, if one does | the numbers then tell why the action is not covered |
+| the time of an answer | if none of the three times is known, "too quick" does not apply; a replay record has `answered_at`, without which its time is 0, and the importer sets it | a replay records the decision and the answer at one time |
+| `considered` in wave 2 | built in wave 1 | the owner put it in wave 1 |
+| a failure to count holds the allow | a prediction whose model cannot be loaded fails, and `FailClosed` asks. A loaded model keeps a ledger of the subject's cases, built when it loads and kept with each write, so a prediction reads no case from the store | the cover, the contact and the kind read every case of the person; reading them from the store at each prediction made its p99 at 512 answers 28 ms in place of 0.4 ms |
+| the stub reads the scope | it does, and its asks in the band are `unsure`, because it knows no variance | as before this spec |
+| a `surface` outside the list | it is not an error, and Limen keeps no `surface` for it; an `answer_ms` outside its range and a negative `waited_ms` are `invalid_answer` | a newer client works with an older Limen, and an answer holds no text |
+
+### What this leaves open
+
+- The calibration report and `calibration` on an explanation, wave 2,
+  criteria 16 and 17. Until then no explanation has `calibration`, so no
+  client shows a recommendation (decision 10).
+- `features/2`, `learned/2` with `weights/2`, the replay comparison and
+  the refit, wave 3, criteria 18, 19 and 21.
+- The ledger a model keeps is not counted in the byte budget of the
+  cache of models. Each prediction still weighs every answer of the
+  person, which is linear in the cases.
+- Contact from Limen's own reading needs a target `id`. Topos sends an
+  id for an app and none for a host, so a fetch has contact only from
+  Topos's claim.

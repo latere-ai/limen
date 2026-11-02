@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [engine/, engine/kernel/, engine/gp/, engine/featurize/, engine/store/]
 effort: large
 created: 2026-09-28
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -197,6 +197,24 @@ counted. The count reads the subject's cases, so an allow the thresholds
 give costs a scan of them on the hot path; a per-subject index is left
 for the consent spec. The rule is part of the contract
 ([[006-conformance]], case `AnswerMinimum`), so the stub keeps it too.
+
+*Amended 2026-11-03:* [[011-consent]] replaces the answer minimum with
+the cover rule, on version 1. Each new case keeps its scope and its
+families (`Case.Scope`, `Case.Families`) and a `labels/2` label, read at
+creation; contact is read from the targets of the subject's approved
+cases. A case from before keeps `labels/1`, and the cover rule reads its
+scope from the migration table of 011. The cached model keeps a ledger
+of the subject's cases as the cover rule reads them, built from the
+store when the model loads and kept with each write of a case, so a
+prediction reads no case from the store: the p99 of a prediction at 512
+answers stays under a millisecond. A model that cannot be loaded fails
+the prediction, so `FailClosed` asks. A decision that carries a new
+action reads the approved targets from that ledger, or from the store
+when no model is cached. The ledger is not counted in the byte budget of
+the cache. The fit, the features and the snapshots do not change: the
+weight of an answer applies to the cover rule only. `engine.Options`
+gains `MinWeight` (in place of `MinAllows`), `AnswerFloor` and
+`AnswerFatigue`. A replay records an answer at `answered_at`.
 
 A prediction never fits. Against a snapshot of `n` training cases it
 costs one kernel row, `O(n d)`, a dot product for the mean, and one

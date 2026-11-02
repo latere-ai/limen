@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md, 008-ledger-and-estimation.md]
 affects: [conformance/, stub/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-02
+updated: 2026-11-03
 author: changkun
 ---
 
@@ -98,6 +98,21 @@ the thresholds' allow only with `minimum` set and not met, and the
 steered cases that expect an allow first approve enough actions to meet
 the minimum.
 
+*Amended 2026-11-03:* wave 1 of [[011-consent]] replaces `AnswerMinimum`
+with `CoverCapsAllow`, and adds `ScopeOfAnAction`, `AnswerWeights`
+(against `Clocked`), `ConsentOfAProfile`, `AskReasons` and
+`AnswerFields`, each with a defect. `PredictionFollowsTheProfile` and
+every case that checks a verdict compare it with the thresholds after
+the cap: the thresholds' verdict, an allow that is covered, or an ask of
+kind `wider` or `few` in place of their allow with a cover that does not
+cover it, and an ask in the band of kind `unsure`, `split` or `short`.
+The cover rests on the ledger alone, so a learned target is held to the
+exact covers too. The steered cases that expect an allow first give
+considered approvals that cover it, and `Certificate` checks
+`considered`. `Previews` holds an allow to the recorded cover. The
+conformance action has no target id, because 011 reads contact from it
+and a path is no id.
+
 ### The stub
 
 ```go
@@ -141,7 +156,7 @@ test in the tree.
 
 | # | Proof in the tree |
 |---|---|
-| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 45 cases, the 29 of this spec, the 15 of [[010-organizations]] and `AnswerMinimum` (amended above), in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
+| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 50 cases, the 29 of this spec, the 15 of [[010-organizations]] and the 6 of [[011-consent]] (amended above), in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above |
 | 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same; `TestEngineAndStubReportOrganizationsAlike` does the same for the report of an organization |
@@ -174,7 +189,7 @@ are merged:
 | `Certificate` | `Certificate` |
 | none | `SteeredVerdicts`, `LaterAnswersNeverEstimate`, `ExplanationsOfSteeredVerdicts` |
 | the 15 cases of [[010-organizations]] | the same names, from `ProfileRemoved` to `ReportNamesNoPerson` |
-| the answer minimum (amended above) | `AnswerMinimum` |
+| the cover rule of [[011-consent]] (amended above) | `CoverCapsAllow`, `ScopeOfAnAction`, `AnswerWeights`, `ConsentOfAProfile`, `AskReasons`, `AnswerFields` |
 
 | What it said | What was built | Why |
 |---|---|---|
