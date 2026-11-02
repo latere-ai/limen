@@ -18,9 +18,9 @@ We fix vulnerabilities in the two most recent minor release series.
 
 | Version | Supported |
 |---|---|
+| v0.6.x | Yes |
 | v0.5.x | Yes |
-| v0.4.x | Yes |
-| v0.3.x and older | No |
+| v0.4.x and older | No |
 
 A fix comes in a new patch release of each supported series. Before
 v1.0.0, the contract in the module root can change in a minor release.

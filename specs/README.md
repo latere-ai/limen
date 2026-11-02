@@ -29,7 +29,7 @@ engine ports, is at that repository's tag
 [`v3`](https://github.com/changkun/trustcalib/tree/v3/go) and no longer
 on its main branch. A spec that cites a proposition cites that paper.
 
-Limen is in production since 2026-11-01, at v0.5.1 since 2026-11-02.
+Limen is in production since 2026-11-01, at v0.6.0 since 2026-11-02.
 Each spec's Outcome records what is built, the tests that prove it, and
 what is not built. Specs 001, 002, 003, 006, 008, 009 and 010 are
 complete. Spec 004 is at `testing`: a second model version beside the
