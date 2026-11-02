@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.4.0 - 2026-11-02
+
 ### Added
 
 - The conformance suite has the case `Certificate`. An implementation
