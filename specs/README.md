@@ -13,7 +13,11 @@ that proves an implementation serves all three. Spec 004 is the engine
 that predicts, spec 005 the adapters that put Limen behind a harness's
 decision point, and spec 007 the evidence each step of a rollout must
 produce before the next one starts. Spec 009 is the explanations: why
-a prediction is what it is, and the evidence behind an `ask`.
+a prediction is what it is, and the evidence behind an `ask`. Spec 010
+is what an organization needs: an agent that goes back to the cost
+profile of its organization, a cost profile of a person that only makes
+the cost profile of the organization stricter, and a weekly report that
+never shows one person.
 
 The design follows the research in Changkun Ou, *Learning When to Ask:
 Trust Calibration for Agentic Tool Use, from Known Tools to Opaque LLM
@@ -30,7 +34,8 @@ records what is built, the tests that prove it, and what is not built.
 Specs 001, 002, 003, 006, 008 and 009 are complete. Spec 004 is at
 `testing`: a second model version and a shared store are not built.
 Spec 005's hooks are not built, and spec 007 is a rule for
-deployments.
+deployments. Spec 010 is in progress: the owner approved it on
+2026-11-02.
 
 ## Layout
 
@@ -80,6 +85,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
+| [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | in-progress |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a
