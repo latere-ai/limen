@@ -33,7 +33,7 @@ The first time, read these pages in this order.
 | Page | Contents |
 |---|---|
 | [Principles](principles.md) | The rules that each implementation obeys, the reason for each rule, and how Limen checks it. |
-| [Theory](theory.md) | The model of the tolerance of a person, the decision rule and its thresholds, the two kinds of `ask`, the answer minimum, and forgetting. The estimates and the certificates, and what you can know about a judge. |
+| [Theory](theory.md) | The model of the tolerance of a person, the decision rule and its thresholds, the kinds of `ask`, the cover rule and the weight of an answer, and forgetting. The estimates and the certificates, and what you can know about a judge. |
 
 ## Operate Limen
 

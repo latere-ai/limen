@@ -61,8 +61,9 @@ runs. The [API](api.md) page and the
 | `effect` | `none`, `read`, `write`, or `external`. Use `write` for a change inside the system that runs the action. Use `external` for an effect outside that system: the network, a sent message, a transfer of money. If you are not sure, use `external`. |
 | `reversible` | Whether somebody can undo the action. Set it only if you know. |
 | `input` | The input of the action as JSON, for example the arguments of a tool call. Only the feature extractors of Limen read it. These are fixed programs, not language models. Limen never stores the input. |
-| `target` | The object of the action: `kind` (`path`, `ref`, `host`, `account`) and `id`. Optionally, `sensitivity`, from 0 (scratch data) to 1 (production). |
-| `environment` | The place where the action runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`. Set `credentialed` if a credential in that place gives access outside it. |
+| `target` | The object of the action: `kind` (`path`, `ref`, `host`, `account`) and `id`. Optionally, `sensitivity`, from 0 (scratch data) to 1 (production), and `class` ([The reach of an action](#send-the-reach-of-an-action)). |
+| `environment` | The place where the action runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`. Set `credentialed` if a credential in that place gives access outside it. Optionally, `holds` and `repositories` ([The reach of an action](#send-the-reach-of-an-action)). |
+| `scope` | What you know about the reach of the action: `undo`, `crosses`, and `contact` ([The reach of an action](#send-the-reach-of-an-action)). |
 | `attributes` | Other facts from your domain, as strings, numbers, or booleans. Examples: an amount, whether a branch is protected, a count of files. The maximum is 64 attributes. |
 | `signals` | Verdicts or scores from other sources. Examples: the score of your rules, `{"source": "rules/1", "score": 0.4}`. The verdict of a judge, `{"source": "classifier/claude-auto-mode", "verdict": "allow"}`. |
 
@@ -77,19 +78,59 @@ an `action_id` that you used before, Limen refuses it with
 ### Sessions
 
 Send the session of the agent in `actor.session`. Limen uses it for the
-[answer minimum](theory.md#the-answer-minimum). By default, Limen
-suggests `allow` for an action only after 3 approvals or more of
-actions with the same label. These approvals must come from 2 sessions
-or more.
+[cover rule](theory.md#the-cover-rule). By default, Limen suggests
+`allow` for an action only if considered approvals of the same family
+and reach have a weight of 3 or more. These approvals must come from 2
+sessions or more. Limen also uses the session to count the reviews
+before an answer, for the weight of the answer.
 
 - Use one value for all the actions of one session. Use a different
   value for each session.
-- If an action has no `actor.session`, Limen counts it as a session of
-  its own. Then 3 approvals of actions without a session meet the
-  minimum. Send the session if you have it.
+- If an action has no `actor.session`, Limen counts it in the session of
+  the UTC day when it received the action. Send the session if you have
+  it.
 - Limen does not read a session from `action_id`. For example, Topos
   sends the ID of its session in `actor.session`, and it uses
   `<session>/<tool_use_id>` as `action_id`.
+
+### Send the reach of an action
+
+Limen reads the reach of an action, its scope, from the input and from
+`effect` and `reversible`. For a shell command, a fixed table reads each
+segment: for example, `git push --force` cannot be undone, a refspec that
+names `main` is the default branch, and `npm publish` makes something
+public. Send what only you know with these optional fields. Use only the
+words of the lists. Do not put a path, a host, a branch name, or other
+text of the input in them.
+
+| Field | Values | Meaning |
+|---|---|---|
+| `scope.undo` | `none`, `reversible`, `recoverable`, `irreversible` | Whether the action can be undone. `recoverable`: a copy or a second action can undo it. `irreversible`: no copy brings it back, or other people already saw it. |
+| `scope.crosses` | an object with `machine`, `remote`, `network`, `organization`, `public`, each `true` or `false` | The boundaries that the action crosses. Leave out a boundary that you do not know. Do not send it as `false`. |
+| `scope.contact` | `first`, `repeat` | Whether the action is the first contact with its target. |
+| `target.class` | `scratch`, `own`, `shared`, `primary` | The class of the target. `own`: a thing that this session or person made. `primary`: the default branch, production, or a live release. |
+| `environment.holds` | `egress`, `protected_refs`, `checkpoints` | The limits that the environment enforces. |
+| `environment.repositories` | `private`, `public`, `mixed` | The visibility of the repositories that the session pushes to. |
+
+Limen takes the greater of your claim and its own reading in each
+dimension. If the two are not comparable, Limen takes the greatest
+value. A claim can make the scope wider. It cannot make it narrower,
+because the agent writes the input. A hold makes the reading of Limen
+narrower, because the environment enforces it:
+
+| Hold | What it makes narrower |
+|---|---|
+| `egress` | The reading of `crosses.network` is `false`. |
+| `protected_refs` | The default branch that Limen reads from a `git push` is `unknown`. |
+| `checkpoints` | If the action crosses no boundary, the reading of `undo` is at most `recoverable`. |
+
+A word outside a list is `unknown`, and it is not an error. A newer
+decision point can then use an older Limen. The prediction gives the
+scope that Limen used in `scope`, with `target_class` and `target_kind`.
+Show it to the person with the action.
+
+The reach also goes into the label. For example, `publish: make public`
+and `publish: update` are two labels.
 
 ### Examples from four domains
 
@@ -187,72 +228,61 @@ becomes `ask`.
 | `ask` | Hold the action until the person answers. Do not change an `ask` to a refusal after a timeout. An agent that gets a refusal tries a different way to do the same thing. |
 | `block` | Do not run the action. Tell the agent the reason in your own words. The `reason` of a prediction is for the record of the person. Never show it to an agent. |
 
-### Two kinds of `ask`
+### Kinds of `ask`
 
-A suggested `ask` has an `ask_kind`. The kind tells why Limen is not
-sure:
+A suggested `ask` has an `ask_kind`. The kind tells why Limen suggests
+`ask`:
 
-| `ask_kind` | Evidence ratio | Meaning |
+| `ask_kind` | When | Meaning for the person |
 |---|---|---|
-| `unsure` | Less than 0.5 | The person has few answers about this type of action. More answers can change the suggestion. |
-| `split` | 0.5 or more | The answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. |
+| `unsure` | The evidence ratio is less than 0.5. | The person has few answers about this type of action. More answers can change the suggestion. |
+| `split` | The evidence ratio is 0.5 or more, and the answers of the person about the family of the action have an approval and a denial. | The answers of the person do not agree. |
+| `short` | The evidence ratio is 0.5 or more, and the answers of the family agree. | The answers agree, but they are not enough yet to give `allow` or `block`. |
+| `wider` | The thresholds give `allow`, and no approval of the family has a scope that the scope of the action is within. | The person never allowed an action of this reach. |
+| `few` | The thresholds give `allow`, and approvals cover the action, but not with enough weight or not from enough sessions. | The person allowed this reach, but not with enough considered answers or not in enough sessions. |
 
 The evidence ratio is the `evidence_ratio` of the prediction.
-[Theory](theory.md#two-kinds-of-ask) gives its formula. The `FailClosed`
-fallback has the kind `unsure`.
+[Theory](theory.md#kinds-of-ask) gives its formula and the cover rule.
+The `FailClosed` fallback has the kind `unsure`.
 
-A `split` ask can change. More answers that agree can move the approval
-probability out of the ask range. Answers that disagree keep it in the
-ask range. For example, a person approves `publish` two times and does
-not deny it. If the upper threshold is 0.90, Limen suggests `ask` with
-the approval probability 0.80 and the kind `split`. More approvals move
-the approval probability above 0.90. Then Limen suggests `allow` if the
-approvals come from 2 sessions or more.
+For example, one approval of `publish: update` gives the approval
+probability 0.73 and the evidence ratio 0.54. If the upper threshold is
+0.65, Limen suggests `ask` with the kind `few`. A `publish: make public`
+after that one approval is `wider`. If the upper threshold is 0.90, the
+first suggestion is `short`.
 
-An `ask` can also come from the answer minimum. Then the approval
-probability is above the upper threshold, but the person has too few
-approvals of actions with this label. The prediction has `minimum`, with
-the counts, and its `reason` gives them. The `ask_kind` comes from the
-evidence ratio, as for each `ask`.
+A prediction also has `cover`: `covered`, `weight`, `sessions`,
+`min_weight` and `min_sessions`. `covered` is true if the approvals of
+the person cover the action.
 
-For example, one approval of `publish` gives the approval probability
-0.73 and the evidence ratio 0.54. If the upper threshold is 0.65, Limen
-suggests `ask` with the kind `split`. Before the answer minimum, Limen
-suggested `allow`.
-
-The kind `split` does not tell that the answers disagree. To tell the
-person that their answers disagree, examine the answers:
-
-- In an explanation, `evidence` has an approval and a denial with the
-  same `label`.
-- In `GET /v1/learned`, the entry has `approved` and `denied` both more
-  than 0.
-
-Your decision point can use the kind. The person decides a `split` ask,
-because the ask comes from the answers of that person, not from too few
-answers. Your rules can decide an `unsure` ask, as they did before you
-connected Limen:
+Your decision point can use the kind. The person decides a `split` and a
+`wider` ask, because these rest on the answers of that person. Your
+rules can decide an `unsure`, a `short` and a `few` ask, as they did
+before you connected Limen:
 
 ```go
 suggested := p.Verdict
-if p.Verdict == limen.Ask && p.AskKind != limen.AskSplit {
+switch {
+case p.Verdict == limen.Ask && p.AskKind != limen.AskSplit && p.AskKind != limen.AskWider:
 	suggested = rulesVerdict // Your rules decide. Limen learns from the answers.
+case p.Verdict == limen.Allow && !p.Cover.Covered:
+	suggested = rulesVerdict // Only a covered allow can run an action that your rules ask about.
 }
 v, prob := verdict.Decide(suggested, ceiling, p.AuditRate, rand.Float64())
 ```
 
-- Use the verdict of your rules only for an `ask` that is not `split`.
-  Use the suggested `allow` and `block` of Limen as usual.
-- Treat an `ask` without `ask_kind` as `unsure`. A server before v0.3.0
-  does not send the field.
+- Use the verdict of your rules for an `ask` that is not `split` or
+  `wider`. Use the suggested `block` of Limen as usual.
+- Treat an `ask` without `ask_kind`, or with a kind that you do not know,
+  as `unsure`. A server before v0.3.0 does not send the field.
+- A suggested `allow` of Limen always has `cover.covered`. A server
+  before the cover rule does not send `cover`. Then let your rules
+  decide.
 - Keep the audit rate of the prediction. Then a part of the automatic
   verdicts of your rules also goes to the person, and the ledger can
   measure your rules.
 - Record the decision as usual, with the review probability that
   `verdict.Decide` returns.
-- An `ask` from the answer minimum with the kind `unsure` also goes to
-  your rules. Your rules decided such an action before you connected
-  Limen.
 - If Limen fails, the `FailClosed` fallback is an `unsure` ask. Then
   your rules decide, as they did before you connected Limen. The
   fallback has an audit rate of zero, so no random selection occurs. The
@@ -303,6 +333,49 @@ Send the answer of the person each time the person gives one:
 Limen finds which answer is a review from the recorded decision. For this
 reason, an answer needs a recorded decision first. If there is no recorded
 decision, Limen refuses the answer with `no_decision`.
+
+### How the person answered
+
+Most answers are habit. A quick approval with no details does not show
+consent. Send how the person answered with these optional fields. Leave
+out each field that you do not know. Do not guess.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `answer_ms` | integer, 0 to 86400000 | The milliseconds from the moment the question was visible to the person to the answer, as the client measured it. |
+| `waited_ms` | integer, 0 or more | The milliseconds from the decision that showed the action to the answer, as your decision point measured it. |
+| `details_opened` | boolean | `true` if the person opened the details of the action before the answer: the full input, the change, or the target. `false` if the client offered the details and the person did not open them. |
+| `suggestion_shown` | boolean | `true` if the client showed the suggestion of Limen before the answer: the verdict, the approval probability, the reason, or an explanation. |
+| `surface` | `prompt`, `notification`, `queue`, `bulk`, `rule` | Where the person answered: a question in the conversation, a system notification, a list of questions or reviews, one gesture for more than one action, or a standing rule. |
+| `remembered` | boolean | `true` if the answer also made a standing rule. Never send the rule itself. |
+
+Limen calculates the weight of the answer from these fields. An approval
+has weight 0 if a rule gave it, if one gesture answered many actions, if
+it came in less than 2000 ms, if it followed a suggestion that the client
+showed, or if 50 reviews or more came before it in its session. Except
+for a rule, the weight is 1 if the person opened the details. Only an
+approval with weight 1 builds the cover. Each answer still teaches the
+model, and no error rate reads the weight. `LIMEN_ANSWER_FLOOR_MS` and
+`LIMEN_ANSWER_FATIGUE` set the two numbers ([Running](running.md)).
+
+The time of an answer is the smallest of `answer_ms`, `waited_ms`, and
+the time from the recorded decision to the answer. A client cannot make
+an answer slower than your decision point and Limen measured it. An
+`answer_ms` outside its range, or a negative `waited_ms`, is refused with
+`invalid_answer`. A `surface` outside the list is ignored.
+
+Send a decision of a standing rule as a decision, not as an answer.
+
+> **Warning:** Do not show the approval probability, the suggested
+> verdict, the reason, or an explanation to the person before the person
+> answers. People follow an opinion that they see first. Show the action,
+> its label, and its scope. For a `wider` ask, you can also show the
+> label of the nearest approval in `cover.nearest` of the explanation.
+> After the answer, show both sides of the explanation. A client can
+> show a recommendation before the answer only where the explanation
+> gives `calibration` as `calibrated` for the bin of the prediction.
+> Limen does not send `calibration` yet, so do not show one. If you show
+> any part of the suggestion, send `suggestion_shown` true.
 
 Limen records the caller as the person who answered. An agent harness can
 relay the answer of a person, for example a confirmation in its user
@@ -497,7 +570,7 @@ before it.
    automatic `allow` can do the least damage, for example in a sandbox.
 
    You can also start with the policy in
-   [Two kinds of `ask`](#two-kinds-of-ask). Then Limen decides only where
+   [Kinds of `ask`](#kinds-of-ask). Then Limen decides only where
    it has evidence about the person, and your rules decide the other
    actions as before. Hosted Topos uses this policy.
 
@@ -556,8 +629,8 @@ topos run --mode auto   "Fix the failing test."  # Then: Limen decides under the
 For a new person, Limen suggests `ask`. It suggests `allow` or `block`
 only after the answers of the person support it. Usually, auto mode asks
 about a type of call until it has approximately 30 or more answers for
-that type. Limen suggests `allow` only after 3 approvals or more of the
-same type of call, in 2 sessions or more.
+that type. Limen suggests `allow` only after 3 considered approvals or
+more of the same family and reach, in 2 sessions or more.
 
 #### Hosted Topos
 
@@ -569,8 +642,24 @@ Topos. Topos v0.66.0 added this variable.
 | `TOPOS_DECISIONS_MODE` | What decides a `progressive` call |
 |---|---|
 | `shadow` | The rules and the risk score of Topos decide each call. Topos records the suggested verdict of Limen with the call. |
-| `learned` | The suggested verdict of Limen decides if it is `allow`, `block`, or an `ask` with `ask_kind` `split`. For an `unsure` ask, an `ask` without `ask_kind`, or if Limen does not answer, the rules and the risk score decide. If Limen answered, a part of these automatic verdicts goes to the person, at the audit rate of the prediction. |
+| `learned` | The suggested verdict of Limen decides if it is `allow`, `block`, or an `ask` that Topos keeps for the person (the table below). For the other asks, an `ask` without `ask_kind`, or if Limen does not answer, the rules and the risk score decide. If Limen answered, a part of these automatic verdicts goes to the person, at the audit rate of the prediction. |
 | `decide` (the default) | The suggested verdict of Limen decides each call that the rules do not decide. If Limen fails, the call waits for a person. |
+
+In the `learned` mode, Topos does this with each kind of `ask`:
+
+| `ask_kind` | Topos v0.68.0 | Topos that reads the kinds of the cover rule |
+|---|---|---|
+| `unsure` | The rules and the risk score decide. | The rules and the risk score decide. |
+| `split` | The person decides. | The person decides. |
+| `short` | The rules and the risk score decide, as for `unsure`. | The rules and the risk score decide. |
+| `wider` | The rules and the risk score decide, as for `unsure`. | The person decides: `decided_by` is `learned`, with the review probability 1. |
+| `few` | The rules and the risk score decide, as for `unsure`. | The rules and the risk score decide. |
+
+With `TOPOS_DECISIONS_LOOSEN` set to `covered`, the default, a suggested
+`allow` of Limen decides only if the prediction has `cover.covered`
+true. In the other case, the rules and the risk score decide. With
+`never`, the stricter of the `allow` and the verdict of the rules
+decides. No value lets a call go above the ceiling of the rules.
 
 In each mode, these rules apply:
 
@@ -654,6 +743,10 @@ Each tool call that has a verdict becomes one record:
   that the person saw (`ask` or `flag`), it is the first answer, which is
   the review. For a call that ran without the person, it is the last
   answer, which the model learns.
+- The time of the answer is the time of its confirmation, in
+  `answered_at`. Then the weight of the answer comes from the time that
+  the call waited. An answer whose time the log does not give has the
+  time of the call, so its approval does not build the cover.
 
 Because of this, after `limen replay topos --keep`, the ledger gives the
 error rate of each type of rule. From v0.68.0, Topos sends each live

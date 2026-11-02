@@ -12,7 +12,7 @@ if there is one.
 | action | One operation that software wants to do for a person. Examples: run a shell command, merge a branch, send a network request, deploy a service, make a payment. | `Action` |
 | agent | Software that proposes actions. An AI coding agent is an example. | `actor` |
 | agent harness | The program that runs an agent and its tools. An agent harness is the most frequent type of decision point. | |
-| session | One run of an agent, for example one session of an AI coding agent. The decision point sends it with each action. An action without a session is a session of its own. | `session` in `actor` |
+| session | One run of an agent, for example one session of an AI coding agent. The decision point sends it with each action. An action without a session counts as the session of the UTC day when Limen received it. | `session` in `actor` |
 | decision point | The software that decides if an action runs. The decision point calls Limen, applies a verdict, and records the decision. Limen does not decide. | |
 | Limen | The service that predicts which actions a person approves, keeps the ledger, and calculates error rates. | |
 | `limend` | The program that supplies the Limen API over HTTP. | |
@@ -50,20 +50,35 @@ verdicts. The list starts with the verdict that permits the most.
 | approval probability | The probability that the person approves the action. It is a number from 0 to 1. | `approve` in a prediction |
 | uncertainty | A measure of how little the model knows about an action. Two actions can have the same approval probability and a different uncertainty: one action is familiar and one action is new. | `uncertainty` |
 | suggested verdict | The verdict that Limen suggests for an action. It is `allow`, `ask`, or `block`. Limen never suggests `flag`. | `verdict` in a prediction |
-| answer minimum | A rule after the thresholds. Limen suggests `allow` only if the person approved actions with the same label 3 times or more, in 2 sessions or more. These are the default numbers. If not, Limen suggests `ask`. Limen counts each action whose most recent answer is an approval. The rule is temporary, until a design for consent replaces it. | `minimum` |
 | model | The statistical model that Limen keeps for each person in each organization. Limen calculates it again from the answers of the person. | |
 | tolerance | The amount of risk that a person accepts. The model gives each person a tolerance that changes with time. | |
 | risk | A property of an action. The model lets tolerance change with time. It does not let risk change with time. | |
 | features | Numbers that Limen calculates from an action. The model uses the features. Limen keeps the features. | |
 | feature extractor | A fixed program that calculates features from the input of an action. A feature extractor is not a language model. | |
 | input | The arguments of an action, for example the text of a shell command. Limen reads the input to calculate the features. Limen does not keep the input. | `input` |
-| label | A short name for the type of an action, from a fixed list of words in the feature extractor. Examples: `bash: go test`, `bash: git push --force`. A label never contains the input. | `label` |
+| label | A short name for the type and the scope of an action, from a fixed list of words in the feature extractor. Examples: `bash: go test`, `bash: git push --force, default branch, cannot undo`, `publish: make public`, `publish: update`. A label never contains the input. | `label` |
 | explanation | The parts of one prediction. An explanation shows the answers that changed the prediction most. It also shows what the model learned about the type of action and about the recent tolerance of the person. | `Explanation` |
 | share | The part of one answer in an explanation, from 0 to 1. | `share` |
 | evidence ratio | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. | `evidence_ratio` |
 | unsure | An `ask` with an evidence ratio less than 0.5. The person has few answers about this type of action. More answers can change the suggestion. | `ask_kind` |
-| split | An `ask` with an evidence ratio of 0.5 or more. The answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. The approval probability can also be above the ask range, with too few approvals for the answer minimum. More answers that agree can change the suggestion. | `ask_kind` |
+| split | An `ask` with an evidence ratio of 0.5 or more and the approval probability in the ask range. The answers of the person about the family of the action have an approval and a denial: they do not agree. | `ask_kind` |
+| short | An `ask` with an evidence ratio of 0.5 or more and the approval probability in the ask range. The answers of the person about the family of the action agree, but they are not enough yet to give `allow` or `block`. More answers that agree can change the suggestion. | `ask_kind` |
 | preview | What a different cost profile would do with the recorded predictions of a person. | `Preview` |
+
+## Consent
+
+| Term | Meaning | In the API |
+|---|---|---|
+| scope | The reach of an action. It tells if the action can be undone, the boundaries that it crosses, the class of its target, and if it is a first contact. Limen reads the scope from the input and the fields of the action, and the decision point can make it wider. | `scope` |
+| hold | A limit that the environment of an action enforces, so a reach cannot occur. Examples: `egress`, `protected_refs`, `checkpoints`. | `holds` |
+| family | The type of an action for the cover rule: the name of the tool, or the words of a shell segment, for example `git push` or `rm -r`. | |
+| cover | The approvals of a person in the same family whose scope the scope of an action is within. | `cover` |
+| covered | An action whose cover has enough weight from enough different sessions. The defaults are a weight of 3 from 2 sessions. | `cover.covered` |
+| cover rule | A rule after the thresholds. Limen suggests `allow` only for an action that is covered. If not, Limen suggests `ask`. | `cover` |
+| wider | An `ask` for an action that the thresholds allow, whose scope is more than the scope of each approval of its family. The person never allowed an action of this reach. | `ask_kind` |
+| few | An `ask` for an action that the thresholds allow, that approvals cover, but not with enough weight or not from enough sessions. | `ask_kind` |
+| weight of an answer | A number from 0 to 1 that tells how much an answer counts for the cover rule. An approval that is quick, that came from a rule or from one gesture for many actions, that followed a suggestion that the client showed, or that came late in a long session, has weight 0. | |
+| considered answer | An answer with weight 1. | `considered` |
 
 ## Costs and thresholds
 
@@ -72,7 +87,7 @@ verdicts. The list starts with the verdict that permits the most.
 | false allow | An action that a source allowed and that the person would deny. | `false_allow` |
 | false block | An action that a source blocked and that the person would approve. | `false_block` |
 | cost profile | The costs that an organization states: the cost of a false allow, the cost of a false block, and the cost of one `ask`. It also has the audit rate. A cost profile applies to an organization, a kind of action, or an agent. | `Profile`, `costs` |
-| thresholds | Two approval probabilities that Limen calculates from the cost profile. Above the upper threshold, Limen suggests `allow` if the answer minimum permits it. Below the lower threshold, Limen suggests `block`. | `allow_above`, `block_below` |
+| thresholds | Two approval probabilities that Limen calculates from the cost profile. Above the upper threshold, Limen suggests `allow` if the action is covered. Below the lower threshold, Limen suggests `block`. | `allow_above`, `block_below` |
 | ask range | The approval probabilities between the two thresholds. In this range, Limen suggests `ask`. | |
 | cost profile of a person | A cost profile that a person saves for their own actions in one organization. It can make the cost profile of the organization stricter for that person. It cannot make it less strict. | `subject` in a `Profile` |
 | stricter | A cost profile is stricter than a different cost profile if two conditions are true. Its upper threshold is the same or higher, and its lower threshold is the same or lower. A stricter cost profile asks about more actions. | |

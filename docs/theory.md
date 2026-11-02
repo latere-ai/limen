@@ -180,12 +180,11 @@ at your costs. No learner can remove it. (Lean: `optimal_asks_on_band`,
 In the simulation of the paper, this lower limit was 10.3% of actions with
 the symmetric profile and 31.3% with the safety-weighted profile.
 
-## Two kinds of ask
+## Kinds of ask
 
-An `ask` has one of two causes. In the first, the model knows little
-about the action. In the second, the model knows much about the action,
-but the approval probability is still in the ask range. Each prediction
-tells which cause applies.
+An `ask` has one of five kinds. Three kinds are an `ask` in the ask
+range, and two are an `allow` that the [cover rule](#the-cover-rule)
+changed to an `ask`. Each prediction tells which kind applies.
 
 The prior variance at an action is the variance of $f$ before any answer:
 
@@ -207,23 +206,26 @@ action. It is near 1 for a familiar action. A prediction gives $e$ as
 `evidence_ratio`. For example, `uncertainty` 0.71 gives
 $e = 1 - 0.71^2 / 3.2 \approx 0.84$.
 
-For an `ask`, Limen compares $e$ with 0.5:
+For an `ask` in the ask range, Limen compares $e$ with 0.5, and reads the
+answers of the family of the action:
 
 - If $e < 0.5$, the `ask_kind` is `unsure`. The answers of the person
   tell little about this action. More answers can move $\hat p$ out of
   the ask range.
-- If $e \ge 0.5$, the `ask_kind` is `split`. The answers tell much about
-  this action, and $\hat p$ is still in the ask range. The answers can
-  disagree. They can also agree, but not enough yet to pass a threshold.
-  More answers that agree can move $\hat p$ out of the ask range. Answers
-  that disagree keep it in the ask range.
+- If $e \ge 0.5$ and the answers of the family have an approval and a
+  denial, the `ask_kind` is `split`. The answers do not agree.
+- If $e \ge 0.5$ and the answers of the family agree, the `ask_kind` is
+  `short`. The answers are not enough yet to pass a threshold. More
+  answers that agree can move $\hat p$ out of the ask range.
 
-Answers that agree can give a `split` ask. With the default kernel, two
-approvals of one action and no denial give $e \approx 0.64$ and
-$\hat p \approx 0.80$. With the safety-weighted profile, Limen suggests
-`allow` only above 0.90, so the `ask_kind` is `split`. More approvals
-move $\hat p$ above 0.90. Then Limen suggests `allow` if the approvals
-also meet the [answer minimum](#the-answer-minimum).
+Limen reads the most recent answer of each answered case of the family,
+in the window of the model. A family with no answered case agrees. The
+weight of an answer does not change the kind.
+
+For example, two approvals of one action and no denial give
+$e \approx 0.64$ and $\hat p \approx 0.80$. With the safety-weighted
+profile, Limen suggests `allow` only above 0.90, so the `ask_kind` is
+`short`. More approvals move $\hat p$ above 0.90.
 
 Proposition 3 is about a policy that knows $q(x)$. The model comes near
 $q(x)$ only with many answers. Because of this, Proposition 3 applies to
@@ -232,61 +234,129 @@ $q(x)$ in the ask range. Then more answers do not move $\hat p$ out of
 the ask range. With few answers, $\hat p$ is not near $q(x)$, and more
 answers can move it.
 
-The cut 0.5 is a constant of the engine, `engine.EvidenceCut`. An
-`allow` or a `block` has no `ask_kind`. The `ask_kind` does not tell if
-the answers disagree. [Integration](integrating.md#two-kinds-of-ask)
-tells how a client finds this. A decision point can let its rules decide
-an `unsure` ask and keep a `split` ask for the person. A `split` ask comes
-from the answers of that person.
+The cut 0.5 is a constant of the engine, `engine.EvidenceCut`. It is a
+measure of evidence, not a test of consent. The cover rule is the test of
+consent. An `allow` or a `block` has no `ask_kind`. A decision point can
+let its rules decide an `unsure`, a `short` and a `few` ask, and keep a
+`split` and a `wider` ask for the person. These come from the answers of
+that person. [Integration](integrating.md#kinds-of-ask) tells what Topos
+does with each kind.
 
-## The answer minimum
+## The cover rule
 
-The answer minimum applies after the model and the decision rule. With
-few answers, $\hat p$ can already be above $\tau_{\text{high}}$. For
-example, one approval of `publish` and no denial give
-$\hat p \approx 0.73$ and $e \approx 0.54$. With the symmetric profile,
-$\tau_{\text{high}} = 0.65$, so the decision rule gives `allow` after
-one answer. One approval is not a pattern. Approvals from one session
-can also come from one task only.
+The cover rule applies after the model and the decision rule. With few
+answers, $\hat p$ can already be above $\tau_{\text{high}}$. For example,
+one approval of `publish` and no denial give $\hat p \approx 0.73$ and
+$e \approx 0.54$. With the symmetric profile, $\tau_{\text{high}} = 0.65$,
+so the decision rule gives `allow` after one answer. One approval is not
+a pattern. Also, an approval of a preview is not an approval to make an
+app public. The model does not know this difference, because the label
+`publish` does not tell it.
 
-Let $n$ be the number of actions with the same label as the action whose
-most recent answer is an approval. Let $s$ be the number of different
-sessions of these actions. Limen suggests `allow` only if
+### The scope
+
+The scope of an action has four dimensions:
+
+| Dimension | Values, from the least reach to the most |
+|---|---|
+| `undo` | `none`, `reversible`, `recoverable`, `irreversible` |
+| `crosses` | each of `machine`, `remote`, `network`, `organization`, `public`: no or yes |
+| `target_class` | `scratch`, `own`, `shared`, `primary` |
+| `contact` | `repeat`, `first` |
+
+Each dimension also has the value `unknown`. For values
+$v_0 < v_1 < \dots < v_k$ of one dimension, $v_i$ is within $v_j$ if
+$i \le j$. $v_0$ is within `unknown`, `unknown` is within $v_k$, and
+`unknown` is within `unknown`. A middle value and `unknown` are not
+comparable. This is a partial order. A scope $s$ is within a scope $a$
+if, in each dimension, the value of $s$ is within the value of $a$.
+`contact` is not in the order.
+
+Limen reads the scope from the input of the action, with a fixed table of
+shell commands, and from the fields `effect` and `reversible`. The
+decision point can send claims. For a dimension that both give, the
+value is the greater of the two. If the two values are not comparable,
+the value is the greatest value. A claim can make the scope wider, but
+it cannot make it narrower. Only a hold of the environment can make the
+reading of Limen narrower. [Integration](integrating.md#send-the-reach-of-an-action)
+gives the fields.
+
+### The cover
+
+The family of an action is the name of its tool, or the words of each
+shell segment, for example `git push`. An approval covers an action $x$
+if its most recent answer is an approval, its weight is above 0, it has a
+family of $x$, and the scope of $x$ is within its scope. Let $W_f$ be the
+total weight of the approvals that cover $x$ in the family $f$, and $S_f$
+the number of their different sessions. $x$ is covered if, for each
+family $f$ of $x$,
 
 $$
-\hat p > \tau_{\text{high}}, \qquad n \ge n_{\min}, \qquad s \ge s_{\min}.
+W_f \ge w_{\min}, \qquad S_f \ge s_{\min}.
 $$
 
-If $\hat p > \tau_{\text{high}}$ and $n$ or $s$ is too small, Limen
-suggests `ask`. The defaults are $n_{\min} = 3$ and $s_{\min} = 2$, the
-constants `limen.MinAllows` and `limen.MinSessions`. A denial never
-counts. An approval that the person later changed to a denial does not
-count. An action without a session is a session of its own. Only the
-answers of the person in the same organization count.
+The defaults are $w_{\min} = 3$ and $s_{\min} = 2$, the constants
+`limen.MinWeight` and `limen.MinSessions`. A cost profile can make them
+greater, and the meet of two profiles takes the greater value. Limen
+reads the cases in the window of the model, the 512 most recent answered
+cases. A case without a session counts as the session of its UTC day.
 
-The answer minimum does not change $\hat p$, the uncertainty, the
+If $\hat p > \tau_{\text{high}}$ and $x$ is not covered, Limen suggests
+`ask`. The `ask_kind` is `wider` if, for a family of $x$, no approval of
+any weight has a scope that the scope of $x$ is within. It is `few` in
+the other case. The rule does not change $\hat p$, the uncertainty, the
 evidence ratio, or the thresholds. It never changes a `block` or an
-`ask`. It only changes some `allow` suggestions to `ask`, so it only adds
-asks. The paper has no proposition about it. It is a temporary rule,
-until a design for consent replaces it.
+`ask`.
 
-| Answers of `publish` | $\hat p$ | $e$ | Symmetric (0.65) | Safety-weighted (0.90) |
+Proposition 2 gives the verdict of least expected cost among `allow`,
+`ask` and `block`. The cover rule removes `allow` from the choices where
+the person gave no consent to the reach of the action. Limen then takes
+the verdict of least expected cost among the choices that are left. The
+paper measured the problem that this solves (section Generalization to
+never-labelled actions). Where the scope is new, Limen asks, as the
+per-cell learner of the paper does. Where the scope is covered, the
+kernel still transfers approval.
+
+| Answers of `publish` (an update) | $\hat p$ | $e$ | Symmetric (0.65) | Safety-weighted (0.90) |
 |---|---|---|---|---|
-| 1 approval | 0.73 | 0.54 | `ask`, held (before: `allow`) | `ask` |
-| 3 approvals in 1 session | 0.85 | 0.69 | `ask`, held (before: `allow`) | `ask` |
-| 3 approvals in 2 sessions | 0.85 | 0.69 | `allow` | `ask` |
+| 1 considered approval | 0.73 | 0.54 | `ask`, `few` | `ask`, `short` |
+| 3 considered approvals in 1 session | 0.85 | 0.69 | `ask`, `few` | `ask`, `short` |
+| 3 considered approvals in 2 sessions | 0.85 | 0.69 | `allow` | `ask`, `short` |
+| the same, for a `publish` that makes the app public | 0.85 | 0.69 | `ask`, `wider` | `ask`, `short` |
 
-An `ask` from the answer minimum gets its `ask_kind` from the evidence
-ratio, as each `ask` does. One approval of `publish` gives
-$e \approx 0.54$, so the `ask` is `split`. Then a decision point that
-keeps `split` asks for the person shows the action to the person. The
-prediction has `minimum`, with the counts and the minimums. Its `reason`
-gives the counts.
+### The weight of an answer
+
+Most answers are habit. A model that learns from habit learns the habit,
+not the consent. The weight of an answer, `weights/1`, is 0 or 1. A
+denial has weight 1, except a denial from a standing rule. An approval
+has weight 0 if one of these is true:
+
+- A standing rule gave it (`surface` is `rule`).
+- One gesture answered more than one action (`surface` is `bulk`).
+- The time of the answer is less than 2000 ms.
+- The client showed the suggestion of Limen, the shown $\hat p$ was above
+  0.5, and the approval followed it.
+- 50 reviews or more of the same person came before it in its session.
+
+Each rule but the first applies only if the person did not open the
+details. The time of an answer is the smallest of `answer_ms`,
+`waited_ms`, and the time from the recorded decision to the answer. In
+model version 1, the weight applies to the cover rule only. Each answer
+still trains the model.
+
+No estimate reads the weight. A review counts with the weight
+$1/\pi$ of its review probability, as Proposition 8 needs. A weight that
+depends on the answer would bias the estimate toward the answers that
+the person gave slowly. The cover rule changes which actions a person
+sees. It does not change the probability with which a person sees them,
+because the decision point fixes that probability after the prediction.
+So the estimates stay unbiased. The certificate gives one more count,
+`considered`: the audits of its clean run whose answer has weight 1.
 
 Explanations, the entries of `GET /v1/learned`, and replays also apply
-the answer minimum. A preview and a reliability report read the recorded
-predictions. A preview applies different thresholds to the recorded
-approval probabilities, without the answer minimum.
+the cover rule. A preview applies the cover that each prediction
+recorded, and does not calculate it again. A reliability report reads the
+recorded predictions.
 
 ## Explanations
 

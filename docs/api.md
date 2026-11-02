@@ -84,13 +84,14 @@ the action runs.
 | Field | Required | Meaning |
 |---|---|---|
 | `org`, `subject`, `action_id` | yes | The key. |
-| `actor` | no | The agent that proposed the action: `kind`, `id`, and `session`. If `actor` is present, `kind` is necessary. The answer minimum counts sessions with `session`. |
+| `actor` | no | The agent that proposed the action: `kind`, `id`, and `session`. If `actor` is present, `kind` is necessary. The cover rule counts sessions with `session`. |
 | `kind`, `name` | yes | The domain of the action and the operation. |
 | `effect` | yes | `none`, `read`, `write`, or `external`. |
 | `reversible` | no | `true` if the action can be undone. |
 | `input` | no | Any JSON. Limen reads it only to calculate the features, with fixed code. Limen does not keep it. |
-| `target` | no | `kind`, `id`, and `sensitivity` from 0 to 1. If `target` is present, `kind` and `id` are necessary. |
-| `environment` | no | `kind` and `credentialed`. |
+| `target` | no | `kind`, `id`, `sensitivity` from 0 to 1, and `class`: `scratch`, `own`, `shared`, or `primary`. If `target` is present, `kind` and `id` are necessary. |
+| `environment` | no | `kind` and `credentialed`. Also `holds`, a list of `egress`, `protected_refs` and `checkpoints`, and `repositories`: `private`, `public`, or `mixed`. |
+| `scope` | no | What the decision point knows about the reach of the action: `undo` (`none`, `reversible`, `recoverable`, `irreversible`), `crosses` (an object with `machine`, `remote`, `network`, `organization`, `public`, each `true` or `false`), and `contact` (`first` or `repeat`). Leave out what you do not know. A word outside a list is `unknown`, and it is not an error. [Integration](integrating.md#send-the-reach-of-an-action) gives the meaning. |
 | `attributes` | no | Not more than 64 values. Each value is a string, a finite number, or a boolean. |
 | `signals` | no | Each signal has a `source`. It also has a `verdict`, a `score` from 0 to 1, or both. |
 
@@ -110,42 +111,59 @@ The response is the prediction:
   "profile": {"org": "org_7"},
   "audit_rate": 0.05,
   "source": "learned/1",
-  "reason": "The approval probability is 0.58, between the block threshold (0.25) and the allow threshold (0.90). Limen suggests ask."
+  "reason": "The answers of this person about actions like this do not agree. Limen suggests ask.",
+  "scope": {
+    "undo": "irreversible",
+    "crosses": {"machine": false, "remote": true, "network": false},
+    "target_class": "primary",
+    "contact": "unknown",
+    "target_kind": "ref"
+  },
+  "cover": {"covered": false, "weight": 1, "sessions": 1, "min_weight": 3, "min_sessions": 2}
 }
 ```
 
 | Field | Meaning |
 |---|---|
-| `verdict` | The suggested verdict: `allow`, `ask`, or `block`. It is never `flag`. Only the decision point applies `flag`. If the answer minimum holds an `allow`, the verdict is `ask`, and the prediction has `minimum`. |
+| `verdict` | The suggested verdict: `allow`, `ask`, or `block`. It is never `flag`. Only the decision point applies `flag`. If the thresholds give `allow` and the action is not covered, the verdict is `ask`. |
 | `approve` | The approval probability. |
 | `uncertainty` | The uncertainty of the approval probability. An action that is not similar to an earlier action has a high value. |
 | `evidence_ratio` | The evidence ratio of the prediction, from 0 to 1. A value near 0 tells that the person has few answers about actions like this one. |
-| `ask_kind` | Only for an `ask`: `unsure` if `evidence_ratio` is less than 0.5, `split` if it is 0.5 or more. A decision point can let its rules decide an `unsure` ask and keep a `split` ask for the person. [Two kinds of `ask`](integrating.md#two-kinds-of-ask) gives the meaning of each kind. |
-| `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow` if the answer minimum permits it. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
+| `ask_kind` | Only for an `ask`: `unsure`, `split`, `short`, `wider`, or `few`. A decision point can let its rules decide an `unsure`, a `short` and a `few` ask, and keep a `split` and a `wider` ask for the person. [Kinds of `ask`](integrating.md#kinds-of-ask) gives the meaning of each kind. Read a kind that you do not know as `unsure`. |
+| `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow` if the action is covered. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
 | `profile` | The scope of the cost profile that applies. |
 | `audit_rate` | The audit rate of the cost profile. |
 | `source` | The model that made the prediction: `learned/<version>`. |
-| `reason` | One sentence for the record of the person. Do not show it to an agent. |
-| `minimum` | Only if the answer minimum changed the suggested verdict from `allow` to `ask`. `allows` is the number of actions with the same label whose most recent answer is an approval. `sessions` is the number of different sessions of these actions. `min_allows` and `min_sessions` are the minimums of the server. [Theory](theory.md#the-answer-minimum) gives the rule. |
+| `reason` | One sentence for the record of the person. Do not show it to an agent. For an `ask`, it has no probability and no direction. |
+| `scope` | The reach of the action that Limen used: its reading of the input, the holds, and the claims. `undo`, `target_class` and `contact` are words, `unknown` included. `crosses` has a key only for each boundary that is known. `target_kind` names the type of the target without its name. Not in the `FailClosed` fallback. |
+| `cover` | The [cover rule](theory.md#the-cover-rule) for the action. `covered` is `true` if considered approvals of the person in the family of the action, whose scope the action is within, have the weight `min_weight` or more from `min_sessions` sessions or more. `weight` and `sessions` are the numbers for the family with the least weight. Not in the `FailClosed` fallback. |
+| `minimum` | Not used. A server of v0.6 sent it for the answer minimum, which the cover rule replaced. |
 
-An `ask` from the answer minimum, after one approval of `publish`, under
-the upper threshold 0.65:
+An `ask` from the cover rule, after one considered approval of
+`publish: update`, under the upper threshold 0.65:
 
 ```json
 {
   "verdict": "ask",
   "approve": 0.73,
   "evidence_ratio": 0.54,
-  "ask_kind": "split",
+  "ask_kind": "few",
   "thresholds": {"allow_above": 0.65, "block_below": 0.35},
-  "minimum": {"allows": 1, "sessions": 1, "min_allows": 3, "min_sessions": 2},
-  "reason": "The approval probability is 0.73, above the allow threshold (0.65). The person approved actions with this label 1 time, in 1 session. Limen needs 3 approvals or more, in 2 sessions or more, before it suggests allow. Limen suggests ask."
+  "cover": {"covered": false, "weight": 1, "sessions": 1, "min_weight": 3, "min_sessions": 2},
+  "reason": "This person allowed actions of this reach. Limen needs 3 considered approvals from 2 sessions before it suggests allow. Limen suggests ask."
 }
 ```
 
-Errors: `invalid_action`, `action_conflict`, `body_too_large`, and the
-common errors. If the status is `503`, the decision point must hold the
-action for a person.
+The same person and a `publish` that makes the app public:
+
+```json
+{
+  "verdict": "ask",
+  "ask_kind": "wider",
+  "cover": {"covered": false, "weight": 0, "sessions": 0, "min_weight": 3, "min_sessions": 2},
+  "reason": "This person never allowed an action of this reach: \"publish: make public\". Limen suggests ask."
+}
+```
 
 ## Decisions
 
@@ -194,6 +212,16 @@ Errors:
 | `org`, `subject`, `action_id` | yes | The key. |
 | `approve` | yes | `true` if the person approves the action. For an action that ran before the review, `true` if the person would approve it. |
 | `by` | no | The person who answered, if the caller sends the answer for a different person. Limen keeps `by` only if the caller is not the `subject`. Otherwise, Limen records the caller. In all cases, the caller needs the permission `case.answer` for the `subject`. |
+| `answer_ms` | no | The milliseconds from the moment the question was visible to the person to the answer, as the client measured it. 0 to 86400000. |
+| `waited_ms` | no | The milliseconds from the decision that showed the action to the answer, as the decision point measured it. 0 or more. |
+| `details_opened` | no | `true` if the person opened the details of the action before the answer. `false` if the client offered them and the person did not open them. |
+| `suggestion_shown` | no | `true` if the client showed the suggestion of Limen before the answer. |
+| `surface` | no | Where the person answered: `prompt`, `notification`, `queue`, `bulk`, or `rule`. Limen ignores a different value. |
+| `remembered` | no | `true` if the answer also made a standing rule. |
+
+The last six fields tell how the person answered. They set the weight of
+the answer for the cover rule ([Integration](integrating.md#how-the-person-answered)).
+Leave out each field that you do not know.
 
 The response is status 204 with no body. If the decision showed the
 action to a person, the first answer is the review of the action. Only
@@ -232,7 +260,8 @@ the prediction if there is one, the decision, and the answers.
 ```
 
 In an answer, `review` is `true` if the answer is the review of the
-action. Only this answer goes into the error rates.
+action. Only this answer goes into the error rates. An answer also has
+the fields of how the person answered, as the decision point sent them.
 
 Errors: `invalid_query` and the common errors.
 
@@ -262,7 +291,7 @@ be before the `to` time.
   "to": "2026-10-01T00:00:00Z",
   "false_allow": {"value": 0.10, "interval": [0.03, 0.25], "covered": 0.96, "reviews": 24, "audits": 9, "unanswered": 1},
   "false_block": {"value": 0.49, "interval": [0.31, 0.67], "covered": 1, "reviews": 31, "audits": 2, "unanswered": 0},
-  "certificate": {"alpha": 0.01, "delta": 0.05, "clean": 112, "needed": 300, "holds": false}
+  "certificate": {"alpha": 0.01, "delta": 0.05, "clean": 112, "needed": 300, "holds": false, "considered": 87}
 }
 ```
 
@@ -275,7 +304,7 @@ be before the `to` time.
 | `covered` | The part of the allows (or blocks) of the source that a person could see. The estimate applies to this part only. |
 | `reviews`, `audits` | The number of reviews in the estimate, and the number of audits among them. |
 | `unanswered` | The number of actions that a decision showed to the person and that have no review yet. |
-| `certificate` | A test of the claim of the cost profile: a false allow rate below `alpha`, with confidence `1 - delta`. `clean` counts the audits of allows of the source in the period that the person approved, from the most recent, without a gap. A denied allow stops the count. `needed` is the number that the claim needs. `holds` is `true` if `clean` is equal to or more than `needed`. |
+| `certificate` | A test of the claim of the cost profile: a false allow rate below `alpha`, with confidence `1 - delta`. `clean` counts the audits of allows of the source in the period that the person approved, from the most recent, without a gap. A denied allow stops the count. `needed` is the number that the claim needs. `holds` is `true` if `clean` is equal to or more than `needed`. `considered` is the number of these audits whose answer has weight 1. The claim does not use it: it shows if the certificate rests on quick answers. |
 
 The numbers above are examples. Errors: `invalid_query` and the common
 errors.
@@ -320,6 +349,7 @@ you send for `thresholds` or `default`.
 | `costs.ask` | The cost of one `ask`. It must be more than 0. |
 | `audit_rate` | The audit rate, from 0 to 1. |
 | `certify` | Optional: `alpha` in (0, 1] and `delta` in (0, 1). Without `certify`, the claim is a false allow rate below 1% with 95% confidence. This claim needs 300 clean audits. |
+| `consent` | Optional: `min_weight` and `min_sessions` of the [cover rule](theory.md#the-cover-rule) for the actions in the scope. Each is 0 or more. A value can only make the setting of the server greater: the setting that applies is the greater of the two. 0, or no value, is the setting of the server. The meet of the cost profile of a person and of the organization takes the greater value of each. |
 
 A `DELETE` removes the cost profile that is saved for exactly the scope
 in the query. The response is status 204. If no cost profile is saved
@@ -390,14 +420,17 @@ The body is newline-delimited JSON
 [size limits](#conventions) apply.
 
 ```json
-{"at": "2026-09-02T09:12:03Z", "action": {"...": "..."}, "verdict": "ask", "review_probability": 1, "source": "rules/1", "approve": true}
+{"at": "2026-09-02T09:12:03Z", "action": {"...": "..."}, "verdict": "ask", "review_probability": 1, "source": "rules/1", "approve": true, "answered_at": "2026-09-02T09:12:11Z"}
 {"at": "2026-09-02T09:15:44Z", "action": {"...": "..."}, "verdict": "allow", "review_probability": 0, "source": "rules/1"}
 {"at": "2026-09-02T11:40:10Z", "action": {"...": "..."}, "verdict": "flag", "review_probability": 0.05, "source": "rules/1", "approve": false}
 ```
 
 Limen predicts the records in the order of `at`. It predicts each record
-before it learns the answer of that record, with the answer minimum.
-Then it reports what it would suggest:
+before it learns the answer of that record, with the cover rule. A record
+can have `answered_at`, the time of the answer, and the fields of how the
+person answered. Without `answered_at`, the answer has the time `at`.
+Then the time of the answer is 0, and its approval does not build the
+cover. Then Limen reports what it would suggest:
 
 ```json
 {
@@ -458,6 +491,10 @@ model.
   "parts": {"action": 0.52, "recent": -0.18, "interaction": -0.03},
   "evidence_ratio": 0.84,
   "ask_kind": "split",
+  "cover": {
+    "covered": false, "weight": 0, "sessions": 0, "min_weight": 3, "min_sessions": 2,
+    "nearest": [{"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z"}]
+  },
   "evidence": [
     {"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z", "approve": true, "share": 0.21},
     {"action_id": "ses_8c/toolu_02", "label": "bash: git push --force", "at": "2026-10-01T15:40:10Z", "approve": false, "share": 0.17}
@@ -469,14 +506,14 @@ model.
 |---|---|
 | `model` | The model that gives the explanation. This is the current model of the person. `answers` is the number of answers of the person that the model learned from. |
 | `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
-| `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. The answer minimum applies to `verdict`, with the approvals of the person now. |
-| `minimum` | Only if the answer minimum changed `verdict` from `allow` to `ask`. The same as in a prediction. |
+| `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. The cover rule applies to `verdict`, with the approvals of the person now. |
+| `cover` | The cover of the action now, as in a prediction. `nearest` has not more than three approved cases of the family of the action whose scope the action is more than: the closest first. A client can say "You allowed `publish: update`. This is `publish: make public`." |
 | `reason` | One sentence for the person that tells why `verdict` is what it is, as in a prediction. An older server does not send it. |
 | `thresholds` | The thresholds of the recorded prediction. If there is no recorded prediction, the thresholds of the cost profile that applies now. |
 | `mean` | The value that the model calculates before it changes it into a probability. A positive value is on the side of approval. |
 | `parts` | The parts of `mean`. Their sum is `mean`. `action` is what the model learned about this type of action. `recent` is the recent tolerance of the person, from all recent answers. `interaction` is a small part between the two. |
 | `evidence_ratio` | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. |
-| `ask_kind` | Only for an `ask`. `unsure` if `evidence_ratio` is less than 0.5: the person has few answers about this type of action, and more answers can change the suggestion. `split` if it is 0.5 or more. Then the answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. More answers that agree can change the suggestion. `split` does not tell that the answers disagree. `evidence` with an approval and a denial that have the same `label` tells it. |
+| `ask_kind` | Only for an `ask`, as in a prediction: `unsure`, `split`, `short`, `wider`, or `few`. |
 | `evidence` | The answers with the largest parts: not more than three on the side of the verdict and two on the other side. For an `ask`, not more than three on each side. The largest `share` is first. |
 | `label` | The type of the action, from a fixed list of words. A label never contains the input of the action. |
 | `share` | The size of the part of this answer, divided by the sum of the sizes of the parts of all answers. |
@@ -518,9 +555,9 @@ the most answers is first.
 | Field | Meaning |
 |---|---|
 | `approved`, `denied` | The number of cases with this label that the person approved and denied. The last answer of each case counts. |
-| `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. The answer minimum applies to `verdict`. |
-| `minimum` | Only if the answer minimum changed `verdict` from `allow` to `ask`. The same as in a prediction. |
-| `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. If `ask_kind` is `split` and `approved` and `denied` are both more than 0, the answers of the person about this label disagree. |
+| `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. The cover rule applies to `verdict`. |
+| `cover` | The cover of the most recent case with this label, as in a prediction. |
+| `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. |
 | `thresholds` | The thresholds of the cost profile that applies to the kind of action and to `agent`. |
 | `recent` | The recent tolerance of the person (`parts.recent` of an explanation) at not more than 20 decisions. The decisions have equal intervals between them. `t` is the number of the decision, and `at` is the time when it arrived. |
 
@@ -533,7 +570,9 @@ Errors: `invalid_query` and the common errors.
 A preview shows what a different cost profile would do with the recorded
 predictions of one person in a period of time. Limen applies the
 thresholds of the costs to each recorded prediction. It does not
-calculate the model again, and it does not apply the answer minimum.
+calculate the model again. An `allow` stays `ask` if the recorded
+`cover` of the prediction is not covered. A prediction from before the
+cover rule has no `cover`.
 
 ```json
 {

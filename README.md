@@ -140,12 +140,19 @@ These rules apply to each implementation of Limen:
   formula calculates the thresholds from these costs. Nobody adjusts the
   thresholds by hand. If Limen has no answers from a person, it suggests
   `ask`.
-- **One approval is not a pattern.** Limen suggests `allow` for an action
-  only if the person approved actions with the same label 3 times or
-  more, in 2 sessions or more. These are the default numbers. Until
-  then, Limen suggests `ask`, also if the approval probability is above
-  the upper threshold. This rule is temporary, until a design for
-  consent replaces it.
+- **No allow beyond what the person allowed.** Limen reads the scope of
+  each action: if it can be undone, the boundaries that it crosses, and
+  the class of its target. Limen suggests `allow` only if considered
+  approvals of the same family cover the action: their scope is the same
+  or wider, with a weight of 3 or more from 2 sessions or more. These are
+  the default numbers. Until then, Limen suggests `ask`, also if the
+  approval probability is above the upper threshold. An approval of
+  `publish: update` does not cover `publish: make public`.
+- **A quick approval is not consent.** An approval that came in less than
+  two seconds, from a rule, from one gesture for many actions, after a
+  suggestion that the client showed, or late in a long session, has
+  weight 0 if the person did not open the details. It teaches the model,
+  but it does not build the cover. No error rate reads the weight.
 - **Your rules have priority.** The ceiling from your rules is a limit for
   the suggested verdict. If Limen fails or does not answer in time, the
   suggested verdict is `ask`. Nothing allows the action because Limen
@@ -259,16 +266,24 @@ Content-Type: application/json
   "profile": {"org": "org_7"},
   "audit_rate": 0.05,
   "source": "learned/1",
-  "reason": "The approval probability is 0.58, between the block threshold (0.25) and the allow threshold (0.90). Limen suggests ask."
+  "reason": "The answers of this person about actions like this do not agree. Limen suggests ask.",
+  "scope": {
+    "undo": "recoverable",
+    "crosses": {"machine": false, "remote": true, "network": false},
+    "target_class": "primary",
+    "contact": "unknown",
+    "target_kind": "ref"
+  },
+  "cover": {"covered": false, "weight": 2, "sessions": 1, "min_weight": 3, "min_sessions": 2}
 }
 ```
 
 The judge gave `allow`. But the approval probability is in the ask range,
-so Limen suggests `ask`. The `ask_kind` is `split`: the person answered
-about such actions, and the approval probability is still in the ask
-range. The answers can disagree. They can also agree, but not enough yet
-to pass a threshold. The decision point asks the person and records the
-decision:
+so Limen suggests `ask`. The `ask_kind` is `split`: the person approved
+and denied such actions, and the answers do not agree. The `scope` is
+what Limen read from the command: a push can be undone with a second
+push, it reaches a remote, and `main` is the default branch. The
+decision point asks the person and records the decision:
 
 ```http
 POST /v1/decisions

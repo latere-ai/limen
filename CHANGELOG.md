@@ -11,6 +11,117 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- The scope of an action: if it can be undone (`undo`), the boundaries
+  that it crosses (`crosses`), the class of its target (`target_class`),
+  and if it is a first contact (`contact`). Each dimension also has the
+  value `unknown`.
+  - Limen reads the scope from the input with a fixed table of shell
+    commands. For example, `git push --force` cannot be undone, a refspec
+    that names `main` is the default branch, `npm publish` makes
+    something public, and `curl -d` sends data.
+  - A decision point can send claims: `scope.undo`, `scope.crosses`,
+    `scope.contact`, `target.class`, `environment.holds`, and
+    `environment.repositories`. A claim makes the scope wider and never
+    narrower. A hold (`egress`, `protected_refs`, `checkpoints`) makes
+    the reading of Limen narrower. A word outside a list is `unknown`,
+    and it is not an error.
+  - A prediction gives the scope that Limen used in `scope`. A boundary
+    of `crosses` that is not known has no key. Limen never keeps the
+    input, and the scope holds only words of the lists.
+- The cover rule. Limen suggests `allow` only if considered approvals of
+  the same family cover the action: approvals whose scope the scope of
+  the action is within. In each family, they must have a weight of 3 or
+  more, from 2 sessions or more. Until then, an `allow` from the
+  thresholds becomes `ask`.
+  - A prediction has `cover`: `covered`, `weight`, `sessions`,
+    `min_weight`, and `min_sessions`. An explanation also has
+    `cover.nearest`, the approvals nearest to covering the action. An
+    entry of `GET /v1/learned` has `cover`.
+  - A cost profile can make the settings greater with `consent`:
+    `min_weight` and `min_sessions`. It cannot make them smaller. The
+    meet of two cost profiles takes the greater value.
+  - The rule applies to predictions, explanations, the entries of
+    `GET /v1/learned`, and replays. A preview applies the cover that each
+    prediction recorded.
+- New kinds of `ask`: `short`, `wider`, and `few`.
+  - `short`: the evidence ratio is 0.5 or more, the approval probability
+    is in the ask range, and the answers of the family agree.
+  - `wider`: the thresholds give `allow`, and the person never allowed an
+    action of this reach.
+  - `few`: the thresholds give `allow`, and approvals cover the action,
+    but not with enough weight or not from enough sessions.
+  - A decision point can let its rules decide `unsure`, `short` and
+    `few`, and keep `split` and `wider` for the person. A decision point
+    that does not know a kind reads it as `unsure`.
+- How the person answered. `POST /v1/answers` takes `answer_ms`,
+  `waited_ms`, `details_opened`, `suggestion_shown`, `surface`, and
+  `remembered`, each optional. A recorded answer keeps them. They set the
+  weight of the answer, `weights/1`, which is 0 or 1. An approval has
+  weight 0 if a rule gave it, if one gesture answered many actions, if
+  it came in less than 2000 ms, if it followed a suggestion that the
+  client showed, or if 50 reviews came before it in its session. Except
+  for a rule, the weight is 1 if the person opened the details. Only the
+  cover rule reads the weight. The model still learns each answer, and
+  no error rate reads the weight.
+- `LIMEN_ANSWER_FLOOR_MS` (default `2000`) and `LIMEN_ANSWER_FATIGUE`
+  (default `50`) set the weight of an answer. `0` turns a rule off, and
+  `limend` writes a warning.
+- The certificate of a reliability report has `considered`: the audits of
+  its clean run whose answer has weight 1. The claim does not read it.
+- A replay record can have `answered_at` and the fields of how the person
+  answered. `limen replay topos` sets `answered_at` from the time of the
+  confirmation.
+- The conformance cases `CoverCapsAllow`, `ScopeOfAnAction`,
+  `AnswerWeights`, `ConsentOfAProfile`, `AskReasons`, and `AnswerFields`.
+- In Go: `Reach`, `ReachClaim`, `Crosses`, `Bound`, `Order`, `Cover`,
+  `ExplainedCover`, `Approval`, `Consent`, `HowAnswered`, `MinWeight`,
+  `AnswerFloor`, `AnswerFatigue`, and the shared arithmetic in
+  `estimate`: `Record`, `Policy`, `Cover`, `Judge`, `Nearest`,
+  `Disagree`, and `AskReason`. `featurize.Read` reads the scope, the
+  families and the label of an action.
+
+### Changed
+
+- The cover rule replaces the answer minimum of v0.6.0. It keeps
+  `LIMEN_MIN_ALLOWS` and `LIMEN_MIN_SESSIONS` with the same defaults. It
+  counts by family and scope in place of the label, and it counts only
+  approvals with weight. An approval answered quickly, with no details
+  opened, no longer counts.
+- An action without `actor.session` counts in the session of the UTC day
+  when Limen received it. Before, each such action was a session of its
+  own.
+- `split` now means that the answers of the family have an approval and a
+  denial. Answers that agree give `short`. Hosted Topos keeps a `split`
+  ask for the person, so agreeing answers no longer make each next action
+  wait.
+- The reason of an `ask` states no probability and no direction.
+  Examples: "The answers of this person about actions like this do not
+  agree. Limen suggests ask." and "This person never allowed an action of
+  this reach: "publish: make public". Limen suggests ask." The reasons
+  of `allow` and `block` keep their probabilities.
+- Labels are `labels/2`: the label of `labels/1` and a phrase from the
+  scope, for example `publish: make public`, `publish: update`, or
+  `bash: git push --force, default branch, cannot undo`. A case from
+  before keeps its `labels/1` label. The cover rule reads its scope from
+  its stored records, and an unknown reach of an old approval never
+  covers a known reach of a new action.
+- `invalid_answer` also covers a value that is not permitted.
+- A prediction reads the cases of a person from memory: the engine keeps
+  them beside the model of the person and changes them with each write.
+  If Limen cannot read the cases to load the model, the prediction
+  fails, and `FailClosed` suggests `ask`.
+
+### Removed
+
+- `minimum` is no longer set. A prediction, an explanation and an entry
+  of `GET /v1/learned` keep the field for readers of v0.6, and it is
+  deprecated. In Go, `MinAllows`, `Tally`, `Hold`, and the methods of
+  `Minimum` are removed. `engine.Options` and `stub.Options` have
+  `MinWeight` in place of `MinAllows`. `SessionOf` takes the time when
+  Limen received the action.
+
 ## v0.6.0 - 2026-11-02
 
 ### Added

@@ -1,6 +1,6 @@
 # Principles
 
-This page gives fifteen rules that each implementation of Limen obeys.
+This page gives seventeen rules that each implementation of Limen obeys.
 For each rule, the page gives what is true, the reason, and the check.
 The conformance suite in `conformance/` checks most rules. This suite runs
 against each implementation of the contract. The tests of the shared
@@ -125,7 +125,7 @@ the action attached, and the answer of the person still teaches the model.
 
 The fallback is an `ask` with the kind `unsure`. A decision point that
 lets its rules decide an `unsure` ask also lets them decide when Limen
-fails ([Integration](integrating.md#two-kinds-of-ask)). Then the action
+fails ([Integration](integrating.md#kinds-of-ask)). Then the action
 gets the verdict that the rules gave before Limen, never more than the
 ceiling.
 
@@ -300,25 +300,62 @@ no reliability report, and no cost profile for that person remains in
 that organization. It also checks the group rule and the answer rule of
 the report, and that a forget does not change a kept week.
 
-## 15. One approval is not a pattern
+## 15. No allow beyond what the person allowed
 
-Limen suggests `allow` for an action only if the person approved actions
-with the same label 3 times or more, in 2 sessions or more. These are
-the default numbers. If the approval probability is above the upper
-threshold and the approvals are too few, Limen suggests `ask`. This rule
-applies after the model and the thresholds. It never changes a `block`
-or an `ask`. It is temporary, until a design for consent replaces it.
+Limen suggests `allow` for an action only if the approvals of the person
+cover it. An approval covers an action of the same family whose scope is
+within the scope of the approval. The scope tells if the action can be
+undone, the boundaries that it crosses, and the class of its target. In
+each family of the action, the covering approvals must have a weight of 3
+or more, from 2 sessions or more. These are the default numbers. If the
+approval probability is above the upper threshold and the action is not
+covered, Limen suggests `ask`. This rule applies after the model and the
+thresholds. It never changes a `block` or an `ask`.
 
 **Why.** With few answers, the approval probability can already be above
 the upper threshold. One approval of `publish` gives 0.73. With the
 upper threshold 0.65, the next `publish` would run without a person
-after one answer. Approvals from one session can come from one task only.
-A person who approved an action in two sessions or more approved a type
-of action, not one task.
+after one answer. Also, an approval of an update is not an approval to
+make an app public. The model does not know this difference, because it
+compares actions by their features. Approvals from one session can come
+from one task only.
 
 **Checked by.** The conformance suite checks that an `allow` becomes
-`ask` until the approvals meet the minimum, and that the prediction gives
-the counts. It also checks that a denial never counts and that a `block`
-does not change. It checks that an action without a session counts as a
-session of its own. The tests of the engine check the same for its predictions,
-explanations, entries, and replays.
+`ask` until the approvals cover the action, and that the prediction gives
+the cover. It also checks that a denial, a replaced approval, an approval
+of a different family, and a quick approval never count. It checks that
+an action without a session counts in the session of its day, and that a
+`block` does not change. The tests of the engine check the same for its
+predictions, explanations, entries, and replays.
+
+## 16. A quick approval is not consent
+
+An answer carries how the person gave it: the time, where the person
+answered, if the person opened the details, and if the client showed the
+suggestion of Limen first. An approval that is quick, that came from a
+rule or from one gesture for many actions, that followed a suggestion
+that the client showed, or that came late in a long session, has weight 0
+if the person did not open the details. It does not build the cover. It
+still teaches the model. No error rate reads the weight.
+
+**Why.** Most answers are habit. A model that learns from the habit
+learns the habit, not the consent. An error rate that read the weight
+would not be a Horvitz-Thompson estimate over the reviews, and its value
+would move toward the answers that the person gave slowly.
+
+**Checked by.** The conformance suite checks each rule of the weight
+with the clock of the service. The tests of `estimate` check each rule,
+and that no rate and no certificate changes when the weights change.
+
+## 17. An ask has no lean
+
+The reason of an `ask` states no probability and no direction. A client
+does not show the approval probability, the suggested verdict, the
+reason, or an explanation before the person answers.
+
+**Why.** People follow an opinion that they see first, and they repeat
+its reasons. A person who sees the lean of Limen first can follow Limen.
+Then the answer teaches Limen its own opinion.
+
+**Checked by.** The conformance suite checks that no reason of an `ask`
+has a probability, in a prediction and in an explanation.

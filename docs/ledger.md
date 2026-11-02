@@ -83,6 +83,11 @@ probability of the decision. Examples:
   of 20. It counts for itself and for the 19 other allows that nobody
   examined.
 
+This weight comes from the review probability only. The weight of an
+answer, from how the person gave it, is a different number. Only the
+[cover rule](theory.md#the-cover-rule) reads it, and no estimate reads
+it.
+
 All other answers teach the model, but they never go into an estimate.
 Examples:
 
