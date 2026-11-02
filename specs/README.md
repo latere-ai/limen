@@ -17,7 +17,9 @@ a prediction is what it is, and the evidence behind an `ask`. Spec 010
 is what an organization needs: an agent that goes back to the cost
 profile of its organization, a cost profile of a person that only makes
 the cost profile of the organization stricter, and a weekly report that
-never shows one person.
+never shows one person. Spec 011 is consent: the reach of an action,
+no `allow` beyond what the approvals of the person cover, the weight of
+an answer, and a calibration report.
 
 The design follows the research in Changkun Ou, *Learning When to Ask:
 Trust Calibration for Agentic Tool Use, from Known Tools to Opaque LLM
@@ -101,6 +103,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
 | [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | complete |
+| [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | drafted |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a
