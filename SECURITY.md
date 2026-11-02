@@ -18,9 +18,9 @@ We fix vulnerabilities in the two most recent minor release series.
 
 | Version | Supported |
 |---|---|
-| v0.3.x | Yes |
-| v0.2.x | Yes |
-| v0.1.x | No |
+| v0.5.x | Yes |
+| v0.4.x | Yes |
+| v0.3.x and older | No |
 
 A fix comes in a new patch release of each supported series. Before
 v1.0.0, the contract in the module root can change in a minor release.
@@ -65,7 +65,8 @@ is a vulnerability, whatever its other effects are.
   refer to a record of a different organization.
 - **`Forget` removes all the data of a person.** `Forget` applies to one
   person in one organization. It is in scope if a record, an answer, a
-  model snapshot, or a report of that person stays after `Forget`.
+  model snapshot, the cost profile, or a report of that person stays
+  after `Forget`.
 
 [Spec 001](specs/001-architecture.md) gives the basis of each property.
 [Spec 006](specs/006-conformance.md) gives the tests that check them.
