@@ -327,6 +327,17 @@ Content-Type: application/json
   kind and agent, agent, kind, organization. If there is no saved profile,
   the built-in default applies, and `GET /v1/profiles` returns
   `"default": true`.
+- **Removal.** `DELETE /v1/profiles` (`Admin.DeleteProfile` in Go)
+  removes the cost profile of one scope. Then the next scope in the order
+  applies. For example, an agent goes back to the cost profile of its
+  organization.
+- **A person.** A person can save a cost profile for their own actions in
+  the organization, with `subject` and no `kind` or `agent`. It can only
+  make the cost profile of the organization stricter for that person.
+  Limen applies the meet of the two cost profiles
+  ([API](api.md#the-cost-profile-of-a-person)). A decision point does not
+  change: the thresholds and the audit rate of each prediction are
+  already the meet. `Forget` removes the cost profile of the person.
 - **`audit_rate`** is the audit rate. The simulation of the paper used 5%.
   If the audit rate is zero, Limen cannot estimate the false allow rate of
   automatic verdicts. The reports tell you this.
@@ -355,6 +366,21 @@ value of `of` is one of these sources:
 - Read the `interval` before the `value`.
 - Read `covered` to know which part of the actions the `value` applies to.
 - Keep `unanswered` small.
+
+## The report of an organization
+
+`GET /v1/reports?org=...&from=...&to=...` gives the counts and the error
+rates of the actions of an organization, for all its persons together, by
+week. In Go, it is the `Reporter` interface of each `limen.Service`. A
+week shows its numbers only after it closed, and only if 5 or more persons
+took part. A number that comes from reviews shows only if the reviews
+come from 5 or more persons and no person gave more than one half of them.
+A week that a report showed never changes. The
+[API](api.md#reports-of-an-organization) describes the fields and the
+rules.
+
+A decision point does not read the report. Give `report.read` only to the
+persons who manage the organization.
 
 ## Explanations for the person
 

@@ -42,6 +42,14 @@ rules, a language model that examines actions, and Limen itself.
 >   different cost profile. The parts of each explanation are exact for
 >   the model. Each prediction tells if an `ask` comes from few answers or
 >   from answers that disagree.
+> - Cost profiles for an organization: a cost profile for each kind of
+>   action or agent that you can remove again, and a cost profile of a
+>   person that only makes the cost profile of the organization stricter
+>   for that person.
+> - The report of an organization: the counts and the error rates of its
+>   agents by week, for all its persons together. A number shows only if
+>   it comes from 5 or more persons, and a week that a report showed does
+>   not change.
 > - The `limen` command. It replays recorded decisions, for example from a
 >   Topos data directory.
 > - A stub service for tests, and the conformance tests that each

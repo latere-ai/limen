@@ -11,6 +11,52 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- `DELETE /v1/profiles?org&kind&agent&subject` removes the cost profile
+  that is saved for exactly that scope. The response is 204, also if no
+  cost profile is saved. Then the next scope in the order applies: an
+  agent goes back to the cost profile of its organization. The route asks
+  `profile.write`, as a save of the same scope does. In Go, it is
+  `Admin.DeleteProfile`.
+- A person can save a cost profile for their own actions in one
+  organization: a scope with `subject` and no `kind` or `agent`. It can
+  only make the cost profile of the organization stricter. A prediction,
+  `GET /v1/learned`, an explanation of an action with no prediction, and
+  the certificate of a reliability report use the meet of the two cost
+  profiles. The `profile` of a prediction has `subject` if the cost
+  profile of the person changed a value. `GET /v1/profiles` with
+  `subject` returns what the person saved. The Go function
+  `limen.Stricter` calculates the meet.
+- `GET /v1/reports?org&from&to` gives the report of an organization: the
+  counts and the error rates of its agents by week, for all its persons
+  together. A week starts on a Monday at 00:00 UTC, and a report has at
+  most 13 weeks. A week shows its numbers 7 days after its end, and only
+  if 5 or more persons took part. A number that comes from reviews shows
+  only if the reviews come from 5 or more persons and no person gave more
+  than one half of them. A week divides by agent, and an agent with fewer
+  than 5 persons goes into `other`. A week that a report showed never
+  changes, also after a forget. The route asks the new permission
+  `report.read` on the new resource kind `Report`, with the field `org`.
+  In Go, it is the `Reporter` interface.
+- The conformance suite has 15 new cases for these rules. `Target` has
+  `Clocked`, a service with a clock that the case sets. A target without
+  it skips the cases of the report.
+
+### Changed
+
+- `limen.Service` includes `Reporter`, and `Admin` includes
+  `DeleteProfile`. A Go type outside this module that implements
+  `limen.Service` must add the two methods. A decision point that uses
+  `client/`, `engine/` or `stub/` changes nothing.
+- `Forget` also removes the cost profile of the person in the
+  organization. It does not change a kept week of a report.
+- A `Profile` resource has `subject` for the cost profile of a person.
+  An authorization endpoint must decide it for that person and for no
+  other person.
+- The ledger directory keeps each kept week of a report in
+  `reports/<org>/<week>.json`.
+
 ## v0.4.0 - 2026-11-02
 
 ### Added

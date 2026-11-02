@@ -283,12 +283,19 @@ returns has no input.
 
 Limen uses the answers of a person only for that person. On request, it
 forgets all data about the person in an organization: the cases, the
-answers, and the model that it learned from them.
+answers, the model that it learned from them, and the cost profile of the
+person. The report of an organization never shows one person. Each of its
+numbers comes from 5 or more persons, and no person gave more than one
+half of the reviews in it.
 
 **Why.** The history of approvals and denials of a person shows how that
 person works. The person chooses if Limen uses it. The deletion must be
-complete, and a repeated deletion must give the same result.
+complete, and a repeated deletion must give the same result. A kept week
+of a report stays after a forget. It contains no record of a person, and
+a change would show the numbers of the person who left.
 
 **Checked by.** The conformance suite checks the state after Limen forgets
 a person in an organization. No case, no action that waits for a review,
-and no reliability report for that person remains in that organization.
+no reliability report, and no cost profile for that person remains in
+that organization. It also checks the group rule and the answer rule of
+the report, and that a forget does not change a kept week.

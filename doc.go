@@ -30,8 +30,14 @@
 // profile would have done ([Preview]). Each is exact for the model, and
 // none is for an agent to read.
 //
+// The [Reporter] reports an organization's agents by week across all its
+// persons, and never one person ([Report]). A person's own cost profile
+// only ever makes the organization's stricter for that person
+// ([Stricter]).
+//
 // A [Service] is the [Predictor], the [Ledger], the [Admin] interface for
-// cost profiles, replays and forgetting, and the [Explainer]. The engine
+// cost profiles, replays and forgetting, the [Explainer], and the
+// [Reporter]. The engine
 // (latere.ai/x/limen/engine), the HTTP client (latere.ai/x/limen/client)
 // and the stub (latere.ai/x/limen/stub) each implement it.
 //
@@ -47,7 +53,8 @@
 // contract's arithmetic: the thresholds a cost profile implies
 // ([Costs.Thresholds]), the verdict an approval probability implies
 // ([Thresholds.Verdict]), the number of clean reviews a certificate needs
-// ([CertificationSize]), and the fail-closed wrapper every decision point
+// ([CertificationSize]), the meet of two cost profiles ([Stricter]), and
+// the fail-closed wrapper every decision point
 // should put around a predictor ([FailClosed]). It imports the standard
 // library and latere.ai/x/pkg/verdict only.
 package limen

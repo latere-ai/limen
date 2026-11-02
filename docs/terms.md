@@ -72,6 +72,9 @@ verdicts. The list starts with the verdict that permits the most.
 | cost profile | The costs that an organization states: the cost of a false allow, the cost of a false block, and the cost of one `ask`. It also has the audit rate. A cost profile applies to an organization, a kind of action, or an agent. | `Profile`, `costs` |
 | thresholds | Two approval probabilities that Limen calculates from the cost profile. Above the upper threshold, Limen suggests `allow`. Below the lower threshold, Limen suggests `block`. | `allow_above`, `block_below` |
 | ask range | The approval probabilities between the two thresholds. In this range, Limen suggests `ask`. | |
+| cost profile of a person | A cost profile that a person saves for their own actions in one organization. It can make the cost profile of the organization stricter for that person. It cannot make it less strict. | `subject` in a `Profile` |
+| stricter | A cost profile is stricter than a different cost profile if its upper threshold is the same or higher and its lower threshold is the same or lower. A stricter cost profile asks about more actions. | |
+| meet | The cost profile that takes the stricter value of each number from two cost profiles. The meet of the cost profile of a person and the cost profile of the organization applies to the actions of that person. | `Stricter` |
 
 ## The ledger
 
@@ -91,4 +94,11 @@ verdicts. The list starts with the verdict that permits the most.
 | certificate | A test that the false allow rate of a source is below a limit, with a stated confidence. | `certificate` |
 | replay | A run of recorded decisions through Limen in time order. A replay shows what Limen would suggest. | `Replay` |
 | ledger directory | The directory where `limend` keeps the ledger on disk. Only one process can use a ledger directory at a time. | `LIMEN_DATA_DIR` |
+| report of an organization | The counts and the error rates of the actions of an organization, for all its persons together, by week. It never shows the records of one person. | `Report` |
+| week | A period of seven days that starts on a Monday at 00:00 UTC. A report of an organization has one entry for each week. | `weeks` |
+| closed week | A week that ended seven days ago or more. A review counts in a week only if the person gave it before the week closed. | `state` |
+| kept week | A closed week that a report of an organization showed. Limen keeps it, and each later report shows it with no change. | |
+| minimum group | The smallest number of persons that a number of a report of an organization must come from: 5. | `min_subjects` |
+| group rule | A week shows its numbers only if 5 or more persons took part in it. The numbers of one agent, and of the other agents together, follow the same rule. | `agents`, `other` |
+| answer rule | A number that a report of an organization calculates from reviews shows only if the reviews come from 5 or more persons and no person gave more than one half of them. | `withheld` |
 | regret | The mean cost of the decisions, minus the mean cost of the best possible decisions. The unit is the cost of one `ask`. The paper uses it to compare methods. | |

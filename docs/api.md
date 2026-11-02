@@ -266,10 +266,13 @@ errors.
 
 ## Cost profiles
 
-`GET /v1/profiles?org=...&kind=...&agent=...`. Permission:
+`GET /v1/profiles?org=...&kind=...&agent=...&subject=...`. Permission:
 `profile.read`.
 
 `PUT /v1/profiles`. Permission: `profile.write`.
+
+`DELETE /v1/profiles?org=...&kind=...&agent=...&subject=...`.
+Permission: `profile.write`.
 
 ```json
 {
@@ -295,20 +298,69 @@ you send for `thresholds` or `default`.
 | Field | Meaning |
 |---|---|
 | `org` | Required. `kind` and `agent` make the scope narrower. |
+| `subject` | Optional. The person of a cost profile of a person. It cannot be set with `kind` or `agent`. |
 | `costs.false_allow` | The cost of a false allow: the action runs and the person would deny it. It must be more than two times `costs.ask`. |
 | `costs.false_block` | The cost of a false block: the action does not run and the person would approve it. It must be more than two times `costs.ask`. |
 | `costs.ask` | The cost of one `ask`. It must be more than 0. |
 | `audit_rate` | The audit rate, from 0 to 1. |
 | `certify` | Optional: `alpha` in (0, 1] and `delta` in (0, 1). Without `certify`, the claim is a false allow rate below 1% with 95% confidence. This claim needs 300 clean audits. |
 
+A `DELETE` removes the cost profile that is saved for exactly the scope
+in the query. The response is status 204. If no cost profile is saved
+for the scope, the response is also status 204. After the removal, the
+next scope in the order applies. For example, if you remove the cost
+profile of an agent, the cost profile of the organization applies to that
+agent again. The removal does not change a recorded prediction.
+
+To know if an agent has its own cost profile, send
+`GET /v1/profiles?org=...&agent=...`. If the `agent` field of the
+response is set, the agent has its own cost profile.
+
 Errors:
 
-- `invalid_query` for a `GET`.
+- `invalid_query` for a `GET` and a `DELETE`.
 - `invalid_profile` for a `PUT`.
 - `ask_too_costly` for a `PUT`. With these costs, an approval probability
   of 0.5 is outside the ask range. Limen would then suggest `allow` or
   `block` for a person that it has no answers from.
 - The common errors.
+
+### The cost profile of a person
+
+A person can save a cost profile for their own actions in one
+organization. Set `subject` to the person, and do not set `kind` or
+`agent`. A person has one cost profile in one organization.
+
+The cost profile of a person can only make the cost profile of the
+organization stricter. For each action of the person, Limen uses the
+meet of the two cost profiles:
+
+| Field | The meet |
+|---|---|
+| `thresholds.allow_above` | The higher value of the two. |
+| `thresholds.block_below` | The lower value of the two. |
+| `costs` | `ask` is 1. `false_allow` and `false_block` are the higher ratios to `ask` of the two. |
+| `audit_rate` | The higher value of the two. |
+| `certify` | The lower `alpha` and the lower `delta` of the two. |
+
+A prediction, `GET /v1/learned`, an explanation of an action with no
+recorded prediction, and the certificate of a reliability report use the
+meet. A preview does not use it. If the cost profile of the person
+changed a value, the `profile` of a prediction has `subject`. The Go
+function `limen.Stricter` calculates the same meet.
+
+A person can save a cost profile that is less strict than the cost
+profile of the organization. Then it changes nothing. If the organization
+later makes its cost profile less strict, the cost profile of the person
+applies.
+
+A `GET` with `subject` returns the cost profile that the person saved,
+with `subject`. It does not return the meet. If the person saved no cost
+profile, it returns the cost profile of the organization for the scope
+`{org}`, with no `subject`.
+
+In the context of a person, `subject` must be equal to `org`. Limen
+refuses a different `subject` with `invalid_profile` or `invalid_query`.
 
 ## Replays
 
@@ -355,8 +407,10 @@ records in the details, `body_too_large`, and the common errors.
 ```
 
 This request deletes all data that Limen has about the person in the
-organization. This data is the cases, the answers, and the model that
-Limen learned from them. The response is status 204. You can send the request again
+organization. This data is the cases, the answers, the model that Limen
+learned from them, and the cost profile of the person. The kept weeks of
+the reports of the organization do not change, because they contain no
+record of a person. The response is status 204. You can send the request again
 with the same result. If Limen has no data about the person, the response
 is also status 204.
 
@@ -499,6 +553,101 @@ The response contains the request and these fields:
 The numbers are examples. Errors: `invalid_query`, `ask_too_costly`,
 `body_too_large`, and the common errors.
 
+## Reports of an organization
+
+`GET /v1/reports?org=...&from=...&to=...`. Permission: `report.read`.
+
+The response is the report of an organization. It gives the counts and
+the error rates of the actions of the agents of the organization, for all
+its persons together, by week. It never shows the records of one person.
+
+The `from` and `to` parameters are RFC 3339 times. Each one must be a
+Monday at 00:00 UTC. The `to` time must be after the `from` time, and not
+more than 13 weeks after it. The report has one entry for each week,
+with the oldest week first.
+
+```json
+{
+  "org": "org_7",
+  "from": "2026-09-28T00:00:00Z",
+  "to": "2026-10-19T00:00:00Z",
+  "min_subjects": 5,
+  "weeks": [
+    {"from": "2026-09-28T00:00:00Z", "to": "2026-10-05T00:00:00Z", "state": "too_few"},
+    {
+      "from": "2026-10-05T00:00:00Z", "to": "2026-10-12T00:00:00Z", "state": "ready",
+      "total": {
+        "subjects": 12,
+        "decisions": {"allow": 1610, "flag": 92, "ask": 212, "block": 9},
+        "flag_reviews": {"reviews": 81, "denied": 2},
+        "applied": {"false_allow": {"value": 0.021, "interval": [0.006, 0.07], "covered": 1, "reviews": 81, "audits": 81, "unanswered": 11}},
+        "learned": {"false_allow": {"value": 0.012, "interval": [0.002, 0.06], "covered": 0.97, "reviews": 74, "audits": 74, "unanswered": 9}},
+        "withheld": ["applied.false_block", "learned.false_block"]
+      },
+      "agents": [{"agent": "agt_release", "subjects": 9, "decisions": {"allow": 1200, "flag": 70, "ask": 150, "block": 6}, "flag_reviews": {"reviews": 63}, "applied": {}, "learned": {}, "withheld": ["flag_reviews.denied", "applied.false_allow", "applied.false_block", "learned.false_allow", "learned.false_block"]}],
+      "other": {"subjects": 7, "decisions": {"allow": 410, "flag": 22, "ask": 62, "block": 3}, "flag_reviews": {"reviews": 18}, "applied": {}, "learned": {}, "withheld": ["flag_reviews.denied", "applied.false_allow", "applied.false_block", "learned.false_allow", "learned.false_block"]}
+    },
+    {"from": "2026-10-12T00:00:00Z", "to": "2026-10-19T00:00:00Z", "state": "open"}
+  ]
+}
+```
+
+The numbers above are examples. Each week has one of three states:
+
+| `state` | When | What the week has |
+|---|---|---|
+| `open` | Until 7 days after the end of the week. | Only `from`, `to`, and `state`. |
+| `too_few` | The week is closed, and fewer than 5 persons took part. | Only `from`, `to`, and `state`. |
+| `ready` | The week is closed, and 5 or more persons took part. | `total`, and `agents` and `other` if the week divides by agent. |
+
+A person took part in a week if one or more of their actions have a
+decision and arrived in the week. A review counts in a week only if the
+person gave it before the week closed. A later review is unanswered for
+the report. A `too_few` week does not tell how many persons took part.
+
+A week that a report showed does not change. Limen keeps the closed week
+the first time that a report reads it. A later answer, a replay with
+`keep`, and a forget do not change a kept week. Thus two reports cannot
+show the difference of one person.
+
+`total`, each entry of `agents`, and `other` have these fields:
+
+| Field | Meaning |
+|---|---|
+| `subjects` | The number of persons that took part. |
+| `decisions` | The number of decided actions for each applied verdict. |
+| `flag_reviews.reviews` | The actions with the applied verdict `flag` that have a review from before the week closed. |
+| `flag_reviews.denied` | The reviews among them that denied the action. |
+| `applied` | The false allow rate and the false block rate of the applied verdicts, as `of=applied` gives them. |
+| `learned` | The false allow rate and the false block rate of the suggested verdicts of Limen, as `of=learned` gives them. |
+| `withheld` | The fields that the answer rule removed. |
+
+Each error rate is one estimate for all the actions of the persons
+together. It is not a mean of the rates of the persons. An error rate with
+no review has `value: null`. The report has no certificate.
+
+The report follows two rules:
+
+- **The group rule.** A week, an agent, and the other agents show their
+  numbers only if 5 or more persons took part in them.
+- **The answer rule.** `flag_reviews.denied` and each error rate read the
+  reviews. Each one shows only if its reviews come from 5 or more persons,
+  and no person gave more than one half of them. Otherwise the field is
+  not in the response, and `withheld` contains its name.
+
+`agents` has one entry for each agent with 5 or more persons in the week.
+The agent of an action is `actor.id` if `actor.kind` is `agent`. `other`
+contains all other actions: the agents with fewer persons, and the actions
+with no agent. If `other` has fewer than 5 persons, the agent with the
+fewest persons goes into `other`. If no agent is left, the week has only
+`total`. The counts of `agents` and `other` add up to the counts of
+`total`. If one of them removes a field, all of them remove it.
+
+The report contains no label, no action ID, no session, no subject, and no
+time more exact than a week. The only names in it are agent IDs.
+
+Errors: `invalid_query` and the common errors.
+
 ## Errors
 
 All errors have the same shape:
@@ -558,13 +707,15 @@ and no others:
 | `POST /v1/answers` | `case.answer` | `Case` | `org`, `subject` |
 | `GET /v1/cases` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/reliability` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for the context of a person |
-| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for the context of a person |
+| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
+| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
+| `DELETE /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
 | `POST /v1/replays` | `replay.create` | `Replay` | `org` |
 | `POST /v1/subjects/forget` | `subject.forget` | `Subject` | `org`, `subject` |
 | `GET /v1/explanations` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/learned` | `case.list` | `Case` | `org`, `subject` |
 | `POST /v1/previews` | `reliability.read` | `Reliability` | `org`, `subject` |
+| `GET /v1/reports` | `report.read` | `Report` | `org` |
 
 The `Profile` resource gives the kind of action as `action_kind`. The
 reason is that the resource object of the shared authorizer uses `kind`
@@ -579,6 +730,18 @@ person read and save these cost profiles. An organization ID never
 contains a pipe. Thus the cost profiles of an organization have no
 `subject`, and only an admin can read or save them. Replays have no
 `subject`, also for the context of a person.
+
+A cost profile of a person has `subject` in its `Profile` resource. The
+shared owner policy lets that person read, save, and remove it. An
+authorization endpoint must decide it for that person and for no other
+person. The owners of an organization must not read or save the cost
+profile of a different person. A resource never names two persons: in the
+context of a person, `subject` is equal to `org`.
+
+A `Report` resource has no `subject`, because a report is about an
+organization. Under the shared owner policy, only an admin can read a
+report. An authorization endpoint must not let a person read the report
+of an organization only because the person belongs to it.
 
 Usually, the caller is the person of the request. A decision point can
 predict, decide, or answer for the person that it runs for. An agent

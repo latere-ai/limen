@@ -107,10 +107,12 @@ Without an authorization endpoint, the shared owner policy decides:
   data.
 - A person can read and save the cost profiles of their own context. The
   `org` of these cost profiles is the subject of the person.
+- A person can read, save, and remove their own cost profile in an
+  organization.
 - A subject in `LIMEN_ADMINS` can do all operations for all persons. Use
   it for the service that runs the decision point, for example Topos.
-- Only an admin can read or save the cost profiles of an organization and
-  send replays.
+- Only an admin can read or save the cost profiles of an organization,
+  send replays, and read the report of an organization.
 
 The [API](api.md#permissions) lists the permission that each route needs
 from an authorization endpoint.
@@ -141,8 +143,11 @@ the log. It writes each line to the disk before it continues. If a crash
 interrupts a write, Limen discards the incomplete line the next time that
 it reads the log.
 
-Limen writes each model snapshot and each cost profile as a complete file,
-in one step. A crash cannot leave a part of such a file. Limen never
+Limen writes each model snapshot, each cost profile, and each kept week
+of a report of an organization as a complete file, in one step. A crash
+cannot leave a part of such a file. The kept weeks are in the `reports`
+directory. A forget of a person does not remove them, because they
+contain no record of a person. Limen never
 writes the input of an action. It writes only the features that it
 calculates from the input.
 
