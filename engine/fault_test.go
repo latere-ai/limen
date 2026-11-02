@@ -106,6 +106,34 @@ func (f *faulty) PutSnapshot(ctx context.Context, org, subject, version string, 
 	return f.Memory.PutSnapshot(ctx, org, subject, version, b)
 }
 
+func (f *faulty) DeleteProfile(ctx context.Context, s limen.Scope) error {
+	if err := f.hit("DeleteProfile"); err != nil {
+		return err
+	}
+	return f.Memory.DeleteProfile(ctx, s)
+}
+
+func (f *faulty) Subjects(ctx context.Context, org string) ([]string, error) {
+	if err := f.hit("Subjects"); err != nil {
+		return nil, err
+	}
+	return f.Memory.Subjects(ctx, org)
+}
+
+func (f *faulty) WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error) {
+	if err := f.hit("WeekReport"); err != nil {
+		return limen.WeekReport{}, false, err
+	}
+	return f.Memory.WeekReport(ctx, org, from)
+}
+
+func (f *faulty) PutWeekReport(ctx context.Context, org string, w limen.WeekReport) error {
+	if err := f.hit("PutWeekReport"); err != nil {
+		return err
+	}
+	return f.Memory.PutWeekReport(ctx, org, w)
+}
+
 // Every store failure reaches the caller as an error, never as a verdict.
 func TestStoreFailuresSurface(t *testing.T) {
 	a := bash("s", "a", "go test ./...")
@@ -131,8 +159,14 @@ func TestStoreFailuresSurface(t *testing.T) {
 			_, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.DefaultCosts})
 			return err
 		},
+		"own profile": func(e *engine.Engine) error {
+			_, err := e.Profile(ctx, limen.Scope{Org: "o", Subject: "s"})
+			return err
+		},
+		"delete profile": func(e *engine.Engine) error { return e.DeleteProfile(ctx, limen.Scope{Org: "o"}) },
+		"forget":         func(e *engine.Engine) error { return e.Forget(ctx, "o", "s") },
 	}
-	for _, method := range []string{"Case", "Put", "NextT", "Cases", "Profile", "PutProfile", "Snapshot"} {
+	for _, method := range []string{"Case", "Put", "NextT", "Cases", "Profile", "PutProfile", "Snapshot", "DeleteProfile"} {
 		for name, step := range steps {
 			f := newFaulty(method, 0)
 			e := engine.New(engine.Options{Store: f, Inline: 1})
@@ -233,6 +267,8 @@ func TestQueryValidation(t *testing.T) {
 		func() error { _, err := e.Profile(c, limen.Scope{}); return err }(),
 		func() error { _, err := e.PutProfile(c, limen.Profile{}); return err }(),
 		e.Forget(c, "o", "s"),
+		e.DeleteProfile(c, limen.Scope{Org: "o"}),
+		func() error { _, err := e.Report(c, limen.ReportQuery{}); return err }(),
 	}
 	for i, err := range canceled {
 		if !errors.Is(err, context.Canceled) {
@@ -244,6 +280,12 @@ func TestQueryValidation(t *testing.T) {
 	}
 	if _, err := e.Profile(ctx, limen.Scope{}); limen.CodeOf(err) != limen.CodeInvalidQuery {
 		t.Errorf("profile with no org: %v", err)
+	}
+	if err := e.DeleteProfile(ctx, limen.Scope{Org: "o", Agent: "x", Subject: "s"}); limen.CodeOf(err) != limen.CodeInvalidQuery {
+		t.Errorf("removing a person's scope with an agent: %v", err)
+	}
+	if _, err := e.Report(ctx, limen.ReportQuery{Org: "o"}); limen.CodeOf(err) != limen.CodeInvalidQuery {
+		t.Errorf("a report with no weeks: %v", err)
 	}
 	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 1.5, FalseBlock: 100, Ask: 1}}); limen.CodeOf(err) != limen.CodeAskTooCostly {
 		t.Errorf("costs that decide on no evidence: %v", err)

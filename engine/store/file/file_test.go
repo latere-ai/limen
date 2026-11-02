@@ -6,6 +6,7 @@ package file_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -557,4 +558,59 @@ func TestFilesystemErrors(t *testing.T) {
 	if err := s.Put(ctx, bad); err == nil {
 		t.Error("stored a case that cannot be encoded")
 	}
+}
+
+// A week a report showed is kept in the directory: an engine that opens
+// the directory again returns it unchanged, also after a Forget of a
+// person who took part (spec 010, criterion 12).
+func TestKeptWeekSurvivesAReopen(t *testing.T) {
+	dir := t.TempDir()
+	monday := storetest.Monday
+	now := monday.Add(time.Hour)
+	clock := func() time.Time { return now }
+	s := open(t, dir)
+	e := engine.New(engine.Options{Store: s, Inline: 1, Clock: clock})
+	for i := range 6 {
+		a := limen.Action{Org: "o", Subject: fmt.Sprintf("https://issuer.example|usr_%d", i), ActionID: "a", Kind: "tool", Name: "bash",
+			Effect: limen.EffectWrite, Actor: &limen.Actor{Kind: "agent", ID: "agt"}}
+		if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Flag, ReviewProbability: 1, Source: "m", Action: &a}); err != nil {
+			t.Fatal(err)
+		}
+		if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: i%2 == 0}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now = monday.Add(limen.ReportWeek + limen.ReportClosesAfter)
+	q := limen.ReportQuery{Org: "o", From: monday, To: monday.Add(limen.ReportWeek)}
+	first, err := e.Report(ctx, q)
+	if err != nil || first.Weeks[0].State != limen.WeekReady {
+		t.Fatalf("%+v, %v", first, err)
+	}
+	_ = e.Close()
+	_ = s.Close()
+
+	s = open(t, dir)
+	defer func() { _ = s.Close() }()
+	e = engine.New(engine.Options{Store: s, Inline: 1, Clock: clock})
+	defer func() { _ = e.Close() }()
+	if err := e.Forget(ctx, "o", "https://issuer.example|usr_0"); err != nil {
+		t.Fatal(err)
+	}
+	again, err := e.Report(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameReport(again, first) {
+		t.Errorf("the kept week changed across a reopen and a Forget:\n first %+v\n again %+v", *first.Weeks[0].Total, *again.Weeks[0].Total)
+	}
+	if subs, _ := s.Subjects(ctx, "o"); len(subs) != 5 {
+		t.Errorf("the Forget left %d persons, want 5", len(subs))
+	}
+}
+
+// sameReport compares two reports by their JSON, the form the store keeps.
+func sameReport(a, b limen.Report) bool {
+	x, err1 := json.Marshal(a)
+	y, err2 := json.Marshal(b)
+	return err1 == nil && err2 == nil && bytes.Equal(x, y)
 }

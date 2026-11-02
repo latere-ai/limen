@@ -63,6 +63,8 @@ func TestCanceledContext(t *testing.T) {
 			return err
 		}(),
 		s.Forget(c, "o", "s"),
+		s.DeleteProfile(c, limen.Scope{Org: "o"}),
+		func() error { _, err := s.Report(c, limen.ReportQuery{}); return err }(),
 	}
 	for i, err := range checks {
 		if !errors.Is(err, context.Canceled) {
@@ -253,5 +255,31 @@ func TestConcurrent(t *testing.T) {
 	wg.Wait()
 	if page, _ := s.Cases(ctx, limen.CaseQuery{Org: "o", Subject: "s", Limit: limen.MaxPageLimit}); len(page.Entries) != 32 {
 		t.Errorf("%d cases", len(page.Entries))
+	}
+}
+
+// A report's kept week is the stub's own copy: a caller that changes a
+// returned week changes no later read.
+func TestReportKeepsItsCopy(t *testing.T) {
+	monday := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
+	now := monday.Add(time.Hour)
+	s := stub.New(stub.Options{Clock: func() time.Time { return now }})
+	for i := range 5 {
+		a := act("k")
+		a.Subject = string(rune('a' + i))
+		if err := s.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Allow, ReviewProbability: 0, Source: "r", Action: &a}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now = monday.Add(limen.ReportWeek + limen.ReportClosesAfter)
+	q := limen.ReportQuery{Org: "o", From: monday, To: monday.Add(limen.ReportWeek)}
+	first, err := s.Report(ctx, q)
+	if err != nil || first.Weeks[0].Total == nil {
+		t.Fatalf("%+v, %v", first, err)
+	}
+	first.Weeks[0].Total.Subjects = 99
+	again, err := s.Report(ctx, q)
+	if err != nil || again.Weeks[0].Total.Subjects != 5 {
+		t.Errorf("a write to a returned week reached the stub: %+v, %v", again.Weeks[0].Total, err)
 	}
 }
