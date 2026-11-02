@@ -35,7 +35,7 @@ body:
     attributes:
       label: Version
       description: The release tag or the image digest. Get it with `limend -version`.
-      placeholder: v0.6.0
+      placeholder: v0.7.0
     validations:
       required: true
 

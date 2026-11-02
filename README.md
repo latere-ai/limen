@@ -15,7 +15,7 @@ states. Limen also records each decision and each answer. From these
 records, Limen calculates the error rate of each source of decisions: your
 rules, a language model that examines actions, and Limen itself.
 
-> **Status: in production.** Limen v0.6.0 decides live actions for
+> **Status: in production.** Limen v0.7.0 decides live actions for
 > persons. Hosted [Topos](https://github.com/latere-ai/topos) v0.68.0
 > sends each tool call of a hosted session to Limen. The suggested
 > verdict of Limen decides a call only if Limen has evidence about the
