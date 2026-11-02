@@ -2,15 +2,16 @@
 
 The learning engine behind Limen's predictor: the in-process
 `limen.Service` that predicts, keeps the ledger, fits each person's model
-off the hot path, and explains its predictions (specs/004-engine.md,
-specs/009-explanations.md). The engine package is the service; its
+off the hot path, explains its predictions, and holds an allow to the
+cover rule (specs/004-engine.md, specs/009-explanations.md,
+specs/011-consent.md). The engine package is the service; its
 subpackages are the parts it is built from:
 
 | Package | What it holds |
 |---|---|
 | [`kernel`](kernel/) | The covariance functions over feature points: the additive kernel, whose static term keeps what was learned about an action's risk while the person's tolerance drifts, and the separable product kernel the paper compares against. Standard library only. |
 | [`gp`](gp/) | The Laplace Gaussian-process probit classifier: an immutable fitted posterior, the approval probability it predicts, the log marginal likelihood, and the split of the mean into each answer's term and the kernel's parts. |
-| [`featurize`](featurize/) | The open-set featurizer `features/1`: an action's tool and context feature vectors, the shell reader, and the label of each action from a fixed vocabulary. |
+| [`featurize`](featurize/) | The open-set featurizer `features/1`: an action's tool and context feature vectors, the shell reader, and the label of each action from a fixed vocabulary. Its reading for consent: the scope of an action from the shell table, the holds and the claims, its families, and its `labels/2` label. |
 | [`store`](store/) | The store interface, the memory store, the directory store [`store/file`](store/file/), and the contract tests every store passes ([`store/storetest`](store/storetest/)). |
 
 `kernel` and `gp` are ports of the research implementation,

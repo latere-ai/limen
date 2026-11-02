@@ -82,7 +82,7 @@ func bash(subject, id, command string) limen.Action {
 }
 
 // across moves a to one of two sessions by i, as the answers of a person
-// who works across sessions arrive, so the answer minimum lets an allow
+// who works across sessions arrive, so the cover rule lets an allow
 // through once enough of them approve.
 func across(a limen.Action, i int) limen.Action {
 	a.Actor.Session = fmt.Sprintf("ses-%d", i%2)

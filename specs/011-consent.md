@@ -896,7 +896,7 @@ considered approval disagree.
 | keep a hash of a host, a path or a branch name | a list of names finds the string again |
 | compare scopes across families | one allow of a wide action would then cover each narrower action of any type |
 | put the time of an answer into the features | it describes the answer, not the action, and the model predicts the answer for the action |
-| show the lean of Limen before the person answers | the person follows a lean that is shown first |
+| show the lean of Limen before the person answers, except a recommendation where decision 10 permits it | the person follows a lean that is shown first |
 | choose which actions to ask about for the sake of learning | still a non-goal of [[004-engine]] |
 
 ### Terms

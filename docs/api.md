@@ -89,7 +89,7 @@ the action runs.
 | `effect` | yes | `none`, `read`, `write`, or `external`. |
 | `reversible` | no | `true` if the action can be undone. |
 | `input` | no | Any JSON. Limen reads it only to calculate the features, with fixed code. Limen does not keep it. |
-| `target` | no | `kind`, `id`, `sensitivity` from 0 to 1, and `class`: `scratch`, `own`, `shared`, or `primary`. If `target` is present, `kind` and `id` are necessary. |
+| `target` | no | `kind`, `id`, `sensitivity` from 0 to 1, and `class`: `scratch`, `own`, `shared`, or `primary`. If `target` is present, `kind` is necessary. `id` can be empty. If `id` is set, Limen reads the first contact with the target from it. |
 | `environment` | no | `kind` and `credentialed`. Also `holds`, a list of `egress`, `protected_refs` and `checkpoints`, and `repositories`: `private`, `public`, or `mixed`. |
 | `scope` | no | What the decision point knows about the reach of the action: `undo` (`none`, `reversible`, `recoverable`, `irreversible`), `crosses` (an object with `machine`, `remote`, `network`, `organization`, `public`, each `true` or `false`), and `contact` (`first` or `repeat`). Leave out what you do not know. A word outside a list is `unknown`, and it is not an error. [Integration](integrating.md#send-the-reach-of-an-action) gives the meaning. |
 | `attributes` | no | Not more than 64 values. Each value is a string, a finite number, or a boolean. |
