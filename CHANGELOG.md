@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.7.0 - 2026-11-03
+
 ### Added
 
 - The scope of an action: if it can be undone (`undo`), the boundaries
