@@ -1,6 +1,6 @@
 ---
 title: "Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person"
-status: in-progress
+status: testing
 track: core
 depends_on: [002-contract.md, 003-http-api.md, 004-engine.md, 006-conformance.md, 008-ledger-and-estimation.md, 009-explanations.md]
 affects: [profile.go, service.go, report.go, authorizer/, estimate/, engine/, engine/store/, stub/, conformance/, client/, server/, api/openapi.yaml, docs/api.md, docs/terms.md, docs/integrating.md, CHANGELOG.md]
@@ -620,3 +620,71 @@ withholds nothing.
 
 v0.4.0 shipped before this build. The release with part 1 is the next
 minor release, v0.5.0.
+
+## Outcome
+
+Recorded on 2026-11-02, before the release. The three parts are built,
+and every criterion has a passing test in the tree. The spec stays
+`testing` until the release with them, v0.5.0, is in production; then it
+moves to `complete`.
+
+### What was built
+
+| Piece | Where |
+|---|---|
+| `Scope.Subject`, `Scope.Validate`, the scope rules in `Profile.Validate`, `Stricter` | `profile.go` |
+| `Admin.DeleteProfile`, `Reporter` in `Service` | `service.go`, `report.go` |
+| the report types, `ReportQuery.Validate`, `ReportMinSubjects`, `ReportWeek`, `ReportClosesAfter`, `ReportMaxWeeks`, `WeekStart`, `WeekClosed`, `AnswerFields` | `report.go` |
+| the week of a report, built once for every ledger: the group rule, the answer rule, the merge of small agents, the review cutoff | `estimate/report.go` (`Week`, `Weeks`, `OpenWeek`, `ReportCase`) |
+| `DeleteProfile`, `Subjects`, `WeekReport`, `PutWeekReport` in the store, the memory store and the directory store | `engine/store`, `engine/store/file` |
+| the meet in a prediction, `learned`, an explanation, a certificate and a replay; the removal; the report with kept weeks under a lock per organization; Forget of the person's profile | `engine/` |
+| the same in the stub | `stub/` |
+| `DELETE /v1/profiles`, `GET /v1/reports`, `subject` on the profile routes, the resources | `server/`, `client/`, `api/openapi.yaml` |
+| `report.read` on `Report` | `authorizer/` |
+| 15 conformance cases, `Target.Clocked`, a defect for each case | `conformance/` |
+
+| # | Proof in the tree |
+|---|---|
+| 1 | the conformance cases `ProfileRemoved` and `ProfileRemovalErrors`; `TestAuthorizerQuestions` |
+| 2 | `TestStricterNamedProfiles`, `TestStricterProperties` in the root package |
+| 3 | `TestStricterProperties` |
+| 4 | the conformance cases `PersonProfileIsTheMeet` (prediction, `learned`, explanation, certificate, preview) and `PersonProfileNeverLoosens`; `TestReplayUsesThePersonsProfile` |
+| 5 | the conformance case `PersonProfileErrors`; `TestScopeValidate` |
+| 6 | `TestPersonProfileOwnership`, `TestOwnerPolicy` in `server/` |
+| 7 | the conformance case `ForgetRemovesThePersonProfile`; `TestForgetRemovesTheOwnProfile` |
+| 8 | the conformance case `ReportWeeks`; `TestReportQueryValidate`, `TestWeeks` |
+| 9 | the conformance case `ReportNeedsAGroup`; `TestWeekNeedsAGroup` |
+| 10 | the conformance cases `ReportAnswerRule` and `ReportMergesSmallAgents`; `TestWeekAnswerRule`, `TestWeekMergesSmallAgents` |
+| 11 | the conformance case `ReportMergesSmallAgents`; `TestWeekProperties` over random ledgers |
+| 12 | the conformance cases `ReportKeepsAClosedWeek` and `ReportCountsReviewsBeforeTheClose`; `TestKeptWeekSurvivesAReopen`; the store suite's `WeekReports` |
+| 13 | the conformance case `ReportNamesNoPerson`; `TestReportOwnerPolicy` |
+| 14 | `TestAuthorizerQuestions`, `TestOwnerPolicy`, `TestReportOwnerPolicy` |
+| 15 | `TestEngineAndStubReportOrganizationsAlike` |
+| 16 | `TestSchemasMatchTypes`, `TestEnumsMatchConstants`, `TestOperations`, `TestRoutesMatchOpenAPI`, `TestVocabulary` |
+
+The conformance cases run for the stub, the engine in memory and over a
+directory, the client against the engine and the stub, and the client
+against a running `limend`, each with a clock.
+
+### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| `Target.Clocked` returns a service whose clock the case sets | `Clocked func(t *testing.T, now func() time.Time) limen.Service` | the case owns the clock and passes its reading |
+| the cells of the example omit `applied` and `learned` | each cell of a ready week has `applied`, `learned` and `withheld` (Decisions) | one shape for a client |
+| the contract lists the report types | also `ReportWeek`, `WeekStart`, `WeekClosed`, `AnswerFields` and `Scope.Validate` | a client checks a bound, a state and a path with the same functions |
+| the computation of a week | one function, `estimate.Week`, that the engine and the stub call | the parity of criterion 15 holds by construction |
+| `Forget` removes the person's profile | the engine removes it before the store's `Forget`; the store's `Forget` keeps profiles | a retry of a failed `Forget` finishes it |
+| a replay | also meets the person's own profile in its scratch engine | a replay predicts for one person, as a live prediction does |
+| `<dir>/reports/<org>/<week>.json` | the week's file is named by its first day, `2026-10-05.json` | a name that every file system takes |
+| the resource of a person's profile | its id also ends in the subject | an authorizer that caches by id tells two persons apart |
+| the terms of the build | `docs/terms.md` also has week, closed week, kept week, group rule and answer rule | the documents use them |
+
+### What this leaves open
+
+| Open | Why |
+|---|---|
+| a cost profile of a person for one agent | Decisions, 5 |
+| a minimum group that an installation sets | Decisions, 2 |
+| a count of the persons who saved a cost profile, and a notice that one no longer changes what applies | Decisions; a client calculates both |
+

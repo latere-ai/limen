@@ -188,6 +188,12 @@ was built, each written into the section it changes:
   both.
 - *Explanations* (Routes): three routes and the code `no_case`.
 
+**2026-11-02.** [[010-organizations]] adds two routes and a field, with
+no new error code: `DELETE /v1/profiles`, asked as `profile.write` on the
+scope's `Profile`; `GET /v1/reports`, asked as the new action
+`report.read` on the new resource kind `Report` with `org`; and `subject`
+on a profile's scope, which a `Profile` resource carries.
+
 ## Outcome
 
 Recorded on 2026-11-01, after v0.3.0. The API is built as designed and is

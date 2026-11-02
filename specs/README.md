@@ -34,8 +34,8 @@ records what is built, the tests that prove it, and what is not built.
 Specs 001, 002, 003, 006, 008 and 009 are complete. Spec 004 is at
 `testing`: a second model version and a shared store are not built.
 Spec 005's hooks are not built, and spec 007 is a rule for
-deployments. Spec 010 is in progress: the owner approved it on
-2026-11-02.
+deployments. Spec 010 is at `testing`: it is built, and it moves to
+`complete` when its release is in production.
 
 ## Layout
 
@@ -85,7 +85,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [007](007-evidence-gates.md) | Evidence gates: replay, shadow, learned decisions inside the ceiling, judge signals, and what stops a rollout | drafted |
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
-| [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | in-progress |
+| [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | testing |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a

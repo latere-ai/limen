@@ -188,7 +188,9 @@ that a `limen.Service` can show:
 7. **One key, one action.** A key names one action; a second action
    under the same key is refused.
 8. **A person's records are theirs.** Forgetting a subject in an
-   organization removes every case, answer and model of theirs there.
+   organization removes every case, answer and model of theirs there,
+   and their own cost profile there ([[010-organizations]]). A kept week
+   of the organization's report stays: it holds no record of a person.
 
 ### Identity
 

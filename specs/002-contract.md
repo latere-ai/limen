@@ -204,6 +204,14 @@ are validated strictly.
 | 9 | The root package's coverage is at or above 90% | the `suite` gate |
 | 10 | The ledger rules above hold for every implementation | [[006-conformance]] |
 
+## Amendments
+
+**2026-11-02.** [[010-organizations]] adds `Scope.Subject`, `Stricter`,
+`Admin.DeleteProfile`, and the `Reporter` interface with the report
+types, and `Service` embeds `Reporter`. A Go type outside this module
+that implements `limen.Service` adds the two methods. A decision point
+that uses `client/`, `engine/` or `stub/` changes nothing.
+
 ## Outcome
 
 Recorded on 2026-11-01, after v0.3.0. Every type, rule, interface and
