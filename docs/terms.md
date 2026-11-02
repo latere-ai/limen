@@ -59,8 +59,8 @@ verdicts. The list starts with the verdict that permits the most.
 | explanation | The parts of one prediction: the answers that changed it most, and what the model learned about the type of action and about the recent tolerance of the person. | `Explanation` |
 | share | The part of one answer in an explanation, from 0 to 1. | `share` |
 | evidence ratio | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. | `evidence_ratio` |
-| unsure | An `ask` with an evidence ratio less than 0.5. The person has few answers about this type of action. More answers change the suggestion. | `ask_kind` |
-| split | An `ask` with an evidence ratio of 0.5 or more. The answers of the person about this type of action disagree. More answers do not change the suggestion. | `ask_kind` |
+| unsure | An `ask` with an evidence ratio less than 0.5. The person has few answers about this type of action. More answers can change the suggestion. | `ask_kind` |
+| split | An `ask` with an evidence ratio of 0.5 or more. The answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. More answers that agree can change the suggestion. | `ask_kind` |
 | preview | What a different cost profile would do with the recorded predictions of a person. | `Preview` |
 
 ## Costs and thresholds

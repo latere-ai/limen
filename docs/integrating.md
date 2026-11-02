@@ -177,16 +177,32 @@ sure:
 
 | `ask_kind` | Evidence ratio | Meaning |
 |---|---|---|
-| `unsure` | Less than 0.5 | The person has few answers about this type of action. More answers change the suggestion. |
-| `split` | 0.5 or more | The person has answers about this type of action, and the answers disagree. More answers do not change the suggestion. |
+| `unsure` | Less than 0.5 | The person has few answers about this type of action. More answers can change the suggestion. |
+| `split` | 0.5 or more | The answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. |
 
 The evidence ratio is the `evidence_ratio` of the prediction.
 [Theory](theory.md#two-kinds-of-ask) gives its formula. The `FailClosed`
 fallback has the kind `unsure`.
 
-Your decision point can use the kind. The person decides a `split` ask.
-Your rules can decide an `unsure` ask, as they did before you connected
-Limen:
+A `split` ask can change. More answers that agree can move the approval
+probability out of the ask range. Answers that disagree keep it in the
+ask range. For example, a person approves `publish` two times and does
+not deny it. If the upper threshold is 0.90, Limen suggests `ask` with
+the approval probability 0.80 and the kind `split`. More approvals move
+the approval probability above 0.90, and then Limen suggests `allow`.
+
+The kind `split` does not tell that the answers disagree. To tell the
+person that their answers disagree, examine the answers:
+
+- In an explanation, `evidence` has an approval and a denial with the
+  same `label`.
+- In `GET /v1/learned`, the entry has `approved` and `denied` both more
+  than 0.
+
+Your decision point can use the kind. The person decides a `split` ask,
+because the ask comes from the answers of that person, not from too few
+answers. Your rules can decide an `unsure` ask, as they did before you
+connected Limen:
 
 ```go
 suggested := p.Verdict

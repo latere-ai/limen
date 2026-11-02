@@ -182,8 +182,9 @@ the symmetric profile and 31.3% with the safety-weighted profile.
 
 ## Two kinds of ask
 
-An `ask` has one of two causes. The model knows little about the action,
-or the answers of the person about the action disagree. Each prediction
+An `ask` has one of two causes. In the first, the model knows little
+about the action. In the second, the model knows much about the action,
+but the approval probability is still in the ask range. Each prediction
 tells which cause applies.
 
 The prior variance at an action is the variance of $f$ before any answer:
@@ -212,13 +213,30 @@ For an `ask`, Limen compares $e$ with 0.5:
   tell little about this action. More answers can move $\hat p$ out of
   the ask range.
 - If $e \ge 0.5$, the `ask_kind` is `split`. The answers tell much about
-  this action, and they disagree. $\hat p$ is in the ask range because of
-  the evidence. Proposition 3 applies: more answers do not move it out.
+  this action, and $\hat p$ is still in the ask range. The answers can
+  disagree. They can also agree, but not enough yet to pass a threshold.
+  More answers that agree can move $\hat p$ out of the ask range. Answers
+  that disagree keep it in the ask range.
+
+Answers that agree can give a `split` ask. With the default kernel, two
+approvals of one action and no denial give $e \approx 0.64$ and
+$\hat p \approx 0.80$. With the safety-weighted profile, Limen suggests
+`allow` only above 0.90, so the `ask_kind` is `split`. More approvals
+move $\hat p$ above 0.90, and then Limen suggests `allow`.
+
+Proposition 3 is about a policy that knows $q(x)$. The model comes near
+$q(x)$ only with many answers. Because of this, Proposition 3 applies to
+a `split` ask only in the limit: many answers that stay mixed, with
+$q(x)$ in the ask range. Then more answers do not move $\hat p$ out of
+the ask range. With few answers, $\hat p$ is not near $q(x)$, and more
+answers can move it.
 
 The cut 0.5 is a constant of the engine, `engine.EvidenceCut`. An
-`allow` or a `block` has no `ask_kind`. A decision point can let its
-rules decide an `unsure` ask and keep a `split` ask for the person
-([Integration](integrating.md#two-kinds-of-ask)).
+`allow` or a `block` has no `ask_kind`. The `ask_kind` does not tell if
+the answers disagree. [Integration](integrating.md#two-kinds-of-ask)
+tells how a client finds this. A decision point can let its rules decide
+an `unsure` ask and keep a `split` ask for the person. A `split` ask comes
+from the answers of that person.
 
 ## Explanations
 

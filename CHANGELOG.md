@@ -11,6 +11,22 @@ the commit log.
 
 ## Unreleased
 
+### Fixed
+
+- The documents gave a wrong meaning for an `ask` with `ask_kind`
+  `split`. They told that the answers of the person disagree, and that
+  more answers do not change the suggestion. A `split` ask has an
+  evidence ratio of 0.5 or more, with the approval probability still in
+  the ask range. The answers can disagree, or they can agree but not
+  enough yet to pass a threshold. For example, two approvals and no
+  denial under the upper threshold 0.90 give a `split` ask, and more
+  approvals change it to `allow`. The behavior of Limen does not change.
+- The integration page tells how a client finds answers that disagree.
+  One sign is an approval and a denial of the same `label` in the
+  `evidence` of an explanation. The other sign is a `learned` entry with
+  `approved` and `denied` both more than 0. A `split` ask alone does not
+  tell it.
+
 ## v0.5.0 - 2026-11-02
 
 ### Added

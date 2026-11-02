@@ -120,7 +120,7 @@ The response is the prediction:
 | `approve` | The approval probability. |
 | `uncertainty` | The uncertainty of the approval probability. An action that is not similar to an earlier action has a high value. |
 | `evidence_ratio` | The evidence ratio of the prediction, from 0 to 1. A value near 0 tells that the person has few answers about actions like this one. |
-| `ask_kind` | Only for an `ask`: `unsure` or `split`. A decision point can let its rules decide an `unsure` ask and keep a `split` ask for the person. |
+| `ask_kind` | Only for an `ask`: `unsure` if `evidence_ratio` is less than 0.5, `split` if it is 0.5 or more. A decision point can let its rules decide an `unsure` ask and keep a `split` ask for the person. [Two kinds of `ask`](integrating.md#two-kinds-of-ask) gives the meaning of each kind. |
 | `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow`. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
 | `profile` | The scope of the cost profile that applies. |
 | `audit_rate` | The audit rate of the cost profile. |
@@ -458,7 +458,7 @@ model.
 | `mean` | The value that the model calculates before it changes it into a probability. A positive value is on the side of approval. |
 | `parts` | The parts of `mean`. Their sum is `mean`. `action` is what the model learned about this type of action. `recent` is the recent tolerance of the person, from all recent answers. `interaction` is a small part between the two. |
 | `evidence_ratio` | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. |
-| `ask_kind` | Only for an `ask`. `unsure` if `evidence_ratio` is less than 0.5: the person has few answers about this type of action, and more answers change the suggestion. `split` if it is 0.5 or more: the answers disagree, and more answers do not change the suggestion. |
+| `ask_kind` | Only for an `ask`. `unsure` if `evidence_ratio` is less than 0.5: the person has few answers about this type of action, and more answers can change the suggestion. `split` if it is 0.5 or more. Then the answers of the person tell much about this type of action, and the approval probability is still in the ask range. The answers can disagree, or they can agree but not enough yet to pass a threshold. More answers that agree can change the suggestion. `split` does not tell that the answers disagree. `evidence` with an approval and a denial that have the same `label` tells it. |
 | `evidence` | The answers with the largest parts: not more than three on the side of the verdict and two on the other side. For an `ask`, not more than three on each side. The largest `share` is first. |
 | `label` | The type of the action, from a fixed list of words. A label never contains the input of the action. |
 | `share` | The size of the part of this answer, divided by the sum of the sizes of the parts of all answers. |
@@ -501,7 +501,7 @@ the most answers is first.
 |---|---|
 | `approved`, `denied` | The number of cases with this label that the person approved and denied. The last answer of each case counts. |
 | `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. |
-| `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. |
+| `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. If `ask_kind` is `split` and `approved` and `denied` are both more than 0, the answers of the person about this label disagree. |
 | `thresholds` | The thresholds of the cost profile that applies to the kind of action and to `agent`. |
 | `recent` | The recent tolerance of the person (`parts.recent` of an explanation) at not more than 20 decisions. The decisions have equal intervals between them. `t` is the number of the decision, and `at` is the time when it arrived. |
 

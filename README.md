@@ -40,8 +40,8 @@ rules, a language model that examines actions, and Limen itself.
 > - Explanations for the person: why Limen suggests a verdict for one
 >   action, what the model learned about the person, and a preview of a
 >   different cost profile. The parts of each explanation are exact for
->   the model. Each prediction tells if an `ask` comes from few answers or
->   from answers that disagree.
+>   the model. Each prediction tells if an `ask` comes from few answers,
+>   or from answers that leave the approval probability in the ask range.
 > - Cost profiles for an organization: a cost profile for each kind of
 >   action or agent that you can remove again, and a cost profile of a
 >   person that only makes the cost profile of the organization stricter
@@ -120,8 +120,8 @@ These rules apply to each implementation of Limen:
 
 - **An unclear action waits for a person.** If the evidence is not clear,
   Limen suggests `ask`, not `block`, and the action waits for a person.
-  The suggestion also tells if the person has few answers or answers
-  that disagree. Your decision point can let its rules decide if the
+  The suggestion also tells if the person has few answers about this
+  type of action. Your decision point can let its rules decide if the
   person has few answers.
 - **The costs set the thresholds.** You state three costs: the cost of a
   false allow, the cost of a false block, and the cost of one `ask`. A
@@ -247,8 +247,9 @@ Content-Type: application/json
 
 The judge gave `allow`. But the approval probability is in the ask range,
 so Limen suggests `ask`. The `ask_kind` is `split`: the person answered
-about such actions, and the answers disagree. More answers do not change
-this suggestion. The decision point asks the person and records the
+about such actions, and the approval probability is still in the ask
+range. The answers can disagree. They can also agree, but not enough yet
+to pass a threshold. The decision point asks the person and records the
 decision:
 
 ```http
