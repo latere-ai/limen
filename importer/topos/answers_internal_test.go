@@ -6,6 +6,7 @@ package topos
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"latere.ai/x/topos/session"
 )
@@ -16,6 +17,7 @@ import (
 // approval.decided yet come last, in the order of their requests. An
 // unreadable approval.decided, or a second one, settles nothing.
 func TestAnswersFollowTheSettlements(t *testing.T) {
+	start := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
 	person := session.Sender{Subject: "u", Kind: session.SenderPerson}
 	var events []session.Event
 	add := func(typ session.Type, v any) {
@@ -23,7 +25,7 @@ func TestAnswersFollowTheSettlements(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		events = append(events, session.Event{ID: session.NewID(session.PrefixEvent), Type: typ, Payload: b})
+		events = append(events, session.Event{ID: session.NewID(session.PrefixEvent), Type: typ, Payload: b, Time: start.Add(time.Duration(len(events)) * time.Second)})
 	}
 	request := func(id string) {
 		add(session.TypeApprovalRequested, session.ApprovalRequested{ApprovalID: id, ToolUseID: "toolu_1", Verdict: "ask"})
@@ -48,7 +50,22 @@ func TestAnswersFollowTheSettlements(t *testing.T) {
 	events = append(events, session.Event{ID: session.NewID(session.PrefixEvent), Type: session.TypeApprovalDecided, Payload: []byte(`{"approval_id":5}`)})
 	decide("apr_2", session.DecisionAllow)
 	got := answersOf(events)["toolu_1"]
-	if want := []bool{true, false, true, true, false}; !slices.Equal(got, want) {
-		t.Errorf("answers %v, want %v", got, want)
+	var approves []bool
+	var ats []time.Duration
+	for _, a := range got {
+		approves = append(approves, a.approve)
+		if a.at.IsZero() {
+			ats = append(ats, -1)
+		} else {
+			ats = append(ats, a.at.Sub(start))
+		}
+	}
+	if want := []bool{true, false, true, true, false}; !slices.Equal(approves, want) {
+		t.Errorf("answers %v, want %v", approves, want)
+	}
+	// Each answer has the time of its confirmation or of its
+	// approval.decided; the approvals settled at the end have none.
+	if want := []time.Duration{0, 6 * time.Second, 8 * time.Second, -1, -1}; !slices.Equal(ats, want) {
+		t.Errorf("times %v, want %v", ats, want)
 	}
 }

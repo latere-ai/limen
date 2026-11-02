@@ -164,8 +164,8 @@ func seq(rs ...limen.ReplayRecord) iter.Seq2[limen.ReplayRecord, error] {
 	}
 }
 
-// A replay's report follows the steered predictions, here with no answer
-// minimum so that one record is an allow.
+// A replay's report follows the steered predictions, here with the cover
+// rule off so that one record is an allow.
 func TestReplay(t *testing.T) {
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	yes, no := true, false
@@ -174,7 +174,7 @@ func TestReplay(t *testing.T) {
 			return 0.99, 0
 		}
 		return 0.01, 0
-	}, MinAllows: -1, MinSessions: -1})
+	}, MinWeight: -1, MinSessions: -1})
 	if _, err := s.PutProfile(ctx, limen.Profile{Org: "o", Costs: limen.Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}, AuditRate: 0.05}); err != nil {
 		t.Fatal(err)
 	}
@@ -288,16 +288,21 @@ func TestReportKeepsItsCopy(t *testing.T) {
 }
 
 // A replay into a scratch stub holds its would-be allows to this stub's
-// answer minimum: a history of approvals in one session allows nothing,
-// over two sessions it allows, and with the minimum off it allows at once.
+// cover rule: a history of considered approvals in one session allows
+// nothing, over two sessions it allows, with the rule off it allows at
+// once, and a history with no answered_at builds no cover.
 func TestReplayIsHeld(t *testing.T) {
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	history := func(sessions int) []limen.ReplayRecord {
+	history := func(sessions int, answered time.Duration) []limen.ReplayRecord {
 		var rs []limen.ReplayRecord
 		for i := range 4 {
 			a := act(fmt.Sprintf("r%d", i))
 			a.Actor = &limen.Actor{Kind: "agent", Session: fmt.Sprintf("ses-%d", i%sessions)}
-			rs = append(rs, limen.ReplayRecord{At: at.Add(time.Duration(i) * time.Minute), Action: a, Verdict: limen.Ask, ReviewProbability: 1, Source: "r", Approve: new(true)})
+			r := limen.ReplayRecord{At: at.Add(time.Duration(i) * time.Minute), Action: a, Verdict: limen.Ask, ReviewProbability: 1, Source: "r", Approve: new(true)}
+			if answered > 0 {
+				r.AnsweredAt = r.At.Add(answered)
+			}
+			rs = append(rs, r)
 		}
 		return rs
 	}
@@ -305,23 +310,27 @@ func TestReplayIsHeld(t *testing.T) {
 	for _, c := range []struct {
 		o        stub.Options
 		sessions int
+		answered time.Duration
 		want     int
 	}{
-		{stub.Options{Predict: allow}, 1, 0},
-		{stub.Options{Predict: allow}, 2, 1},
-		{stub.Options{Predict: allow, MinAllows: -1, MinSessions: -1}, 1, 4},
-		{stub.Options{Predict: allow, MinAllows: 1, MinSessions: 1}, 1, 3},
+		{stub.Options{Predict: allow}, 1, 3 * time.Second, 0},
+		{stub.Options{Predict: allow}, 2, 3 * time.Second, 1},
+		{stub.Options{Predict: allow}, 2, 0, 0},
+		{stub.Options{Predict: allow, AnswerFloor: -1}, 2, 0, 1},
+		{stub.Options{Predict: allow, MinWeight: -1, MinSessions: -1}, 1, 0, 4},
+		{stub.Options{Predict: allow, MinWeight: 1, MinSessions: 1}, 1, 3 * time.Second, 3},
 	} {
-		rep, err := stub.New(c.o).Replay(ctx, seq(history(c.sessions)...), limen.ReplayOptions{})
+		rep, err := stub.New(c.o).Replay(ctx, seq(history(c.sessions, c.answered)...), limen.ReplayOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if rep.Would[limen.Allow] != c.want {
-			t.Errorf("%d sessions, minimum %d and %d: %d allows, want %d", c.sessions, c.o.MinAllows, c.o.MinSessions, rep.Would[limen.Allow], c.want)
+			t.Errorf("%d sessions, answered after %v, options %+v: %d allows, want %d", c.sessions, c.answered, c.o, rep.Would[limen.Allow], c.want)
 		}
 	}
 	p, err := stub.New(stub.Options{Predict: allow}).Predict(ctx, act("p"))
-	if err != nil || p.Verdict != limen.Ask || !strings.Contains(p.Reason, "held by the answer minimum: 0 of 3 approvals, 0 of 2 sessions") {
+	if err != nil || p.Verdict != limen.Ask || p.AskKind != limen.AskWider || p.Cover != (limen.Cover{MinWeight: 3, MinSessions: 2}) ||
+		!strings.Contains(p.Reason, "never allowed an action of this reach") {
 		t.Errorf("a held prediction: %+v, %v", p, err)
 	}
 }

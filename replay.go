@@ -19,6 +19,14 @@ type ReplayRecord struct {
 	Source            string    `json:"source"`
 	// Approve is the person's answer, or nil when there was none.
 	Approve *bool `json:"approve,omitempty"`
+	// AnsweredAt is when the person answered, not before At. A record
+	// without it has its answer at At, so the time Limen measures for the
+	// answer is zero and an approval of it does not build the cover
+	// (spec 011).
+	AnsweredAt time.Time `json:"answered_at,omitzero"`
+	// HowAnswered is how the person gave the answer, when the record
+	// knows it.
+	HowAnswered
 }
 
 // Validate reports every field of r that breaks the contract, as one
@@ -36,6 +44,10 @@ func (r ReplayRecord) Validate() error {
 	if r.Source == "" {
 		p.add("source", "is empty")
 	}
+	if !r.AnsweredAt.IsZero() && r.AnsweredAt.Before(r.At) {
+		p.add("answered_at", "is before at")
+	}
+	r.check(&p, "")
 	return p.err(CodeInvalidReplay)
 }
 

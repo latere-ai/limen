@@ -104,9 +104,12 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Each event comes five seconds after the one before, so a person
+	// answers a call in five seconds, past the floor of the weight of an
+	// answer (Limen spec 011).
 	at := Start
 	tick := func() time.Time {
-		at = at.Add(time.Second)
+		at = at.Add(5 * time.Second)
 		return at
 	}
 	var ids []string

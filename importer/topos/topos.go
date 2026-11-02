@@ -70,6 +70,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"latere.ai/x/topos/harness/tools"
 	"latere.ai/x/topos/session"
@@ -268,11 +269,16 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 			r.ReviewProbability = 1
 		}
 		if as := answers[u.ToolUseID]; len(as) > 0 {
-			approve := as[len(as)-1]
+			ans := as[len(as)-1]
 			if v.Shown() {
-				approve = as[0]
+				ans = as[0]
 			}
-			r.Approve = &approve
+			r.Approve = &ans.approve
+			// The time of the answer, so the time Limen measures for it is
+			// the time the call waited (spec 011).
+			if !ans.at.IsZero() && !ans.at.Before(r.At) {
+				r.AnsweredAt = ans.at
+			}
 		}
 		if r.Validate() != nil {
 			skip(u.ToolUseID, ReasonInvalid)
@@ -286,6 +292,13 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 		out = append(out, r)
 	}
 	return out
+}
+
+// answer is one answer of the person and the time of the event that gave
+// it, zero when the log has none.
+type answer struct {
+	approve bool
+	at      time.Time
 }
 
 // answersOf returns the person's answers in a session, by the tool use ID
@@ -302,15 +315,16 @@ func sessionRecords(sess session.Session, events []session.Event, o Options) []l
 // that a confirmation settled gives an answer: Topos sends none for a
 // person's message in place of a confirmation. [session.Approvals] pairs
 // each approval with what settled it, so the importer reads the pairing
-// Topos itself uses.
-func answersOf(events []session.Event) map[string][]bool {
-	out := map[string][]bool{}
-	add := func(toolUseID, decision string) {
+// Topos itself uses. An answer has the time of its confirmation, or of the
+// approval.decided that settled it.
+func answersOf(events []session.Event) map[string][]answer {
+	out := map[string][]answer{}
+	add := func(toolUseID, decision string, at time.Time) {
 		switch decision {
 		case session.DecisionAllow:
-			out[toolUseID] = append(out[toolUseID], true)
+			out[toolUseID] = append(out[toolUseID], answer{true, at})
 		case session.DecisionDeny:
-			out[toolUseID] = append(out[toolUseID], false)
+			out[toolUseID] = append(out[toolUseID], answer{false, at})
 		}
 	}
 	confirmed := map[string]session.Approval{}
@@ -322,9 +336,9 @@ func answersOf(events []session.Event) map[string][]bool {
 		confirmed[a.Request.ApprovalID] = a
 		order = append(order, a.Request.ApprovalID)
 	}
-	settle := func(approvalID string) {
+	settle := func(approvalID string, at time.Time) {
 		if a, ok := confirmed[approvalID]; ok {
-			add(a.Request.ToolUseID, a.Confirmation.Decision)
+			add(a.Request.ToolUseID, a.Confirmation.Decision, at)
 			delete(confirmed, approvalID)
 		}
 	}
@@ -337,17 +351,17 @@ func answersOf(events []session.Event) map[string][]bool {
 			var c session.UserToolConfirmation
 			// A confirmation that names no call answers an approval.
 			if e.Decode(&c) == nil && c.ToolUseID != "" {
-				add(c.ToolUseID, c.Decision)
+				add(c.ToolUseID, c.Decision, e.Time)
 			}
 		case session.TypeApprovalDecided:
 			var d session.ApprovalDecided
 			if e.Decode(&d) == nil {
-				settle(d.ApprovalID)
+				settle(d.ApprovalID, e.Time)
 			}
 		}
 	}
 	for _, id := range order {
-		settle(id)
+		settle(id, time.Time{})
 	}
 	return out
 }

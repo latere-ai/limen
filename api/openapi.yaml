@@ -131,7 +131,15 @@ paths:
         answer, or an answer to an action nobody was shown, trains the model
         only. A caller that relays an answer for someone else names them in
         by, which is honored only when the authorizer allows the caller to
-        answer for the subject.
+        answer for the subject. The decision point relays how the person
+        answered (answer_ms, waited_ms, details_opened, suggestion_shown,
+        surface, remembered) and leaves out each field it does not know.
+        They set the weight of the answer for the cover rule (weights/1): an
+        approval counts 0 if a standing rule gave it, if one gesture answered
+        many actions, if it came faster than 2000 ms, if it followed a lean
+        the client showed, or if 50 reviews came before it in its session,
+        each but the first unless the details were opened. The estimates
+        never read the weight.
       x-limen-action: case.answer
       x-limen-resource:
         kind: Case
@@ -769,6 +777,8 @@ components:
           $ref: "#/components/schemas/Target"
         environment:
           $ref: "#/components/schemas/Environment"
+        scope:
+          $ref: "#/components/schemas/ReachClaim"
         attributes:
           type: object
           description: Further observable facts the domain has. Values are strings, finite numbers, or booleans.
@@ -794,7 +804,7 @@ components:
           type: string
         session:
           type: string
-          description: The run the action belongs to, for example an agent's session. The answer minimum counts the sessions of a person's approvals by it; an action without it counts as a session of its own. Limen never reads a session out of action_id.
+          description: The run the action belongs to, for example an agent's session. The cover rule counts the sessions of a person's approvals by it, and the weight of an answer counts the reviews before it in its session. An action without it counts as the UTC day it was received. Limen never reads a session out of action_id.
       required: [kind]
     Target:
       type: object
@@ -811,6 +821,14 @@ components:
         sensitivity:
           $ref: "#/components/schemas/Probability"
           description: From 0, a scratch directory, to 1, production.
+        class:
+          type: string
+          description: The class of the target, a claim of the scope. A word outside the list is a claim of unknown, and it is not an error.
+          examples:
+          - scratch
+          - own
+          - shared
+          - primary
       required: [kind, id]
     Environment:
       type: object
@@ -824,6 +842,22 @@ components:
         credentialed:
           type: boolean
           description: The environment holds a credential that reaches outside it.
+        holds:
+          type: array
+          description: The limits the environment enforces, so a reach cannot occur. Each bounds Limen's reading of the input. egress, no host outside the session's network is reachable without its own approval, so crosses.network is no; protected_refs, the git host refuses a push to a protected branch, so a primary class read from a git push is unknown; checkpoints, a copy of the workspace can restore it, so an action that crosses no boundary is at most recoverable. A hold outside the list is no hold.
+          items:
+            type: string
+            examples:
+            - egress
+            - protected_refs
+            - checkpoints
+        repositories:
+          type: string
+          description: The visibility of the repositories the session pushes to, which is the visibility of a git push. Another word is unknown.
+          examples:
+          - private
+          - public
+          - mixed
       required: [kind, credentialed]
     Signal:
       type: object
@@ -854,7 +888,7 @@ components:
           type: string
         verdict:
           $ref: "#/components/schemas/Suggestion"
-          description: The verdict the thresholds give approve, except that an allow whose label misses the answer minimum is an ask, with minimum set.
+          description: The verdict the thresholds give approve, except that an allow the person's approvals do not cover is an ask, of ask_kind wider or few.
         approve:
           $ref: "#/components/schemas/Probability"
           description: The probability that the subject approves the action.
@@ -869,7 +903,7 @@ components:
           description: The share of the prior variance at the action that the subject's answers removed.
         ask_kind:
           $ref: "#/components/schemas/AskKind"
-          description: Present when verdict is ask. unsure means evidence_ratio is below 0.5, so the ask rests on little evidence and more answers can move it. split means evidence_ratio is 0.5 or more and approve is still inside the ask band, on answers that disagree or that agree but not yet past the thresholds; more answers that agree can still move it out. An ask the answer minimum made from an allow takes its kind from evidence_ratio the same way.
+          description: Present when verdict is ask.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
         profile:
@@ -883,31 +917,196 @@ components:
           - learned/1
         reason:
           type: string
-          description: One sentence for the person who reads the record. Never shown to an agent. For an ask the answer minimum made from an allow, it gives the approvals and the sessions counted and the minimum they miss.
+          description: One sentence for the person who reads the record. Never shown to an agent. For an allow or a block it gives the approval probability; for an ask it states no probability and no direction, so it does not lead the person who reads it when Limen asks.
+        scope:
+          $ref: "#/components/schemas/Reach"
+          description: The reach of the action as Limen used it. Absent from a prediction that FailClosed made.
+        cover:
+          $ref: "#/components/schemas/Cover"
+          description: The cover rule for the action. Absent from a prediction that FailClosed made.
         minimum:
           $ref: "#/components/schemas/Minimum"
       required: [org, subject, action_id, verdict, approve, uncertainty, evidence_ratio, thresholds, profile, audit_rate, source, reason]
     Minimum:
       type: object
-      description: Present only when the answer minimum turned the allow the thresholds give into an ask. Limen suggests allow for an action only after the person has approved actions with the same label min_allows times or more, in min_sessions sessions or more; by default 3 approvals in 2 sessions. An action counts when its latest answer approves. An interim rule, until a consent design replaces it.
+      deprecated: true
+      description: The answer minimum of v0.6, the interim rule that the cover rule replaced. Limen no longer sets it; read cover.
       properties:
         allows:
           type: integer
           minimum: 0
-          description: The person's actions with the label whose latest answer approves.
         sessions:
           type: integer
           minimum: 0
-          description: The distinct sessions of those actions, by actor.session; an action without one is a session of its own.
         min_allows:
           type: integer
           minimum: 0
-          description: The approvals the server needs, 3 unless its operator set another number. 0 is no minimum.
         min_sessions:
           type: integer
           minimum: 0
-          description: The sessions the server needs, 2 unless its operator set another number. 0 is no minimum.
       required: [allows, sessions, min_allows, min_sessions]
+    ReachClaim:
+      type: object
+      description: >-
+        What the decision point knows about the reach of the action, in the
+        words of the lists alone, never with a path, a host, a ref name or
+        other text of the input. Limen also reads the reach from the input
+        and the fields of the action, and takes the greater of each claim
+        and its reading, or the greatest value when the two are not
+        comparable: a claim makes the scope wider and never narrower. A
+        member left out is no claim. A word outside its list is a claim of
+        unknown, and it is not an error.
+      properties:
+        undo:
+          type: string
+          description: Whether the action can be undone.
+          examples:
+          - none
+          - reversible
+          - recoverable
+          - irreversible
+        crosses:
+          $ref: "#/components/schemas/Crosses"
+        contact:
+          type: string
+          description: Whether the action is the first contact with its target.
+          examples:
+          - first
+          - repeat
+    Crosses:
+      type: object
+      description: The boundaries an action crosses, each true for yes and false for no. A boundary that is not known has no key. A value that is not a boolean is unknown, and it is not an error. network, organization and public each make remote true.
+      properties:
+        machine:
+          type: boolean
+          description: The action changes the machine outside the workspace, for example a home or system path.
+        remote:
+          type: boolean
+          description: The action reaches a system other than the machine.
+        network:
+          type: boolean
+          description: The action reaches a host outside the network of the session.
+        organization:
+          type: boolean
+          description: The action reaches a party that the organization does not own.
+        public:
+          type: boolean
+          description: The action makes something readable by anyone.
+    Reach:
+      type: object
+      description: >-
+        The scope of an action as Limen used it: its reading of the input,
+        bounded by the holds of the environment, merged with the claims.
+        Each dimension has a value, unknown included; an unknown boundary
+        of crosses has no key. It holds words of the lists alone.
+      properties:
+        undo:
+          $ref: "#/components/schemas/Undo"
+        crosses:
+          $ref: "#/components/schemas/Crosses"
+        target_class:
+          $ref: "#/components/schemas/TargetClass"
+        contact:
+          $ref: "#/components/schemas/Contact"
+        target_kind:
+          type: string
+          description: The kind of the target without its name, the target's kind or a kind the segments of a shell action name.
+          examples:
+          - ref
+          - repository
+          - package
+          - host
+          - path
+          - app
+      required: [undo, crosses, target_class, contact]
+    Undo:
+      type: string
+      description: Whether an action can be undone, from the least reach to the most, or unknown.
+      enum: [none, reversible, recoverable, irreversible, unknown]
+    TargetClass:
+      type: string
+      description: The class of what an action changes, from the least reach to the most, or unknown.
+      enum: [scratch, own, shared, primary, unknown]
+    Contact:
+      type: string
+      description: Whether an action is the first contact with its target, or unknown. It is not in the order of scopes.
+      enum: [repeat, first, unknown]
+    Cover:
+      type: object
+      description: >-
+        The cover rule for an action. An approval covers it when its latest
+        answer approves, it shares a family with the action, and the scope
+        of the action is within its scope. The action is covered when, in
+        each family, the covering approvals with weight have min_weight or
+        more in total, from min_sessions or more sessions. An allow that is
+        not covered is an ask.
+      properties:
+        covered:
+          type: boolean
+        weight:
+          type: number
+          minimum: 0
+          description: The total weight of the covering approvals, for the family with the least weight; if a family misses a setting, only those families are compared.
+        sessions:
+          type: integer
+          minimum: 0
+          description: The sessions of the covering approvals with weight, for that family.
+        min_weight:
+          type: integer
+          minimum: 0
+          description: The setting that applied, the greater of the installation's and the cost profile's. 3 by default.
+        min_sessions:
+          type: integer
+          minimum: 0
+          description: The setting that applied, the greater of the installation's and the cost profile's. 2 by default.
+      required: [covered, weight, sessions, min_weight, min_sessions]
+    ExplainedCover:
+      type: object
+      description: The cover of an explanation, with the approvals nearest to covering the action.
+      properties:
+        covered:
+          type: boolean
+        weight:
+          type: number
+          minimum: 0
+        sessions:
+          type: integer
+          minimum: 0
+        min_weight:
+          type: integer
+          minimum: 0
+        min_sessions:
+          type: integer
+          minimum: 0
+        nearest:
+          type: array
+          maxItems: 3
+          description: Up to three approved cases of a family of the action whose scope the action exceeds, closest first, so a client can say "You allowed publish, update. This is publish, make public."
+          items:
+            $ref: "#/components/schemas/Approval"
+      required: [covered, weight, sessions, min_weight, min_sessions]
+    Approval:
+      type: object
+      properties:
+        action_id:
+          type: string
+        label:
+          type: string
+        at:
+          type: string
+          format: date-time
+          description: The time of the latest answer of the case.
+      required: [action_id, label, at]
+    Consent:
+      type: object
+      description: The settings of the cover rule for the actions in the scope. A profile can make the settings of the installation greater and never smaller. 0, or no value, is the setting of the installation.
+      properties:
+        min_weight:
+          type: integer
+          minimum: 0
+        min_sessions:
+          type: integer
+          minimum: 0
     Thresholds:
       type: object
       description: Above allow_above is an allow, below block_below a block, and everything between, both ends included, an ask.
@@ -976,7 +1175,46 @@ components:
         by:
           type: string
           description: Who answered, when the caller relays the answer for someone else. Honored only when the authorizer allows the relay.
+        answer_ms:
+          $ref: "#/components/schemas/AnswerMS"
+        waited_ms:
+          $ref: "#/components/schemas/WaitedMS"
+        details_opened:
+          $ref: "#/components/schemas/DetailsOpened"
+        suggestion_shown:
+          $ref: "#/components/schemas/SuggestionShown"
+        surface:
+          $ref: "#/components/schemas/Surface"
+        remembered:
+          $ref: "#/components/schemas/Remembered"
       required: [org, subject, action_id, approve]
+    AnswerMS:
+      type: integer
+      minimum: 0
+      maximum: 86400000
+      description: How the person answered. The milliseconds from the moment the question was visible to the person to the answer, measured by the client.
+    WaitedMS:
+      type: integer
+      minimum: 0
+      description: How the person answered. The milliseconds from the decision that showed the action to the answer, measured by the decision point.
+    DetailsOpened:
+      type: boolean
+      description: How the person answered. True if the person opened the details of the action (the full input, the change, the target) before the answer; false if the client offered them and the person did not open them.
+    SuggestionShown:
+      type: boolean
+      description: How the person answered. True if the client showed the suggestion of Limen (the verdict, the approval probability, the reason, or an explanation) before the answer.
+    Surface:
+      type: string
+      description: How the person answered. Where the person answered. A surface outside the list is no surface, and it is not an error.
+      examples:
+      - prompt
+      - notification
+      - queue
+      - bulk
+      - rule
+    Remembered:
+      type: boolean
+      description: How the person answered. True if the answer also made a standing rule for later actions. The rule itself is never sent.
     Case:
       type: object
       description: Everything Limen holds about one action.
@@ -1006,6 +1244,18 @@ components:
         review:
           type: boolean
           description: True for the answer that reviews an action the decision showed a person, the one answer that enters error estimates.
+        answer_ms:
+          $ref: "#/components/schemas/AnswerMS"
+        waited_ms:
+          $ref: "#/components/schemas/WaitedMS"
+        details_opened:
+          $ref: "#/components/schemas/DetailsOpened"
+        suggestion_shown:
+          $ref: "#/components/schemas/SuggestionShown"
+        surface:
+          $ref: "#/components/schemas/Surface"
+        remembered:
+          $ref: "#/components/schemas/Remembered"
       required: [approve, by, at, review]
     Page:
       type: object
@@ -1042,6 +1292,8 @@ components:
         certify:
           $ref: "#/components/schemas/Certify"
           description: The claim reliability reports test. Omitted, it is a false-allow rate below 1% at 95% confidence, which takes 300 clean reviews.
+        consent:
+          $ref: "#/components/schemas/Consent"
         thresholds:
           $ref: "#/components/schemas/Thresholds"
           readOnly: true
@@ -1148,7 +1400,11 @@ components:
           description: ceil(ln(1/delta)/alpha); 300 for alpha 0.01 and delta 0.05.
         holds:
           type: boolean
-      required: [alpha, delta, clean, needed, holds]
+        considered:
+          type: integer
+          minimum: 0
+          description: The audits of the clean run whose answer is considered, with weight 1 under weights/1. The claim does not read it; it shows whether the certificate rests on quick answers.
+      required: [alpha, delta, clean, needed, holds, considered]
     ReplayRecord:
       type: object
       description: One recorded action, one per line.
@@ -1167,6 +1423,22 @@ components:
         approve:
           type: boolean
           description: The person's answer; absent when there was none.
+        answered_at:
+          type: string
+          format: date-time
+          description: When the person answered, not before at. Without it the answer is at at, so the time Limen measures is 0 and the approval builds no cover.
+        answer_ms:
+          $ref: "#/components/schemas/AnswerMS"
+        waited_ms:
+          $ref: "#/components/schemas/WaitedMS"
+        details_opened:
+          $ref: "#/components/schemas/DetailsOpened"
+        suggestion_shown:
+          $ref: "#/components/schemas/SuggestionShown"
+        surface:
+          $ref: "#/components/schemas/Surface"
+        remembered:
+          $ref: "#/components/schemas/Remembered"
       required: [at, action, verdict, review_probability, source]
     ReplayReport:
       type: object
@@ -1203,8 +1475,19 @@ components:
       required: [source, answers]
     AskKind:
       type: string
-      description: The uncertainty behind a suggested ask, by the evidence ratio. unsure is below 0.5, little evidence, which more answers can move. split is 0.5 or more with the approval probability still inside the ask band; the answers disagree, or agree but not yet past the thresholds, and more answers that agree can still move it out. split alone does not say the answers disagree; an explanation's evidence with an approval and a denial of one label, or a learned entry with approved and denied both above zero, does.
-      enum: [unsure, split]
+      description: >-
+        Why a suggestion is an ask. In the ask band: unsure, an evidence
+        ratio below 0.5, little evidence that more answers can move; split,
+        0.5 or more, and in a family of the action the latest answers of the
+        person hold an approval and a denial; short, 0.5 or more, and the
+        answers of each family agree but are not enough yet. For an allow
+        the cover rule turned into an ask: wider, the person never allowed
+        an action of this reach; few, the person allowed this reach, but
+        not with enough considered approvals or not in enough sessions. A
+        decision point can let its rules decide unsure, short and few, and
+        keep split and wider for the person. A decision point reads a kind
+        it does not know as unsure.
+      enum: [unsure, split, short, wider, few]
     Parts:
       type: object
       description: The latent mean split by the additive model's terms; they sum to the mean.
@@ -1257,9 +1540,11 @@ components:
           minimum: 0
         verdict:
           $ref: "#/components/schemas/Suggestion"
-          description: The verdict the thresholds give approve, held to the answer minimum by the person's approvals now.
+          description: The verdict the thresholds give approve, held to the cover rule by the person's approvals now.
         thresholds:
           $ref: "#/components/schemas/Thresholds"
+        cover:
+          $ref: "#/components/schemas/ExplainedCover"
         minimum:
           $ref: "#/components/schemas/Minimum"
         reason:
@@ -1306,7 +1591,7 @@ components:
           minimum: 0
         verdict:
           $ref: "#/components/schemas/Suggestion"
-          description: The verdict the thresholds give approve, held to the answer minimum.
+          description: The verdict the thresholds give approve, held to the cover rule.
         evidence_ratio:
           type: number
           minimum: 0
@@ -1315,6 +1600,8 @@ components:
           $ref: "#/components/schemas/AskKind"
         thresholds:
           $ref: "#/components/schemas/Thresholds"
+        cover:
+          $ref: "#/components/schemas/Cover"
         minimum:
           $ref: "#/components/schemas/Minimum"
       required: [label, kind, name, approved, denied, approve, uncertainty, verdict, evidence_ratio, thresholds]
@@ -1604,7 +1891,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     invalid_answer:
-      description: "400 invalid_answer: The answer has a missing field. Correct the fields that the details list, then send the answer again."
+      description: "400 invalid_answer: The answer has a missing field or a value that is not permitted. Correct the fields that the details list, then send the answer again."
       content:
         application/json:
           schema:

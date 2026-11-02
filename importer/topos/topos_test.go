@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"latere.ai/x/topos/session"
 
@@ -125,6 +126,11 @@ func TestRecords(t *testing.T) {
 	}
 	if first.At.IsZero() || !first.At.After(topostest.Start) {
 		t.Errorf("time %v", first.At)
+	}
+	// The record answers at the time of the confirmation, after the call
+	// (spec 011, criterion 23).
+	if !first.AnsweredAt.After(first.At) || first.AnsweredAt.Sub(first.At) > time.Minute {
+		t.Errorf("answered at %v, the call at %v", first.AnsweredAt, first.At)
 	}
 	sandboxed := got["c1"]
 	if sandboxed.Action.Org != "acme" || sandboxed.Action.Environment.Kind != "sandbox" || sandboxed.Action.Environment.Credentialed {

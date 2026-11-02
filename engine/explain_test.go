@@ -16,6 +16,16 @@ import (
 // answer predicts, records an ask and answers it, as manual mode does.
 func answer(t *testing.T, e *engine.Engine, a limen.Action, approve bool) limen.Prediction {
 	t.Helper()
+	return answerHow(t, e, a, approve, considered)
+}
+
+// considered is how a person who opened the details answers: weight 1
+// under weights/1, whatever the time.
+var considered = limen.HowAnswered{DetailsOpened: new(true)}
+
+// answerHow predicts a, records an ask for it, and answers it with how.
+func answerHow(t *testing.T, e *engine.Engine, a limen.Action, approve bool, how limen.HowAnswered) limen.Prediction {
+	t.Helper()
 	p, err := e.Predict(ctx, a)
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +33,7 @@ func answer(t *testing.T, e *engine.Engine, a limen.Action, approve bool) limen.
 	if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: approve}); err != nil {
+	if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: approve, HowAnswered: how}); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -165,13 +175,14 @@ func TestAskKinds(t *testing.T) {
 	}
 }
 
-// Spec 009, criterion 3, as amended on 2026-11-02: a split ask does not
-// mean answers that disagree. Two approvals of an action and no denial,
-// under Careful, remove more than half of the prior variance at it while
-// the approval probability is still below the allow threshold, 0.90: the
-// owner's live case. Its evidence and its learned entry hold approvals
-// only, and more approvals move it out of the ask band to an allow.
-func TestSplitOnAnswersThatAgree(t *testing.T) {
+// Spec 011, decision 7: two approvals of an action and no denial, under
+// Careful, remove more than half of the prior variance at it while the
+// approval probability is still below the allow threshold, 0.90: the
+// owner's live case. The answers agree, so the ask is short, which a
+// decision point leaves to its rules. Its evidence and its learned entry
+// hold approvals only, and more approvals move it out of the ask band to
+// an allow.
+func TestShortOnAnswersThatAgree(t *testing.T) {
 	e := taught(t, 0)
 	careful := limen.Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}
 	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: careful, AuditRate: 0.05}); err != nil {
@@ -192,7 +203,7 @@ func TestSplitOnAnswersThatAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Thresholds != th || p.Verdict != limen.Ask || p.AskKind != limen.AskSplit || p.EvidenceRatio < engine.EvidenceCut ||
+	if p.Thresholds != th || p.Verdict != limen.Ask || p.AskKind != limen.AskShort || p.EvidenceRatio < engine.EvidenceCut ||
 		p.Approve <= 0.5 || p.Approve >= th.AllowAbove {
 		t.Fatalf("two approvals and no denial: %+v", p)
 	}
@@ -200,8 +211,8 @@ func TestSplitOnAnswersThatAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.AskKind != limen.AskSplit || len(x.Evidence) != 2 {
-		t.Fatalf("the explanation of a split ask on two approvals: %+v", x)
+	if x.AskKind != limen.AskShort || len(x.Evidence) != 2 {
+		t.Fatalf("the explanation of a short ask on two approvals: %+v", x)
 	}
 	for _, ev := range x.Evidence {
 		if !ev.Approve {
@@ -212,14 +223,14 @@ func TestSplitOnAnswersThatAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(l.Entries) != 1 || l.Entries[0].Approved != 2 || l.Entries[0].Denied != 0 || l.Entries[0].AskKind != limen.AskSplit {
+	if len(l.Entries) != 1 || l.Entries[0].Approved != 2 || l.Entries[0].Denied != 0 || l.Entries[0].AskKind != limen.AskShort {
 		t.Fatalf("what the model learned from two approvals: %+v", l.Entries)
 	}
 	for i := 2; p.Verdict == limen.Ask; i++ {
 		if i > 20 {
 			t.Fatalf("%d approvals and no denial are still an ask: %+v", i, p)
 		}
-		if p.AskKind != limen.AskSplit {
+		if p.AskKind != limen.AskShort {
 			t.Fatalf("after %d approvals: %+v", i, p)
 		}
 		answer(t, e, publish(fmt.Sprintf("a-%d", i), i), true)
@@ -292,7 +303,7 @@ func TestLearned(t *testing.T) {
 	if x := by["bash: go test"]; x.Approved != 12 || x.Denied != 0 || x.Verdict != limen.Allow || x.Kind != "tool" || x.Name != "bash" || x.AskKind != "" || x.EvidenceRatio <= 0 {
 		t.Errorf("test runs: %+v", x)
 	}
-	if x := by["bash: rm -r"]; x.Approved != 0 || x.Denied != 12 || x.Verdict != limen.Block {
+	if x := by["bash: rm -r, cannot undo"]; x.Approved != 0 || x.Denied != 12 || x.Verdict != limen.Block {
 		t.Errorf("recursive deletes: %+v", x)
 	}
 	if len(l.Recent) == 0 || len(l.Recent) > 20 {
@@ -346,7 +357,11 @@ func TestPreview(t *testing.T) {
 	want := map[limen.Verdict]int{limen.Allow: 0, limen.Ask: 0, limen.Block: 0}
 	answered, allowedDenied, blockedApproved := 0, 0, 0
 	for _, c := range page.Entries {
+		// A preview holds an allow to the cover the prediction recorded.
 		v := th.Verdict(c.Prediction.Approve)
+		if v == limen.Allow && !c.Prediction.Cover.Covered {
+			v = limen.Ask
+		}
 		want[v]++
 		if n := len(c.Answers); n > 0 {
 			answered++

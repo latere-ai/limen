@@ -58,8 +58,9 @@ func TestReplayUsesThePersonsProfile(t *testing.T) {
 	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	var rs []limen.ReplayRecord
 	for i := range 40 {
-		rs = append(rs, limen.ReplayRecord{At: start.Add(time.Duration(i) * time.Minute), Action: across(bash("s", fmt.Sprintf("r-%d", i), "go test ./..."), i),
-			Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Approve: new(true)})
+		at := start.Add(time.Duration(i) * time.Minute)
+		rs = append(rs, limen.ReplayRecord{At: at, Action: across(bash("s", fmt.Sprintf("r-%d", i), "go test ./..."), i),
+			Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Approve: new(true), AnsweredAt: at.Add(5 * time.Second)})
 	}
 	allows := func(own bool) int {
 		e := engine.New(engine.Options{Inline: 1})

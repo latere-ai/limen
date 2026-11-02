@@ -10,11 +10,13 @@
 // learning: idempotent predictions keyed by the action's key, one decision
 // per action, answers whose role follows from the decision, profiles with
 // their precedence, the built-in default and a person's own profile met
-// with the organization's, the answer minimum, reliability reports and the
-// reports of organizations computed with latere.ai/x/limen/estimate, kept
-// weeks, replays and forgetting. Its predictions
-// come from [Options.Predict], which by default knows nothing, so every
-// action is an ask. It passes latere.ai/x/limen/conformance.
+// with the organization's, the scope of each action and the cover rule with
+// the weight of each answer (spec 011), reliability reports and the reports
+// of organizations computed with latere.ai/x/limen/estimate, kept weeks,
+// replays and forgetting. Its predictions come from [Options.Predict],
+// which by default knows nothing, so every action is an ask. It knows no
+// variance of a model, so an ask in the band is unsure. It passes
+// latere.ai/x/limen/conformance.
 package stub
 
 import (
@@ -47,11 +49,14 @@ type Options struct {
 	Predict func(limen.Action) (approve, uncertainty float64)
 	// Clock stamps every record. Nil is time.Now.
 	Clock func() time.Time
-	// MinAllows and MinSessions are the answer minimum, as the engine's
-	// options of the same names: zero is [limen.MinAllows] and
-	// [limen.MinSessions], and a negative value no minimum for that count.
-	MinAllows   int
-	MinSessions int
+	// MinWeight, MinSessions, AnswerFloor and AnswerFatigue are the
+	// settings of the cover rule and of weights/1, as the engine's options
+	// of the same names: zero is the contract's value, and a negative value
+	// turns a setting off.
+	MinWeight     int
+	MinSessions   int
+	AnswerFloor   time.Duration
+	AnswerFatigue int
 }
 
 // Service is the in-memory service. The zero value is not usable; call
@@ -59,8 +64,10 @@ type Options struct {
 type Service struct {
 	predict func(limen.Action) (float64, float64)
 	clock   func() time.Time
-	// minAllows and minSessions are the answer minimum, zero for none.
-	minAllows, minSessions int
+	// minWeight and minSessions are the settings of the cover rule, zero
+	// for a setting that is off, and policy is weights/1.
+	minWeight, minSessions int
+	policy                 estimate.Policy
 
 	mu       sync.Mutex
 	seq      int
@@ -77,13 +84,17 @@ type weekKey struct {
 }
 
 // entry is one action's record. The action is kept without its input, and
-// label is written from the input before it is dropped (spec 009).
+// label, scope and families are read from the input before it is dropped
+// (specs 009 and 011).
 type entry struct {
 	seq        int
 	at         time.Time
 	action     limen.Action
 	label      string
+	scope      limen.Reach
+	families   []string
 	digest     string
+	decidedAt  time.Time
 	prediction *limen.Prediction
 	// predictedBy counts the subject's answers when the prediction was made.
 	predictedBy *int64
@@ -102,8 +113,12 @@ func New(o Options) *Service {
 		profiles: map[limen.Scope]limen.Profile{},
 		weeks:    map[weekKey][]byte{},
 
-		minAllows:   minimumOf(o.MinAllows, limen.MinAllows),
-		minSessions: minimumOf(o.MinSessions, limen.MinSessions),
+		minWeight:   settingOf(o.MinWeight, limen.MinWeight),
+		minSessions: settingOf(o.MinSessions, limen.MinSessions),
+		policy: estimate.Policy{
+			Floor:   settingOf(o.AnswerFloor, limen.AnswerFloor),
+			Fatigue: settingOf(o.AnswerFatigue, limen.AnswerFatigue),
+		},
 	}
 	if s.predict == nil {
 		s.predict = func(limen.Action) (float64, float64) { return 0.5, 1 }
@@ -163,14 +178,14 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 	}
 	p := s.effectiveLocked(limen.ScopeOf(a), a.Subject)
 	approve, uncertainty := s.predict(a)
-	v, held := s.holdLocked(p.Thresholds.Verdict(approve), a.Org, a.Subject, e.label)
+	// The stub's predictor knows no answers' variance: its evidence ratio
+	// is zero, so every ask in the band is unsure, as its explanations say.
+	j := s.judgeLocked(e, approve, p)
 	pr := limen.Prediction{
-		Key: a.Key, Verdict: v, Approve: approve, Uncertainty: uncertainty,
-		// The stub's predictor knows no answers' variance: every ask is
-		// unsure, as its explanations say.
-		AskKind:    kindOf(v),
+		Key: a.Key, Verdict: j.Verdict, Approve: approve, Uncertainty: uncertainty,
+		AskKind:    j.Kind,
 		Thresholds: p.Thresholds, Profile: p.Scope, AuditRate: p.AuditRate, Source: Source,
-		Reason: reasonOf(approve, p.Thresholds, held), Minimum: held,
+		Reason: reasonOf(approve, p.Thresholds, j, e.label), Scope: e.scope, Cover: j.Cover,
 	}
 	e.prediction = &pr
 	n := s.answersLocked(a.Org, a.Subject)
@@ -179,10 +194,16 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 }
 
 func (s *Service) newEntry(a limen.Action, d string, at time.Time) *entry {
-	label := featurize.Label(a)
+	var approved []*limen.Target
+	for _, o := range s.subjectLocked(a.Org, a.Subject) {
+		if n := len(o.answers); n > 0 && o.answers[n-1].Approve {
+			approved = append(approved, o.action.Target)
+		}
+	}
+	rd := featurize.Read(a, featurize.Contact(a.Target, approved))
 	a.Input = nil
 	s.seq++
-	e := &entry{seq: s.seq, at: at, action: a, label: label, digest: d}
+	e := &entry{seq: s.seq, at: at, action: a, label: rd.Label, scope: rd.Scope, families: rd.Families, digest: d}
 	s.cases[a.Key] = e
 	return e
 }
@@ -226,6 +247,7 @@ func (s *Service) recordLocked(d limen.Decision, at time.Time) error {
 	}
 	d.Action = nil
 	e.decision = &d
+	e.decidedAt = at
 	return nil
 }
 
@@ -254,7 +276,7 @@ func (s *Service) answerLocked(a limen.Answer, at time.Time) error {
 		by = a.Subject
 	}
 	review := estimate.Pending(caseOf(e))
-	e.answers = append(e.answers, limen.RecordedAnswer{Approve: a.Approve, By: by, At: at, Review: review})
+	e.answers = append(e.answers, limen.RecordedAnswer{Approve: a.Approve, By: by, At: at, Review: review, HowAnswered: a.Kept()})
 	return nil
 }
 
@@ -345,12 +367,15 @@ func (s *Service) Reliability(ctx context.Context, q limen.ReliabilityQuery) (li
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	entries := s.subjectLocked(q.Org, q.Subject)
+	w := s.policy.Weigh(records(entries))
 	var rows []estimate.Row
-	for _, e := range s.sortedLocked() {
-		if e.action.Org != q.Org || e.action.Subject != q.Subject || e.at.Before(q.From) || !e.at.Before(q.To) {
+	for i, e := range entries {
+		if e.at.Before(q.From) || !e.at.Before(q.To) {
 			continue
 		}
 		if r, ok := estimate.RowOf(caseOf(e), q.Of); ok {
+			r.Considered = w[i].Review == 1
 			rows = append(rows, r)
 		}
 	}
@@ -469,7 +494,8 @@ func (s *Service) Replay(ctx context.Context, records iter.Seq2[limen.ReplayReco
 	target := s
 	if !o.Keep {
 		s.mu.Lock()
-		target = New(Options{Predict: s.predict, Clock: s.clock, MinAllows: optionOf(s.minAllows), MinSessions: optionOf(s.minSessions)})
+		target = New(Options{Predict: s.predict, Clock: s.clock, MinWeight: optionOf(s.minWeight), MinSessions: optionOf(s.minSessions),
+			AnswerFloor: optionOf(s.policy.Floor), AnswerFatigue: optionOf(s.policy.Fatigue)})
 		maps.Copy(target.profiles, s.profiles)
 		s.mu.Unlock()
 	}
@@ -491,7 +517,11 @@ func (s *Service) Replay(ctx context.Context, records iter.Seq2[limen.ReplayReco
 		row := estimate.Row{Verdict: pr.Verdict, Review: r.ReviewProbability, Shown: r.Verdict.Shown()}
 		if r.Approve != nil {
 			report.Answered++
-			if err := target.answerLocked(limen.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
+			at := r.AnsweredAt
+			if at.IsZero() {
+				at = r.At
+			}
+			if err := target.answerLocked(limen.Answer{Key: r.Action.Key, Approve: *r.Approve, HowAnswered: r.HowAnswered}, at); err != nil {
 				return limen.ReplayReport{}, err
 			}
 			row.Reviewed, row.Approve = row.Shown, *r.Approve

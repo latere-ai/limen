@@ -125,7 +125,7 @@ func TestLearns(t *testing.T) {
 				t.Fatal(err)
 			}
 			_ = p
-			if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: step.approve}); err != nil {
+			if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: step.approve, HowAnswered: considered}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -279,6 +279,7 @@ func TestReplayLearnsInOrder(t *testing.T) {
 		rs = append(rs, limen.ReplayRecord{
 			At: start.Add(time.Duration(i) * time.Minute), Action: across(bash("s", fmt.Sprintf("r-%d", i), "go test ./..."), i),
 			Verdict: limen.Ask, ReviewProbability: 1, Source: "manual", Approve: &yes,
+			AnsweredAt: start.Add(time.Duration(i)*time.Minute + 5*time.Second),
 		})
 	}
 	// Out of order on purpose: a replay sorts by time.

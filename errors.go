@@ -49,7 +49,7 @@ type row struct {
 var table = map[Code]row{
 	CodeInvalidAction:         {400, "The action has a missing field or a value that is not permitted. Correct the fields that the details list, then send the action again."},
 	CodeInvalidDecision:       {400, "The decision has a missing field or a value that is not permitted. Correct the fields that the details list, then send the decision again."},
-	CodeInvalidAnswer:         {400, "The answer has a missing field. Correct the fields that the details list, then send the answer again."},
+	CodeInvalidAnswer:         {400, "The answer has a missing field or a value that is not permitted. Correct the fields that the details list, then send the answer again."},
 	CodeInvalidProfile:        {400, "The cost profile has a missing field or a value that is not permitted. Correct the fields that the details list, then save the cost profile again."},
 	CodeInvalidQuery:          {400, "The request has a missing field or a value that is not permitted. Correct the fields that the details list, then send the request again."},
 	CodeInvalidReplay:         {400, "A replayed record has a missing field or a value that is not permitted. Correct the records that the details list, then send the replay again."},
@@ -117,8 +117,7 @@ func (e *Error) Error() string {
 // CodeOf returns the code of the first [*Error] in err's chain, or
 // [CodeInternal] when there is none.
 func CodeOf(err error) Code {
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e.Code
 	}
 	return CodeInternal

@@ -33,27 +33,39 @@ func (k Key) Validate() error {
 	return p.err(CodeInvalidQuery)
 }
 
-// The two kinds of uncertainty behind a suggested [Ask], told apart by
-// the evidence ratio at the action (spec 009).
+// The kinds of a suggested [Ask] (specs 009 and 011). Three are asks in
+// the ask band, told apart by the evidence ratio at the action and by the
+// answers of its family. Two are allows the cover rule turned into asks.
 const (
 	// AskUnsure is an ask on little evidence: the person's answers
 	// removed less than half of the prior variance at the action, so they
 	// say little about it, and more answers can move it.
 	AskUnsure = "unsure"
-	// AskSplit is an ask on evidence: the person's answers removed half
-	// of the prior variance at the action or more, and the approval
-	// probability is still inside the profile's ask band, or above it with
-	// too few approvals for the answer minimum ([Minimum]). The answers
-	// disagree, or agree but not yet strongly enough for the thresholds,
-	// as two approvals of one action can under a 0.90 allow threshold.
-	// More answers that agree can still move it out of the band; answers
-	// that disagree keep it there. The paper's Proposition 3 holds only in
-	// the limit of much evidence with mixed answers. AskSplit alone does
-	// not say the answers disagree: an [Explanation] whose Evidence holds
-	// an approval and a denial with one label does, as does a
-	// [LearnedEntry] with Approved and Denied both above zero.
+	// AskSplit is an ask on evidence that disagrees: the evidence ratio is
+	// 0.5 or more, the approval probability is inside the ask band, and in
+	// a family of the action the latest answers of the person's answered
+	// cases in the window hold an approval and a denial. The paper's
+	// Proposition 3 holds only in the limit of much evidence with mixed
+	// answers.
 	AskSplit = "split"
+	// AskShort is an ask on evidence that agrees but is not enough yet:
+	// the evidence ratio is 0.5 or more, the approval probability is inside
+	// the ask band, and in each family of the action the answers agree, as
+	// two approvals of one action can under a 0.90 allow threshold. More
+	// answers that agree can move it out of the band.
+	AskShort = "short"
+	// AskWider is an allow the cover rule turned into an ask, for an
+	// action whose scope exceeds the scope of each approval of a family of
+	// the action: the person never allowed an action of this reach.
+	AskWider = "wider"
+	// AskFew is an allow the cover rule turned into an ask, for an action
+	// that approvals of each family cover, but not with enough weight or
+	// not from enough sessions.
+	AskFew = "few"
 )
+
+// AskKinds lists the kinds of an ask, in the order of their constants.
+func AskKinds() []string { return []string{AskUnsure, AskSplit, AskShort, AskWider, AskFew} }
 
 // ModelRef names one fitted model of a person: the source of its
 // predictions and the number of the person's answers it was fitted
@@ -80,13 +92,19 @@ type Explanation struct {
 	// Approve, Uncertainty and Verdict are the prediction Model makes for
 	// the action, at the action's own time, under Thresholds: those of the
 	// recorded prediction, or of the profile that applies now. Verdict is
-	// held to the answer minimum by the person's approvals now, as a
-	// prediction is, with Minimum set when it turned an allow into an ask.
+	// held to the cover rule by the person's approvals now, as a
+	// prediction is, and Cover says how.
 	Approve     float64    `json:"approve"`
 	Uncertainty float64    `json:"uncertainty"`
 	Verdict     Verdict    `json:"verdict"`
 	Thresholds  Thresholds `json:"thresholds"`
-	Minimum     Minimum    `json:"minimum,omitzero"`
+	// Cover is the cover rule for the action now, with the approvals
+	// nearest to covering it.
+	Cover ExplainedCover `json:"cover,omitzero"`
+	// Minimum is the answer minimum of v0.6.
+	//
+	// Deprecated: Limen no longer sets it. Read Cover.
+	Minimum Minimum `json:"minimum,omitzero"`
 	// Reason is one sentence for the person, saying why Verdict is what
 	// it is, as a prediction's reason does. An implementation from before
 	// it leaves it empty.
@@ -98,7 +116,8 @@ type Explanation struct {
 	// EvidenceRatio is the share of the prior variance the person's answers
 	// removed at this action, in [0, 1).
 	EvidenceRatio float64 `json:"evidence_ratio"`
-	// AskKind is [AskUnsure] or [AskSplit] when Verdict is [Ask].
+	// AskKind is the kind of the ask when Verdict is [Ask], as a
+	// prediction's is.
 	AskKind string `json:"ask_kind,omitempty"`
 	// Evidence are the answers that moved the prediction most: up to three
 	// toward the verdict's side and two against it, or three each way for
@@ -167,11 +186,10 @@ type Learned struct {
 // LearnedEntry is one kind of action the person has answered, and what the
 // model suggests for it now: at its most recent case, moved to the
 // person's current time, under the profile that applies to it, and held
-// to the answer minimum, with Minimum set when it turned an allow into an
-// ask.
-// EvidenceRatio and AskKind are an explanation's at that point, so a scale
-// can draw an unsure ask apart from a split one. A split entry has answers
-// that disagree only when Approved and Denied are both above zero.
+// to the cover rule, with Cover for that case. EvidenceRatio and AskKind
+// are an explanation's at that point, so a scale can draw an unsure ask
+// apart from a split or a short one. The label of a case names its reach
+// (labels/2), so two reaches of one action are two entries.
 type LearnedEntry struct {
 	Label         string     `json:"label"`
 	Kind          string     `json:"kind"`
@@ -184,7 +202,11 @@ type LearnedEntry struct {
 	EvidenceRatio float64    `json:"evidence_ratio"`
 	AskKind       string     `json:"ask_kind,omitempty"`
 	Thresholds    Thresholds `json:"thresholds"`
-	Minimum       Minimum    `json:"minimum,omitzero"`
+	Cover         Cover      `json:"cover,omitzero"`
+	// Minimum is the answer minimum of v0.6.
+	//
+	// Deprecated: Limen no longer sets it. Read Cover.
+	Minimum Minimum `json:"minimum,omitzero"`
 }
 
 // TrendPoint is the shared tolerance part at one point of a person's
@@ -230,12 +252,14 @@ func (r PreviewRequest) Validate() error {
 
 // Preview is what the previewed costs would have done with the person's
 // recorded predictions: the predictions as they were made, re-thresholded,
-// with no model refitted.
+// with no model refitted. An allow the thresholds give is an ask where the
+// recorded [Cover] of the prediction is not covered: a preview applies the
+// cover rule as it was recorded, and does not count it again.
 type Preview struct {
 	PreviewRequest
 	Thresholds Thresholds `json:"thresholds"`
 	// Records counts the predictions in the window and Would the verdicts
-	// the thresholds give them.
+	// the thresholds and the recorded cover give them.
 	Records int             `json:"records"`
 	Would   map[Verdict]int `json:"would"`
 	// Answered counts the records with an answer; AllowedDenied those the

@@ -20,10 +20,18 @@
 //	                  ingress that forwards a public path unchanged, for
 //	                  example /v1/oversight; default none
 //	LIMEN_MIN_ALLOWS, LIMEN_MIN_SESSIONS
-//	                the answer minimum: the approvals of actions with one
-//	                  label, and the sessions they come from, that an allow
-//	                  needs; default 3 and 2 (limen.MinAllows,
-//	                  limen.MinSessions), and 0 is no minimum, for tests
+//	                the cover rule: the total weight of the considered
+//	                  approvals that cover an action, and the sessions they
+//	                  come from, that an allow needs in each family of the
+//	                  action; default 3 and 2 (limen.MinWeight,
+//	                  limen.MinSessions), and 0 turns a setting off, for
+//	                  tests; a cost profile can make them greater
+//	LIMEN_ANSWER_FLOOR_MS, LIMEN_ANSWER_FATIGUE
+//	                weights/1: an approval faster than the floor, or with
+//	                  the fatigue count of reviews or more before it in its
+//	                  session, has weight 0 if its details were not opened;
+//	                  default 2000 and 50 (limen.AnswerFloor,
+//	                  limen.AnswerFatigue), and 0 turns a rule off
 //
 // A hosted server sets LIMEN_OIDC_ISSUERS and LIMEN_OIDC_AUDIENCE in place
 // of LIMEN_TOKEN and LIMEN_SUBJECT, and LIMEN_AUTHORIZER_URL or LIMEN_ADMINS
@@ -124,16 +132,14 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		errOut.Printf("limend: LIMEN_BASE_PATH is not correct: %v. Use an absolute path with no slash at the end, for example /v1/oversight.\n", err)
 		return exitConfig
 	}
-	minAllows, err := minimum(getenv, "LIMEN_MIN_ALLOWS")
-	if err != nil {
-		errOut.Printf("limend: %v\n", err)
-		return exitConfig
+	var settings [4]int
+	for i, name := range []string{"LIMEN_MIN_ALLOWS", "LIMEN_MIN_SESSIONS", "LIMEN_ANSWER_FLOOR_MS", "LIMEN_ANSWER_FATIGUE"} {
+		if settings[i], err = setting(getenv, name); err != nil {
+			errOut.Printf("limend: %v\n", err)
+			return exitConfig
+		}
 	}
-	minSessions, err := minimum(getenv, "LIMEN_MIN_SESSIONS")
-	if err != nil {
-		errOut.Printf("limend: %v\n", err)
-		return exitConfig
-	}
+	minWeight, minSessions, floorMS, fatigue := settings[0], settings[1], settings[2], settings[3]
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
 	dir := dataDir(getenv)
 	if dir == "" {
@@ -164,7 +170,12 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		}
 	}
 
-	eng := engine.New(engine.Options{Store: st, Clock: clock, MinAllows: minAllows, MinSessions: minSessions})
+	floor := time.Duration(floorMS) * time.Millisecond
+	if floorMS < 0 {
+		floor = -1
+	}
+	eng := engine.New(engine.Options{Store: st, Clock: clock, MinWeight: minWeight, MinSessions: minSessions,
+		AnswerFloor: floor, AnswerFatigue: fatigue})
 	// Close stops the fitters and cannot fail.
 	defer func() { _ = eng.Close() }()
 	o := acc.options
@@ -179,8 +190,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	if base != "" {
 		out.Printf("The API is also available under %s.\n", base)
 	}
-	if minAllows < 0 || minSessions < 0 {
+	if minWeight < 0 || minSessions < 0 {
 		out.Println("Warning: LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0. Limen can suggest allow for an action after fewer approvals. Use 0 only for tests.")
+	}
+	if floorMS < 0 || fatigue < 0 {
+		out.Println("Warning: LIMEN_ANSWER_FLOOR_MS or LIMEN_ANSWER_FATIGUE is 0. Quick approvals, or approvals late in a long session, can let Limen suggest allow. Use 0 only for tests.")
 	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
@@ -205,10 +219,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	return exitOK
 }
 
-// minimum reads one count of the answer minimum from the variable name, as
-// the engine's option: an empty variable is 0, the engine's default, a
-// value of 0 is -1, no minimum, and a positive count is itself.
-func minimum(getenv func(string) string, name string) (int, error) {
+// setting reads one setting of the cover rule or of weights/1 from the
+// variable name, as the engine's option: an empty variable is 0, the
+// engine's default, a value of 0 is -1, which turns the setting off, and a
+// positive whole number is itself.
+func setting(getenv func(string) string, name string) (int, error) {
 	v := strings.TrimSpace(getenv(name))
 	if v == "" {
 		return 0, nil
@@ -216,7 +231,7 @@ func minimum(getenv func(string) string, name string) (int, error) {
 	n, err := strconv.Atoi(v)
 	switch {
 	case err != nil || n < 0:
-		return 0, errors.New(name + " is not correct: " + strconv.Quote(v) + ". Use a whole number, 0 or more. 0 turns this part of the answer minimum off.")
+		return 0, errors.New(name + " is not correct: " + strconv.Quote(v) + ". Use a whole number, 0 or more. 0 turns this setting off.")
 	case n == 0:
 		return -1, nil
 	}

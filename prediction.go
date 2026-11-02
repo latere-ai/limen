@@ -14,10 +14,10 @@ const SourceUnavailable = "learned/unavailable"
 type Prediction struct {
 	Key
 	// Verdict is the suggestion, [Allow], [Ask] or [Block]:
-	// Thresholds.Verdict(Approve), except that an allow whose label misses
-	// the answer minimum ([MinAllows], [MinSessions]) is an ask, with
-	// Minimum set. The decision point composes it with its ceiling and
-	// review sampling before applying anything.
+	// Thresholds.Verdict(Approve), except that an allow the approvals of
+	// the person do not cover is an ask ([Cover]). The decision point
+	// composes it with its ceiling and review sampling before applying
+	// anything.
 	Verdict Verdict `json:"verdict"`
 	// Approve is the posterior predictive probability that the subject
 	// approves the action, given every answer Limen has from them.
@@ -30,16 +30,16 @@ type Prediction struct {
 	// the subject's answers removed, 1 - σ²/v₀ (spec 009): near 0 for an
 	// action unlike any answered one, near 1 for a well-known one.
 	EvidenceRatio float64 `json:"evidence_ratio"`
-	// AskKind is [AskUnsure] or [AskSplit] when Verdict is [Ask]: whether
-	// the ask rests on little evidence (EvidenceRatio below 0.5), or on
-	// the subject's answers with Approve still inside the ask band. Those
-	// answers disagree, or agree but not yet past the thresholds, and more
-	// answers that agree can still move a split ask out of the band. A
-	// decision point can let the rules decide an unsure ask and keep a
-	// split one, which rests on the person's own answers and not on too
-	// few of them (spec 009). An ask the answer minimum made from an allow
-	// takes its kind from EvidenceRatio the same way. Empty for an allow or
-	// a block.
+	// AskKind says why Verdict is [Ask], and is empty for an allow or a
+	// block. In the ask band it is [AskUnsure] (EvidenceRatio below 0.5),
+	// [AskSplit] (the answers of a family of the action disagree) or
+	// [AskShort] (they agree, but not enough yet). For an allow the cover
+	// rule turned into an ask it is [AskWider] (the person never allowed
+	// an action of this reach) or [AskFew] (not with enough considered
+	// approvals, or not in enough sessions). A decision point can let its
+	// rules decide unsure, short and few, and keep split and wider for the
+	// person, which rest on the person's own answers (spec 011). A
+	// decision point reads a kind it does not know as unsure.
 	AskKind string `json:"ask_kind,omitempty"`
 	// Thresholds and AuditRate come from the cost profile that applies,
 	// named by Profile, and are recorded with the prediction because a
@@ -56,10 +56,17 @@ type Prediction struct {
 	// Reason is one sentence for the person who reads the record, saying
 	// why the suggestion is what it is. It is never shown to an agent.
 	Reason string `json:"reason"`
-	// Minimum is set when the answer minimum turned the allow the
-	// thresholds give into this ask: the person's approvals of actions
-	// with the label, or the sessions they came from, are too few. It is
-	// the zero value otherwise.
+	// Scope is the reach of the action as Limen used it: its reading of
+	// the input, bounded by the holds, merged with the claims (spec 011).
+	// It is absent from a [FailClosed] prediction.
+	Scope Reach `json:"scope,omitzero"`
+	// Cover is the cover rule for the action: whether the approvals of
+	// the person cover it, and with what weight from how many sessions. It
+	// is absent from a [FailClosed] prediction.
+	Cover Cover `json:"cover,omitzero"`
+	// Minimum is the answer minimum of v0.6.
+	//
+	// Deprecated: Limen no longer sets it. Read Cover.
 	Minimum Minimum `json:"minimum,omitzero"`
 }
 

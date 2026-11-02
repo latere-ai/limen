@@ -4,12 +4,13 @@
 // Package engine is Limen's service: the predictor, the ledger and the
 // administration of the contract in latere.ai/x/limen, over a [store.Store].
 //
-// A prediction featurizes the action (engine/featurize), reads the
-// subject's fitted model, and suggests the verdict the effective cost
-// profile's thresholds give the approval probability, held to the answer
-// minimum (limen.MinAllows, limen.MinSessions): an allow stays an ask
-// until the subject's approvals of the action's label meet it, which a
-// prediction counts from the subject's cases. It never fits: a model
+// A prediction featurizes the action and reads its scope
+// (engine/featurize), reads the subject's fitted model, and suggests the
+// verdict the effective cost profile's thresholds give the approval
+// probability, held to the cover rule (spec 011): an allow stays an ask
+// until approvals of the subject cover the action, which a prediction
+// reads from the subject's cases with latere.ai/x/limen/estimate. It
+// never fits: a model
 // is an immutable [gp.Posterior] read through an atomic pointer, refitted off
 // the hot path when answers arrive, either by background fitters after a
 // debounce (the default) or, for a replay, inline once enough answers are
@@ -82,13 +83,21 @@ type Options struct {
 	// CacheBytes bounds the fitted models held in memory; zero is 1 GiB. An
 	// evicted model is loaded from the store on its next prediction.
 	CacheBytes int64
-	// MinAllows and MinSessions are the answer minimum of the contract: an
-	// allow the thresholds give stays an ask until the person has approved
-	// actions with the same label MinAllows times, in MinSessions sessions.
-	// Zero is the contract's value, [limen.MinAllows] and
-	// [limen.MinSessions]; a negative value is no minimum for that count.
-	MinAllows   int
+	// MinWeight and MinSessions are the settings of the cover rule for
+	// the installation: an allow the thresholds give stays an ask until the
+	// person's covering approvals have MinWeight in total from MinSessions
+	// sessions, in each family of the action. A cost profile can make them
+	// greater. Zero is the contract's value, [limen.MinWeight] and
+	// [limen.MinSessions]; a negative value turns a setting off.
+	MinWeight   int
 	MinSessions int
+	// AnswerFloor and AnswerFatigue are the settings of weights/1: an
+	// approval faster than the floor, or with the fatigue count of reviews
+	// or more before it in its session, has weight 0 when its details were
+	// not opened. Zero is [limen.AnswerFloor] and [limen.AnswerFatigue]; a
+	// negative value turns a rule off.
+	AnswerFloor   time.Duration
+	AnswerFatigue int
 }
 
 type subjectKey struct{ org, subject string }
@@ -101,9 +110,10 @@ type Engine struct {
 	opts    gp.Options
 	inline  int
 	debounc time.Duration
-	// minAllows and minSessions are the answer minimum the engine applies,
-	// zero for no minimum.
-	minAllows, minSessions int
+	// minWeight and minSessions are the installation's settings of the
+	// cover rule, zero for a setting that is off, and policy is weights/1.
+	minWeight, minSessions int
+	policy                 estimate.Policy
 
 	locksMu sync.Mutex
 	locks   map[subjectKey]*sync.Mutex
@@ -150,8 +160,12 @@ func build(o Options) *Engine {
 		models:  newCache(cmp.Or(o.CacheBytes, 1<<30)),
 		stop:    make(chan struct{}),
 
-		minAllows:   minimumOf(o.MinAllows, limen.MinAllows),
-		minSessions: minimumOf(o.MinSessions, limen.MinSessions),
+		minWeight:   settingOf(o.MinWeight, limen.MinWeight),
+		minSessions: settingOf(o.MinSessions, limen.MinSessions),
+		policy: estimate.Policy{
+			Floor:   settingOf(o.AnswerFloor, limen.AnswerFloor),
+			Fatigue: settingOf(o.AnswerFatigue, limen.AnswerFatigue),
+		},
 	}
 	if e.st == nil {
 		e.st = store.NewMemory()
@@ -201,18 +215,19 @@ func conflict(k limen.Key) error {
 		Detail: fmt.Sprintf("action %s for %s in %s was first recorded as a different action", k.ActionID, k.Subject, k.Org)}
 }
 
-// newCase assigns the case its ordinal and receive time and featurizes the
-// action, the one moment its input is read.
-func (e *Engine) newCase(ctx context.Context, a limen.Action, dg string, at time.Time) (store.Case, error) {
+// newCase assigns the case its ordinal and receive time, featurizes the
+// action and reads its scope, the one moment its input is read. approved
+// are the targets of the subject's approved cases, which give its contact.
+func (e *Engine) newCase(ctx context.Context, a limen.Action, dg string, at time.Time, approved []*limen.Target) (store.Case, error) {
 	t, err := e.st.NextT(ctx, a.Org, a.Subject)
 	if err != nil {
 		return store.Case{}, err
 	}
 	f := featurize.Of(a)
-	label := featurize.Label(a)
+	rd := featurize.Read(a, featurize.Contact(a.Target, approved))
 	a.Input = nil
 	return store.Case{T: t, ReceivedAt: at, Digest: dg, Action: a, Featurizer: featurize.Version, A: f.A, C: f.C,
-		Label: label, Labels: featurize.LabelsVersion}, nil
+		Label: rd.Label, Labels: featurize.LabelsVersion, Scope: &rd.Scope, Families: rd.Families}, nil
 }
 
 // Predict implements [limen.Predictor].
@@ -241,8 +256,16 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		return limen.Prediction{}, conflict(a.Key)
 	case ok && c.Prediction != nil:
 		return *c.Prediction, nil
-	case !ok:
-		if c, err = e.newCase(ctx, a, dg, at); err != nil {
+	}
+	// The cover rule reads the subject's cases from the ledger the model
+	// keeps; a model that cannot be loaded is an error, which the decision
+	// point's FailClosed turns into an ask.
+	m, err := e.model(ctx, subjectKey{a.Org, a.Subject})
+	if err != nil {
+		return limen.Prediction{}, err
+	}
+	if !ok {
+		if c, err = e.newCase(ctx, a, dg, at, m.ledger.approved()); err != nil {
 			return limen.Prediction{}, err
 		}
 	}
@@ -250,39 +273,26 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 	if err != nil {
 		return limen.Prediction{}, err
 	}
-	m, err := e.model(ctx, subjectKey{a.Org, a.Subject})
-	if err != nil {
-		return limen.Prediction{}, err
-	}
 	post := m.post.Load()
 	pr := post.Predict(kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
-	v := prof.Thresholds.Verdict(pr.Approve)
-	why := reason(pr.Approve, prof.Thresholds, post.Len())
-	var held limen.Minimum
-	if e.holds(v) {
-		// The allow is held to the answer minimum. A failure to count the
-		// approvals holds it with none counted, so a store that fails here
-		// never lets an action run on its own.
-		cases, cerr := e.st.Cases(ctx, a.Org, a.Subject)
-		v, held = limen.Hold(v, e.tally(cases, label(c)))
-		if held.Held() {
-			why = heldReason(pr.Approve, prof.Thresholds, held, cerr == nil)
-		}
-	}
 	er := evidenceRatio(pr.Var, post.Kernel().Var())
+	s, fams := reach(c)
+	recs := m.ledger.recs
+	j := estimate.Judge(pr.Approve, er, prof.Thresholds, fams, s, recs, e.policy.Weigh(recs), e.settings(prof))
 	p := limen.Prediction{
 		Key:           a.Key,
-		Verdict:       v,
+		Verdict:       j.Verdict,
 		Approve:       pr.Approve,
 		Uncertainty:   math.Sqrt(pr.Var),
 		EvidenceRatio: er,
-		AskKind:       askKind(v, er),
+		AskKind:       j.Kind,
 		Thresholds:    prof.Thresholds,
 		Profile:       prof.Scope,
 		AuditRate:     prof.AuditRate,
 		Source:        Source,
-		Reason:        why,
-		Minimum:       held,
+		Reason:        reason(pr.Approve, prof.Thresholds, post.Len(), j, label(c)),
+		Scope:         s,
+		Cover:         j.Cover,
 	}
 	c.Prediction = &p
 	by := post.answers
@@ -290,59 +300,27 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 	if err := e.st.Put(ctx, c); err != nil {
 		return limen.Prediction{}, err
 	}
+	m.ledger.put(c)
 	return p, nil
 }
 
-func reason(approve float64, t limen.Thresholds, answers int) string {
-	if answers == 0 {
-		return "Limen has no answers from this person yet. It suggests ask."
-	}
+// reason is the sentence of a verdict for the person who reads the
+// record. An allow and a block state their probability, because nobody is
+// asked about them. An ask states none and no direction, because the
+// person reads it when Limen asks (spec 011).
+func reason(approve float64, t limen.Thresholds, answers int, j estimate.Judged, label string) string {
 	d := digits(approve, t.AllowAbove, t.BlockBelow)
-	switch t.Verdict(approve) {
-	case limen.Allow:
+	switch {
+	case j.Verdict == limen.Allow:
 		return fmt.Sprintf("The approval probability is %.*f, above the allow threshold (%.*f). Limen suggests allow.",
 			d, approve, d, t.AllowAbove)
-	case limen.Block:
+	case j.Verdict == limen.Block:
 		return fmt.Sprintf("The approval probability is %.*f, below the block threshold (%.*f). Limen suggests block.",
 			d, approve, d, t.BlockBelow)
-	default:
-		return fmt.Sprintf("The approval probability is %.*f, between the block threshold (%.*f) and the allow threshold (%.*f). Limen suggests ask.",
-			d, approve, d, t.BlockBelow, d, t.AllowAbove)
+	case answers == 0 && j.Kind == limen.AskUnsure:
+		return "Limen has no answers from this person yet. It suggests ask."
 	}
-}
-
-// heldReason is the reason of an allow the answer minimum turned into an
-// ask: the approvals counted and the minimum they miss, or, when counted
-// is false, that the approvals could not be counted.
-func heldReason(approve float64, t limen.Thresholds, m limen.Minimum, counted bool) string {
-	d := digits(approve, t.AllowAbove, t.BlockBelow)
-	s := fmt.Sprintf("The approval probability is %.*f, above the allow threshold (%.*f). ", d, approve, d, t.AllowAbove)
-	switch {
-	case !counted:
-		return s + "Limen could not count the approvals of this person for this label. Limen suggests ask."
-	case m.Allows == 0:
-		s += "The person has not approved an action with this label. "
-	default:
-		s += fmt.Sprintf("The person approved actions with this label %s, in %s. ", plural(m.Allows, "time"), plural(m.Sessions, "session"))
-	}
-	var need string
-	switch {
-	case m.MinSessions == 0:
-		need = plural(m.MinAllows, "approval") + " or more"
-	case m.MinAllows == 0:
-		need = "approvals in " + plural(m.MinSessions, "session") + " or more"
-	default:
-		need = plural(m.MinAllows, "approval") + " or more, in " + plural(m.MinSessions, "session") + " or more,"
-	}
-	return s + "Limen needs " + need + " before it suggests allow. Limen suggests ask."
-}
-
-// plural is n and the word, with an s for any n but one.
-func plural(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
-	}
-	return strconv.Itoa(n) + " " + word + "s"
+	return estimate.AskReason(j.Kind, label, j.Cover)
 }
 
 // digits is the number of decimals, two or more, at which p and every
@@ -396,7 +374,17 @@ func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) e
 		if err != nil {
 			return err
 		}
-		if c, err = e.newCase(ctx, *d.Action, dg, at); err != nil {
+		var approved []*limen.Target
+		if m := e.models.get(subjectKey{d.Org, d.Subject}); m != nil {
+			approved = m.ledger.approved()
+		} else {
+			cases, err := e.st.Cases(ctx, d.Org, d.Subject)
+			if err != nil {
+				return err
+			}
+			approved = approvedTargets(cases)
+		}
+		if c, err = e.newCase(ctx, *d.Action, dg, at, approved); err != nil {
 			return err
 		}
 	case d.Action != nil:
@@ -411,7 +399,13 @@ func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) e
 	d.Action = nil
 	c.Decision = &d
 	c.DecidedAt = at
-	return e.st.Put(ctx, c)
+	if err := e.st.Put(ctx, c); err != nil {
+		return err
+	}
+	if m := e.models.get(subjectKey{d.Org, d.Subject}); m != nil {
+		m.ledger.put(c)
+	}
+	return nil
 }
 
 // Answer implements [limen.Ledger]. The first answer to an action its
@@ -437,7 +431,8 @@ func (e *Engine) answerAt(ctx context.Context, a limen.Answer, at time.Time) err
 	var m *model
 	if err == nil {
 		review := estimate.Pending(c.Contract())
-		c.Answers = append(c.Answers, limen.RecordedAnswer{Approve: a.Approve, By: cmp.Or(a.By, a.Subject), At: at, Review: review})
+		c.Answers = append(c.Answers, limen.RecordedAnswer{Approve: a.Approve, By: cmp.Or(a.By, a.Subject), At: at, Review: review,
+			HowAnswered: a.Kept()})
 		err = e.st.Put(ctx, c)
 	}
 	if err == nil {
@@ -446,6 +441,7 @@ func (e *Engine) answerAt(ctx context.Context, a limen.Answer, at time.Time) err
 		// answer and the count or neither.
 		if m = e.models.get(k); m != nil {
 			m.answers.Add(1)
+			m.ledger.put(c)
 		}
 	}
 	unlock()
@@ -513,12 +509,16 @@ func (e *Engine) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 	if err != nil {
 		return limen.Reliability{}, err
 	}
+	// The weights give the certificate its count of considered audits,
+	// and nothing else: no rate reads them.
+	w := e.policy.Weigh(records(cases))
 	var rows []estimate.Row
-	for _, c := range cases {
+	for i, c := range cases {
 		if c.ReceivedAt.Before(q.From) || !c.ReceivedAt.Before(q.To) {
 			continue
 		}
 		if r, ok := estimate.RowOf(c.Contract(), q.Of); ok {
+			r.Considered = w[i].Review == 1
 			rows = append(rows, r)
 		}
 	}
@@ -685,9 +685,10 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		}
 	}
 	// Inline, so the scratch engine runs no fitter and needs no Close. It
-	// holds allows to this engine's answer minimum.
+	// holds allows to this engine's cover rule and weights.
 	scratch := build(Options{Store: mem, Inline: 8, MaxLabels: e.opts.MaxLabels,
-		MinAllows: optionOf(e.minAllows), MinSessions: optionOf(e.minSessions)})
+		MinWeight: optionOf(e.minWeight), MinSessions: optionOf(e.minSessions),
+		AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue)})
 
 	report := limen.ReplayReport{Records: len(recs), Would: map[limen.Verdict]int{}, Kept: o.Keep}
 	var rows []estimate.Row
@@ -706,7 +707,7 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		row := estimate.Row{Verdict: p.Verdict, Review: r.ReviewProbability, Shown: r.Verdict.Shown()}
 		if r.Approve != nil {
 			report.Answered++
-			if err := scratch.answerAt(ctx, limen.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
+			if err := scratch.answerAt(ctx, answerOf(r), answeredAt(r)); err != nil {
 				return limen.ReplayReport{}, err
 			}
 			row.Reviewed, row.Approve = row.Shown, *r.Approve
@@ -729,7 +730,7 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 			return limen.ReplayReport{}, err
 		}
 		if r.Approve != nil {
-			if err := e.answerAt(ctx, limen.Answer{Key: r.Action.Key, Approve: *r.Approve}, r.At); err != nil {
+			if err := e.answerAt(ctx, answerOf(r), answeredAt(r)); err != nil {
 				return limen.ReplayReport{}, err
 			}
 		}
@@ -743,6 +744,20 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		}
 	}
 	return report, nil
+}
+
+// answerOf is a replayed record's answer, with how the person gave it.
+func answerOf(r limen.ReplayRecord) limen.Answer {
+	return limen.Answer{Key: r.Action.Key, Approve: *r.Approve, HowAnswered: r.HowAnswered}
+}
+
+// answeredAt is when a replayed record's answer came: AnsweredAt, or the
+// record's time when it has none, so the time Limen measures is zero.
+func answeredAt(r limen.ReplayRecord) time.Time {
+	if r.AnsweredAt.IsZero() {
+		return r.At
+	}
+	return r.AnsweredAt
 }
 
 // decisionOf is a replayed record's decision, carrying its action when the

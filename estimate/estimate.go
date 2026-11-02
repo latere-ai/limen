@@ -49,6 +49,10 @@ type Row struct {
 	// a shown action; Approve is that answer.
 	Reviewed bool
 	Approve  bool
+	// Considered is true when the review has weight 1 under weights/1
+	// (spec 011). Only the certificate's count of considered audits reads
+	// it: no rate and no claim depends on the weight of an answer.
+	Considered bool
 }
 
 // Automatic maps a recorded decision to the automatic verdict it stands
@@ -165,15 +169,16 @@ func wilson(p, n float64) [2]float64 {
 // Certificate tests the claim certify against rows in chronological order:
 // the most recent run of clean audited allows, reviews with probability
 // below one on the source's allows that the person approved. A denied one
-// ends the run. A zero certify takes [limen.DefaultCertify]; an invalid one
-// reports a certificate that does not hold.
+// ends the run. Considered counts the audits of the run whose answer is
+// considered; the claim does not read it. A zero certify takes
+// [limen.DefaultCertify]; an invalid one reports a certificate that does
+// not hold.
 func Certificate(rows []Row, certify limen.Certify) limen.Certificate {
 	if certify == (limen.Certify{}) {
 		certify = limen.DefaultCertify
 	}
 	c := limen.Certificate{Alpha: certify.Alpha, Delta: certify.Delta}
 	for _, r := range slices.Backward(rows) {
-
 		if r.Verdict != limen.Allow || !r.Shown || !r.Reviewed || !(r.Review > 0 && r.Review < 1) {
 			continue
 		}
@@ -181,6 +186,9 @@ func Certificate(rows []Row, certify limen.Certify) limen.Certificate {
 			break
 		}
 		c.Clean++
+		if r.Considered {
+			c.Considered++
+		}
 	}
 	needed, err := limen.CertificationSize(certify.Alpha, certify.Delta)
 	if err != nil {

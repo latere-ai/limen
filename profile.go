@@ -103,6 +103,9 @@ type Profile struct {
 	// Certify is the claim reliability reports test. A zero value takes
 	// [DefaultCertify] when the profile is saved.
 	Certify Certify `json:"certify,omitzero"`
+	// Consent sets the cover rule for the actions in the scope. It can
+	// only make the settings of the installation greater.
+	Consent Consent `json:"consent,omitzero"`
 	// Thresholds is derived from Costs when the profile is saved; a value
 	// a caller sends is ignored.
 	Thresholds Thresholds `json:"thresholds"`
@@ -202,6 +205,12 @@ func (p Profile) Validate() error {
 			q.add("certify", "needs 0 < alpha <= 1 and 0 < delta < 1")
 		}
 	}
+	if p.Consent.MinWeight < 0 {
+		q.add("consent.min_weight", "is below 0")
+	}
+	if p.Consent.MinSessions < 0 {
+		q.add("consent.min_sessions", "is below 0")
+	}
 	if err := q.err(CodeInvalidProfile); err != nil {
 		return err
 	}
@@ -212,8 +221,8 @@ func (p Profile) Validate() error {
 // Stricter is the meet of the organization's profile and a person's own:
 // each number from the profile that is stricter for it (spec 010). The
 // upper threshold is the higher one, the lower threshold the lower one,
-// the audit rate the higher one, and the claim the lower alpha and the
-// lower delta. The costs are restated with an ask of one, each error at
+// the audit rate the higher one, the claim the lower alpha and the lower
+// delta, and each setting of consent the greater one (spec 011). The costs are restated with an ask of one, each error at
 // the higher of the two ratios to the ask: the upper threshold
 // 1 - ask/false_allow rises and the lower threshold ask/false_block falls
 // with its ratio, so the higher ratios give the stricter thresholds
@@ -250,6 +259,14 @@ func Stricter(org, person Profile) Profile {
 	}
 	if pc.Delta < oc.Delta {
 		out.Certify.Delta = pc.Delta
+		changed = true
+	}
+	if person.Consent.MinWeight > org.Consent.MinWeight {
+		out.Consent.MinWeight = person.Consent.MinWeight
+		changed = true
+	}
+	if person.Consent.MinSessions > org.Consent.MinSessions {
+		out.Consent.MinSessions = person.Consent.MinSessions
 		changed = true
 	}
 	if !changed {

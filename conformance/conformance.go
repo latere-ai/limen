@@ -59,7 +59,12 @@ var rules = []rule{
 	{"UnknownIsAnAsk", unknownIsAnAsk},
 	{"PredictionFollowsTheProfile", predictionFollowsTheProfile},
 	{"SteeredVerdicts", steeredVerdicts},
-	{"AnswerMinimum", answerMinimum},
+	{"CoverCapsAllow", coverCapsAllow},
+	{"ScopeOfAnAction", scopeOfAnAction},
+	{"AnswerWeights", answerWeights},
+	{"ConsentOfAProfile", consentOfAProfile},
+	{"AskReasons", askReasons},
+	{"AnswerFields", answerFields},
 	{"ProfilePrecedence", profilePrecedence},
 	{"ProfileDefaults", profileDefaults},
 	{"AskTooCostly", askTooCostly},
@@ -144,7 +149,7 @@ func action(id string) limen.Action {
 		Name:        "bash",
 		Effect:      limen.EffectWrite,
 		Input:       []byte(`{"command":"go test ./..."}`),
-		Target:      &limen.Target{Kind: "path", ID: "/work", Sensitivity: &sens},
+		Target:      &limen.Target{Kind: "path", Sensitivity: &sens},
 		Environment: &limen.Environment{Kind: "sandbox"},
 	}
 }
@@ -266,52 +271,62 @@ func unknownIsAnAsk(t *testing.T, target Target) {
 }
 
 // predictionFollowsTheProfile: the suggestion is the thresholds' verdict
-// for the approval, and the thresholds and audit rate are those of the
-// profile that applies.
+// for the approval after the cover rule, and the thresholds and audit rate
+// are those of the profile that applies.
 func predictionFollowsTheProfile(t *testing.T, target Target) {
 	s := target.New(t)
 	saved, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.Costs{FalseAllow: 20, FalseBlock: 5, Ask: 1}, AuditRate: 0.1})
 	must(t, err)
 	p := predict(t, s, action("p1"))
-	followsTheMinimum(t, "prediction", p.Approve, p.Verdict, p.Thresholds, p.Minimum)
+	followsTheCap(t, "prediction", p.Approve, p.Verdict, p.AskKind, p.Thresholds, p.Cover)
 	expect(t, p.EvidenceRatio >= 0 && p.EvidenceRatio <= 1, "evidence ratio %v outside [0, 1]", p.EvidenceRatio)
-	switch p.Verdict {
-	case limen.Ask:
-		expect(t, p.AskKind == limen.AskUnsure || p.AskKind == limen.AskSplit, "an ask of kind %q", p.AskKind)
-	default:
-		expect(t, p.AskKind == "", "a %s with an ask kind %q", p.Verdict, p.AskKind)
-	}
 	want, _ := saved.Costs.Thresholds()
 	expect(t, p.Thresholds == want && p.AuditRate == 0.1 && p.Profile == saved.Scope,
 		"prediction %+v, want thresholds %+v, audit rate 0.1, profile %+v", p, want, saved.Scope)
 }
 
 // steeredVerdicts: approvals on either side of the default thresholds give
-// allow, ask and block, once the person's approvals meet the answer
-// minimum.
+// allow, ask and block, once the person's approvals cover the action.
 func steeredVerdicts(t *testing.T, target Target) {
 	if target.Steered == nil {
 		t.Skip("the target learns its predictions; Target.Steered is nil")
 	}
 	for approve, want := range map[float64]limen.Verdict{0.97: limen.Allow, 0.5: limen.Ask, 0.1: limen.Block} {
 		s := target.Steered(t, func(limen.Action) (float64, float64) { return approve, 0.1 })
-		meetTheMinimum(t, s, "s")
+		meetTheCover(t, s, "s")
 		p := predict(t, s, action("s1"))
 		expect(t, p.Verdict == want && p.Approve == approve, "approve %v: %+v, want %q", approve, p, want)
 	}
 }
 
-// followsTheMinimum checks a verdict against the thresholds and the answer
-// minimum: it is the thresholds' verdict with no minimum set, or an ask in
-// place of their allow with a minimum set that is not met.
-func followsTheMinimum(t *testing.T, what string, approve float64, v limen.Verdict, th limen.Thresholds, m limen.Minimum) {
+// inBand and capped are the kinds of an ask in the ask band, and of an
+// allow the cover rule turned into an ask.
+var (
+	inBand = []string{limen.AskUnsure, limen.AskSplit, limen.AskShort}
+	capped = []string{limen.AskWider, limen.AskFew}
+)
+
+// followsTheCap checks a verdict against the thresholds and the cover
+// rule: it is the thresholds' verdict, and an allow is covered; or it is an
+// ask of kind wider or few in place of their allow, with a cover that does
+// not cover the action. An ask in the band has a kind of the band, and
+// only an ask has a kind.
+func followsTheCap(t *testing.T, what string, approve float64, v limen.Verdict, kind string, th limen.Thresholds, c limen.Cover) {
 	t.Helper()
-	if !m.Held() {
-		expect(t, v == th.Verdict(approve), "%s: verdict %q, the thresholds give %q for %v", what, v, th.Verdict(approve), approve)
-		return
+	want := th.Verdict(approve)
+	switch {
+	case v == want && v == limen.Ask:
+		expect(t, slices.Contains(inBand, kind), "%s: an ask in the band of kind %q", what, kind)
+	case v == want:
+		expect(t, kind == "", "%s: a %s of kind %q", what, v, kind)
+		expect(t, v != limen.Allow || c.Covered, "%s: an allow with the cover %+v, which does not cover it", what, c)
+	case v == limen.Ask && want == limen.Allow:
+		expect(t, !c.Covered && slices.Contains(capped, kind), "%s: an ask of kind %q in place of an allow, with the cover %+v", what, kind, c)
+	default:
+		t.Errorf("%s: verdict %q, the thresholds give %q for %v", what, v, want, approve)
 	}
-	expect(t, v == limen.Ask && th.Verdict(approve) == limen.Allow && !m.Met(),
-		"%s: verdict %q with the minimum %+v, the thresholds give %q for %v", what, v, m, th.Verdict(approve), approve)
+	expect(t, c.MinWeight >= limen.MinWeight && c.MinSessions >= limen.MinSessions,
+		"%s: the cover %+v has settings below the contract's", what, c)
 }
 
 // in is the action id in the session ses; an empty ses is no session.
@@ -321,37 +336,43 @@ func in(id, ses string) limen.Action {
 	return a
 }
 
-// approved records an ask for a and the person's answer to it.
+// considered is how a person who opened the details answers: the answer
+// has weight 1 under weights/1, whatever its time.
+var considered = limen.HowAnswered{DetailsOpened: new(true)}
+
+// approved records an ask for a and the person's considered answer to it.
 func approved(t *testing.T, s limen.Service, a limen.Action, approve bool) {
 	t.Helper()
 	decide(t, s, a, limen.Ask, 1, "test/1")
-	answer(t, s, a.Key, approve)
+	must(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: approve, HowAnswered: considered}))
 }
 
-// meetTheMinimum approves limen.MinAllows actions with the label of
-// action, spread over limen.MinSessions sessions, so that the answer
-// minimum no longer holds an allow of that label. Their ids start with
-// prefix.
-func meetTheMinimum(t *testing.T, s limen.Service, prefix string) {
+// meetTheCover approves, with considered answers, limen.MinWeight actions
+// of the family and scope of action, over limen.MinSessions sessions, so
+// that they cover it. Their ids start with prefix.
+func meetTheCover(t *testing.T, s limen.Service, prefix string) {
 	t.Helper()
-	for i := range max(limen.MinAllows, limen.MinSessions) {
-		approved(t, s, in(prefix+"-min-"+strconv.Itoa(i), "ses_min_"+strconv.Itoa(i%max(limen.MinSessions, 1))), true)
+	for i := range max(limen.MinWeight, limen.MinSessions) {
+		approved(t, s, in(prefix+"-cover-"+strconv.Itoa(i), "ses_cover_"+strconv.Itoa(i%max(limen.MinSessions, 1))), true)
 	}
 }
 
-// answerMinimum: an allow the thresholds give is an ask until the person
-// has approved actions with the same label limen.MinAllows times, in
-// limen.MinSessions sessions, and the ask names the counts. A denial never
-// counts, nor an approval a later denial replaced, nor an approval of
-// another label; an action with no session counts as its own session; a
-// block is never changed. An explanation and a learned entry hold the
-// same. A learned target is held to the rule on whatever it predicts.
-func answerMinimum(t *testing.T, target Target) {
+// coverCapsAllow (spec 011): an allow the thresholds give is an ask until
+// considered approvals of the action's family, whose scope the action is
+// within, have limen.MinWeight in total from limen.MinSessions sessions.
+// The ask is wider while no approval of any weight covers the action, and
+// few after. A denial never counts, nor an approval a later denial
+// replaced, nor an approval of another family, nor a quick approval; an
+// action with no session counts as its UTC day; a block is never changed;
+// the cap changes no number of the prediction. An explanation and a learned
+// entry hold the same. The cover rests on the ledger alone, so a learned
+// target is held to the same covers.
+func coverCapsAllow(t *testing.T, target Target) {
 	steered := target.Steered != nil
 	var s limen.Service
 	if steered {
 		s = target.Steered(t, func(a limen.Action) (float64, float64) {
-			if strings.HasPrefix(a.ActionID, "amb") {
+			if strings.HasPrefix(a.ActionID, "cvb") {
 				return 0.1, 0.1
 			}
 			return 0.97, 0.1
@@ -364,61 +385,238 @@ func answerMinimum(t *testing.T, target Target) {
 		must(t, err)
 	}
 	probes := 0
-	check := func(allows, sessions int) {
+	check := func(a limen.Action, weight float64, sessions int, wider bool) {
 		t.Helper()
 		probes++
-		a := in("amp"+strconv.Itoa(probes), "ses_1")
+		a.Key = key("cvp" + strconv.Itoa(probes))
 		p := predict(t, s, a)
-		what := "after " + strconv.Itoa(allows) + " approvals in " + strconv.Itoa(sessions) + " sessions"
-		followsTheMinimum(t, what, p.Approve, p.Verdict, p.Thresholds, p.Minimum)
-		want := limen.Minimum{Allows: allows, Sessions: sessions, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}
-		if p.Thresholds.Verdict(p.Approve) == limen.Allow && !want.Met() {
-			expect(t, p.Verdict == limen.Ask && p.Minimum == want && p.Reason != "", "%s: %+v, want an ask held by %+v", what, p, want)
+		what := "probe " + a.ActionID
+		followsTheCap(t, what, p.Approve, p.Verdict, p.AskKind, p.Thresholds, p.Cover)
+		want := limen.Cover{Covered: weight >= limen.MinWeight && sessions >= limen.MinSessions, Weight: weight, Sessions: sessions,
+			MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}
+		expect(t, p.Cover == want, "%s: the cover %+v, want %+v", what, p.Cover, want)
+		if p.Thresholds.Verdict(p.Approve) == limen.Allow && !want.Covered {
+			kind := map[bool]string{true: limen.AskWider, false: limen.AskFew}[wider]
+			expect(t, p.Verdict == limen.Ask && p.AskKind == kind && p.Reason != "", "%s: %+v, want an ask of kind %s", what, p, kind)
 		}
 		if steered {
-			v := limen.Allow
-			if !want.Met() {
-				v = limen.Ask
-			}
-			expect(t, p.Verdict == v, "%s: verdict %q, want %q", what, p.Verdict, v)
+			v := map[bool]limen.Verdict{true: limen.Allow, false: limen.Ask}[want.Covered]
+			expect(t, p.Verdict == v && p.Approve == 0.97 && p.Uncertainty == 0.1, "%s: %+v, want %q at 0.97", what, p, v)
 		}
 		x, err := s.Explain(ctx, a.Key)
 		must(t, err)
-		followsTheMinimum(t, what+", the explanation", x.Approve, x.Verdict, x.Thresholds, x.Minimum)
-		expect(t, !x.Minimum.Held() || (x.Minimum == want && x.Reason != ""), "%s: the explanation is held by %+v with the reason %q, want %+v", what, x.Minimum, x.Reason, want)
+		followsTheCap(t, what+", the explanation", x.Approve, x.Verdict, x.AskKind, x.Thresholds, x.Cover.Cover)
+		expect(t, x.Cover.Cover == want, "%s: the explanation's cover %+v, want %+v", what, x.Cover.Cover, want)
 	}
-	check(0, 0)
-	approved(t, s, in("am1", "ses_1"), true)
-	check(1, 1)
-	approved(t, s, in("am2", "ses_1"), true)
-	approved(t, s, in("am3", "ses_1"), true)
-	check(3, 1)
-	approved(t, s, in("amd", "ses_2"), false)
-	approved(t, s, command("amo", "ls -la"), true)
-	check(3, 1)
-	approved(t, s, in("amn", ""), true)
-	check(4, 2)
-	answer(t, s, key("amn"), false)
-	check(3, 1)
-	approved(t, s, in("am4", "ses_2"), true)
-	check(4, 2)
+	probe := in("", "ses_1")
+	check(probe, 0, 0, true)
+	approved(t, s, in("cv1", "ses_1"), true)
+	check(probe, 1, 1, false)
+	approved(t, s, in("cv2", "ses_1"), true)
+	approved(t, s, in("cv3", "ses_1"), true)
+	check(probe, 3, 1, false)
+	approved(t, s, in("cvd", "ses_2"), false)
+	approved(t, s, command("cvo", "ls -la"), true)
+	quick := in("cvq", "ses_3")
+	decide(t, s, quick, limen.Ask, 1, "test/1")
+	answer(t, s, quick.Key, true)
+	check(probe, 3, 1, false)
+	// A wider action: the approvals do not cover it.
+	public := probe
+	public.Scope = &limen.ReachClaim{Crosses: limen.Crosses{Public: limen.BoundYes}}
+	check(public, 0, 0, true)
+	approved(t, s, in("cvn", ""), true)
+	check(probe, 4, 2, false)
+	answer(t, s, key("cvn"), false)
+	check(probe, 3, 1, false)
+	approved(t, s, in("cv4", "ses_2"), true)
+	check(probe, 4, 2, false)
 
 	l, err := s.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject})
 	must(t, err)
 	for _, e := range l.Entries {
-		followsTheMinimum(t, "entry "+e.Label, e.Approve, e.Verdict, e.Thresholds, e.Minimum)
+		followsTheCap(t, "entry "+e.Label, e.Approve, e.Verdict, e.AskKind, e.Thresholds, e.Cover)
 	}
 	if steered {
-		b := predict(t, s, in("amb1", "ses_1"))
-		expect(t, b.Verdict == limen.Block && !b.Minimum.Held(), "a block with no approvals: %+v", b)
+		b := predict(t, s, in("cvb1", "ses_1"))
+		expect(t, b.Verdict == limen.Block && b.AskKind == "" && b.Cover.Covered, "a block: %+v", b)
 		f := target.Steered(t, func(limen.Action) (float64, float64) { return 0.97, 0.1 })
-		approved(t, f, in("amf", "ses_1"), true)
+		approved(t, f, in("cvf", "ses_1"), true)
 		l, err := f.Learned(ctx, limen.LearnedQuery{Org: org, Subject: subject})
 		must(t, err)
-		want := limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}
-		expect(t, len(l.Entries) == 1 && l.Entries[0].Verdict == limen.Ask && l.Entries[0].Minimum == want,
-			"the learned entry of one approval: %+v, want an ask held by %+v", l.Entries, want)
+		want := limen.Cover{Weight: 1, Sessions: 1, MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}
+		expect(t, len(l.Entries) == 1 && l.Entries[0].Verdict == limen.Ask && l.Entries[0].AskKind == limen.AskFew && l.Entries[0].Cover == want,
+			"the learned entry of one approval: %+v, want a few ask with %+v", l.Entries, want)
 	}
+}
+
+// scopeOfAnAction (spec 011): a prediction gives the scope Limen used,
+// read from the input and merged with the claims, in words of the
+// vocabularies alone; a claim widens and never narrows; a value outside the
+// vocabulary is unknown, and it is not an error.
+func scopeOfAnAction(t *testing.T, target Target) {
+	s := target.New(t)
+	push := command("sc1", "git push --force origin release/feature-secret-plan")
+	push.Environment = &limen.Environment{Kind: "sandbox", Repositories: limen.RepositoriesPublic}
+	p := predict(t, s, push)
+	want := limen.Reach{Undo: limen.UndoIrreversible, Crosses: limen.Crosses{Machine: limen.BoundNo, Remote: limen.BoundYes, Network: limen.BoundNo, Public: limen.BoundYes},
+		TargetClass: limen.ClassPrimary, Contact: limen.Unknown, TargetKind: "path"}
+	expect(t, p.Scope == want, "a force push: scope %+v, want %+v", p.Scope, want)
+	claimed := action("sc2")
+	claimed.Scope = &limen.ReachClaim{Undo: limen.UndoNone, Contact: "sometimes", Crosses: limen.Crosses{Network: limen.BoundYes}}
+	claimed.Target = &limen.Target{Kind: "path", Class: "galaxy"}
+	claimed.Environment = &limen.Environment{Kind: "sandbox", Holds: []string{"moat", limen.HoldEgress}, Repositories: "secret"}
+	p = predict(t, s, claimed)
+	want = limen.Reach{Undo: limen.UndoReversible, Crosses: limen.Crosses{Machine: limen.BoundNo, Remote: limen.BoundYes, Network: limen.BoundYes, Public: limen.BoundNo},
+		TargetClass: limen.Unknown, Contact: limen.Unknown, TargetKind: "path"}
+	expect(t, p.Scope == want, "go test with claims: scope %+v, want %+v", p.Scope, want)
+	for _, id := range []string{"sc1", "sc2"} {
+		c := oneCase(t, s, id)
+		expect(t, c.Prediction != nil && c.Prediction.Scope.Undo != "", "case %s keeps no scope: %+v", id, c.Prediction)
+	}
+	page := cases(t, s, limen.CaseQuery{})
+	for _, c := range page.Entries {
+		if c.Prediction == nil {
+			continue
+		}
+		for _, w := range []string{c.Prediction.Scope.Undo, c.Prediction.Scope.TargetClass, c.Prediction.Scope.Contact, c.Prediction.Scope.TargetKind} {
+			expect(t, !strings.Contains(w, "secret") && !strings.Contains(w, "plan"), "the scope of %s holds %q", c.Action.ActionID, w)
+		}
+	}
+}
+
+// answerWeights (spec 011): an approval counts toward the cover with
+// weight 1 only if it is considered. Quick approvals, by Limen's clock, the
+// client's or the decision point's, one gesture for many, a standing rule,
+// and an approval late in a long session count 0, unless the person opened
+// the details. The rules need the time between a decision and its answer,
+// so they run against Clocked.
+func answerWeights(t *testing.T, target Target) {
+	if target.Clocked == nil {
+		t.Skip("the target has no clock the case can set; Target.Clocked is nil")
+	}
+	now := time.Now().Add(-time.Hour)
+	s := target.Clocked(t, func() time.Time { return now })
+	n := 0
+	give := func(ses string, delay time.Duration, how limen.HowAnswered) {
+		t.Helper()
+		n++
+		a := in("aw"+strconv.Itoa(n), ses)
+		decide(t, s, a, limen.Ask, 1, "test/1")
+		now = now.Add(delay)
+		must(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: how}))
+		now = now.Add(time.Second)
+	}
+	probe := func(weight float64, what string) {
+		t.Helper()
+		n++
+		p := predict(t, s, in("aw"+strconv.Itoa(n), "ses_probe"))
+		expect(t, p.Cover.Weight == weight, "%s: weight %v, want %v", what, p.Cover.Weight, weight)
+	}
+	ms := func(x int64) *int64 { return &x }
+	give("ses_a", 3*time.Second, limen.HowAnswered{})
+	probe(1, "a slow approval")
+	give("ses_a", time.Second, limen.HowAnswered{})
+	probe(1, "a quick approval")
+	give("ses_a", time.Second, limen.HowAnswered{DetailsOpened: new(true)})
+	probe(2, "a quick approval with its details")
+	give("ses_a", 5*time.Second, limen.HowAnswered{AnswerMS: ms(800)})
+	probe(2, "quick on the client")
+	give("ses_a", 5*time.Second, limen.HowAnswered{WaitedMS: ms(1500), AnswerMS: ms(9000)})
+	probe(2, "quick for the decision point")
+	give("ses_a", 5*time.Second, limen.HowAnswered{Surface: limen.SurfaceBulk})
+	probe(2, "one gesture for many")
+	give("ses_a", 5*time.Second, limen.HowAnswered{Surface: limen.SurfaceRule, DetailsOpened: new(true)})
+	probe(2, "a standing rule")
+	give("ses_a", 5*time.Second, limen.HowAnswered{Surface: "wristwatch", AnswerMS: ms(5000)})
+	probe(3, "a surface outside the list")
+	// Late in a long session: 50 reviews come before the next approval.
+	for range limen.AnswerFatigue {
+		give("ses_long", 3*time.Second, limen.HowAnswered{DetailsOpened: new(true)})
+	}
+	p := predict(t, s, in("aw-before", "ses_probe"))
+	before := p.Cover.Weight
+	give("ses_long", 3*time.Second, limen.HowAnswered{})
+	probe(before, "an approval after 50 reviews in its session")
+	give("ses_long", 3*time.Second, limen.HowAnswered{DetailsOpened: new(true)})
+	probe(before+1, "a late approval with its details")
+}
+
+// consentOfAProfile (spec 011): a profile can make the settings of the
+// cover rule greater and never smaller, a value below zero is refused, and
+// the meet of the organization's profile and a person's own takes the
+// greater of each.
+func consentOfAProfile(t *testing.T, target Target) {
+	s := target.New(t)
+	_, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.DefaultCosts, Consent: limen.Consent{MinWeight: -1}})
+	code(t, err, limen.CodeInvalidProfile, "consent.min_weight")
+	saved, err := s.PutProfile(ctx, limen.Profile{Org: org, Costs: limen.DefaultCosts, AuditRate: 0.05, Consent: limen.Consent{MinWeight: 5, MinSessions: 1}})
+	must(t, err)
+	expect(t, saved.Consent == limen.Consent{MinWeight: 5, MinSessions: 1}, "saved %+v", saved.Consent)
+	p := predict(t, s, action("cs1"))
+	expect(t, p.Cover.MinWeight == 5 && p.Cover.MinSessions == limen.MinSessions, "a profile of 5 and 1: the cover %+v", p.Cover)
+	_, err = s.PutProfile(ctx, limen.Profile{Org: org, Subject: subject, Costs: limen.DefaultCosts, AuditRate: 0.05, Consent: limen.Consent{MinWeight: 4, MinSessions: 6}})
+	must(t, err)
+	p = predict(t, s, action("cs2"))
+	expect(t, p.Cover.MinWeight == 5 && p.Cover.MinSessions == 6 && p.Profile.Subject == subject, "the meet: the cover %+v of %+v", p.Cover, p.Profile)
+	x, err := s.Explain(ctx, key("cs2"))
+	must(t, err)
+	expect(t, x.Cover.MinWeight == 5 && x.Cover.MinSessions == 6, "the explanation's cover %+v", x.Cover)
+}
+
+// askReasons (spec 011): the reason of an ask states no probability, in a
+// prediction and in an explanation, whatever its kind.
+func askReasons(t *testing.T, target Target) {
+	decimal := func(r string) bool {
+		for i := 1; i+1 < len(r); i++ {
+			if r[i] == '.' && r[i-1] >= '0' && r[i-1] <= '9' && r[i+1] >= '0' && r[i+1] <= '9' {
+				return true
+			}
+		}
+		return strings.Contains(r, "probability")
+	}
+	var services []limen.Service
+	services = append(services, target.New(t))
+	if target.Steered != nil {
+		services = append(services, target.Steered(t, func(limen.Action) (float64, float64) { return 0.97, 0.1 }),
+			target.Steered(t, func(limen.Action) (float64, float64) { return 0.6, 0.1 }))
+	}
+	for i, s := range services {
+		approved(t, s, in("ar0", "ses_1"), true)
+		for _, a := range []limen.Action{action("ar1"), command("ar2", "rm -rf ~/x")} {
+			p := predict(t, s, a)
+			x, err := s.Explain(ctx, a.Key)
+			must(t, err)
+			for what, r := range map[string]string{"prediction": p.Reason, "explanation": x.Reason} {
+				if p.Verdict == limen.Ask {
+					expect(t, r != "" && !decimal(r), "service %d, %s %s of kind %s: the reason %q states a probability", i, what, a.ActionID, p.AskKind, r)
+				}
+			}
+		}
+	}
+}
+
+// answerFields (spec 011): an answer keeps how the person gave it, a
+// surface outside the list is dropped and is no error, and a time outside
+// its range is refused.
+func answerFields(t *testing.T, target Target) {
+	s := target.New(t)
+	a := action("af1")
+	decide(t, s, a, limen.Ask, 1, "test/1")
+	ms := func(x int64) *int64 { return &x }
+	how := limen.HowAnswered{AnswerMS: ms(4200), WaitedMS: ms(5000), DetailsOpened: new(false), SuggestionShown: new(true),
+		Surface: limen.SurfaceNotification, Remembered: true}
+	must(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: how}))
+	must(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: false, Surface: "wristwatch"}))
+	got := oneCase(t, s, "af1").Answers
+	require(t, len(got) == 2, "answers %+v", got)
+	kept := got[0].HowAnswered
+	expect(t, kept.AnswerMS != nil && *kept.AnswerMS == 4200 && kept.WaitedMS != nil && *kept.WaitedMS == 5000 &&
+		kept.DetailsOpened != nil && !*kept.DetailsOpened && kept.SuggestionShown != nil && *kept.SuggestionShown &&
+		kept.Surface == limen.SurfaceNotification && kept.Remembered, "kept %+v", kept)
+	expect(t, got[1].Surface == "", "a surface outside the list is kept: %+v", got[1])
+	code(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, AnswerMS: ms(limen.MaxAnswerMS + 1)}), limen.CodeInvalidAnswer, "answer_ms")
+	code(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, WaitedMS: ms(-1)}), limen.CodeInvalidAnswer, "waited_ms")
 }
 
 // profilePrecedence: kind and agent, then agent, then kind, then the
@@ -616,7 +814,7 @@ func learned(t *testing.T, target Target) {
 		t.Skip("the target learns its predictions; Target.Steered is nil")
 	}
 	s := target.Steered(t, func(limen.Action) (float64, float64) { return 0.97, 0.1 })
-	meetTheMinimum(t, s, "le")
+	meetTheCover(t, s, "le")
 	a := action("le1")
 	p := predict(t, s, a)
 	require(t, p.Verdict == limen.Allow, "prediction %+v, want an allow", p)
@@ -629,7 +827,9 @@ func learned(t *testing.T, target Target) {
 // certificate: the certificate counts the most recent audited allows the
 // person approved, back to the first denial, and needs the size of the
 // organization's claim (paper, Proposition 5(b)). A review with
-// probability one is no audit, and an allow nobody saw is no review.
+// probability one is no audit, and an allow nobody saw is no review. It
+// counts the considered answers among the clean audits, and the claim does
+// not depend on them.
 func certificate(t *testing.T, target Target) {
 	s := target.New(t)
 	c := reliability(t, s, limen.OfApplied).Certificate
@@ -643,18 +843,19 @@ func certificate(t *testing.T, target Target) {
 		verdict limen.Verdict
 		prob    float64
 		approve *bool
+		how     limen.HowAnswered
 	}{
-		{"ct1", limen.Flag, 0.05, new(true)},
-		{"ct2", limen.Flag, 0.05, new(false)},
-		{"ct3", limen.Flag, 0.05, new(true)},
-		{"ct4", limen.Flag, 1, new(true)},
-		{"ct5", limen.Allow, 0.05, nil},
-		{"ct6", limen.Flag, 0.05, new(true)},
+		{"ct1", limen.Flag, 0.05, new(true), considered},
+		{"ct2", limen.Flag, 0.05, new(false), considered},
+		{"ct3", limen.Flag, 0.05, new(true), limen.HowAnswered{}},
+		{"ct4", limen.Flag, 1, new(true), considered},
+		{"ct5", limen.Allow, 0.05, nil, limen.HowAnswered{}},
+		{"ct6", limen.Flag, 0.05, new(true), considered},
 	} {
 		a := action(step.id)
 		decide(t, s, a, step.verdict, step.prob, "test/1")
 		if step.approve != nil {
-			answer(t, s, a.Key, *step.approve)
+			must(t, s.Answer(ctx, limen.Answer{Key: a.Key, Approve: *step.approve, HowAnswered: step.how}))
 		}
 	}
 	needed, err := limen.CertificationSize(claim.Alpha, claim.Delta)
@@ -662,6 +863,9 @@ func certificate(t *testing.T, target Target) {
 	c = reliability(t, s, limen.OfApplied).Certificate
 	expect(t, c.Alpha == claim.Alpha && c.Delta == claim.Delta && c.Clean == 2 && c.Needed == needed && c.Holds,
 		"certificate %+v, want 2 clean audits of %d needed", c, needed)
+	// The quick approval of ct3 is no considered answer, and the claim does
+	// not read it (spec 011).
+	expect(t, c.Considered == 1, "certificate %+v, want 1 considered audit of the 2 clean", c)
 }
 
 // pendingAndPages: the review queue holds shown actions with no review;
@@ -800,18 +1004,12 @@ func command(id, cmd string) limen.Action {
 }
 
 // consistent checks the fields of a verdict every model must agree on: it
-// is the thresholds' verdict, or an ask in place of their allow when the
-// answer minimum says it held it, and only an ask has a kind of
-// uncertainty.
-func consistent(t *testing.T, what string, approve, ratio float64, v limen.Verdict, kind string, th limen.Thresholds, m limen.Minimum) {
+// follows the thresholds and the cover rule ([followsTheCap]), and the
+// evidence ratio is in [0, 1].
+func consistent(t *testing.T, what string, approve, ratio float64, v limen.Verdict, kind string, th limen.Thresholds, c limen.Cover) {
 	t.Helper()
-	followsTheMinimum(t, what, approve, v, th, m)
+	followsTheCap(t, what, approve, v, kind, th, c)
 	expect(t, ratio >= 0 && ratio <= 1, "%s: evidence ratio %v outside [0, 1]", what, ratio)
-	if v == limen.Ask {
-		expect(t, kind == limen.AskUnsure || kind == limen.AskSplit, "%s: an ask of kind %q", what, kind)
-	} else {
-		expect(t, kind == "", "%s: a %s of kind %q", what, v, kind)
-	}
 }
 
 // explanations (spec 009): an explanation names its action and its model;
@@ -829,7 +1027,7 @@ func explanations(t *testing.T, target Target) {
 	x, err := s.Explain(ctx, a.Key)
 	must(t, err)
 	require(t, x.Key == a.Key && x.Model.Source != "" && x.Evidence != nil, "explanation %+v", x)
-	consistent(t, "explanation", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
+	consistent(t, "explanation", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Cover.Cover)
 	expect(t, x.Thresholds == p.Thresholds, "thresholds %+v, the prediction's %+v", x.Thresholds, p.Thresholds)
 	require(t, x.PredictedBy != nil && *x.PredictedBy == x.Model && x.Model.Answers == 0, "predicted by %+v, explained by %+v", x.PredictedBy, x.Model)
 	expect(t, math.Abs(x.Approve-p.Approve) < 1e-9 && math.Abs(x.Uncertainty-p.Uncertainty) < 1e-9 && x.Verdict == p.Verdict,
@@ -846,7 +1044,7 @@ func explanations(t *testing.T, target Target) {
 	for _, k := range []limen.Key{a.Key, b.Key} {
 		x, err := s.Explain(ctx, k)
 		must(t, err)
-		consistent(t, "explanation "+k.ActionID, x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
+		consistent(t, "explanation "+k.ActionID, x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Cover.Cover)
 		expect(t, x.Model.Answers <= 2, "a model fitted through %d of 2 answers", x.Model.Answers)
 		if x.Parts != nil {
 			sum := x.Parts.Action + x.Parts.Recent + x.Parts.Interaction
@@ -870,12 +1068,12 @@ func explanationsOfSteeredVerdicts(t *testing.T, target Target) {
 	}
 	for approve, want := range map[float64]limen.Verdict{0.97: limen.Allow, 0.5: limen.Ask, 0.1: limen.Block} {
 		s := target.Steered(t, func(limen.Action) (float64, float64) { return approve, 0.1 })
-		meetTheMinimum(t, s, "es")
+		meetTheCover(t, s, "es")
 		predict(t, s, action("es1"))
 		x, err := s.Explain(ctx, key("es1"))
 		must(t, err)
 		expect(t, x.Verdict == want && x.Approve == approve, "approve %v: %+v, want %q", approve, x, want)
-		consistent(t, "steered", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Minimum)
+		consistent(t, "steered", x.Approve, x.EvidenceRatio, x.Verdict, x.AskKind, x.Thresholds, x.Cover.Cover)
 	}
 }
 
@@ -914,13 +1112,14 @@ func learnedEntries(t *testing.T, target Target) {
 	for _, e := range l.Entries {
 		got[e.Label] = [2]int{e.Approved, e.Denied}
 		labels = append(labels, e.Label)
-		consistent(t, "entry "+e.Label, e.Approve, e.EvidenceRatio, e.Verdict, e.AskKind, e.Thresholds, e.Minimum)
+		consistent(t, "entry "+e.Label, e.Approve, e.EvidenceRatio, e.Verdict, e.AskKind, e.Thresholds, e.Cover)
 		want, _ := saved.Costs.Thresholds()
 		expect(t, e.Kind == "tool" && e.Name == "bash" && e.Thresholds == want, "entry %+v, want the thresholds %+v of the agent's profile", e, want)
 		expect(t, !strings.Contains(e.Label, "secret") && !strings.Contains(e.Label, "origin"), "label %q holds input", e.Label)
 	}
-	want := map[string][2]int{"bash: go test": {1, 1}, "bash: git push --force": {0, 1}, "bash: ls": {1, 0}}
-	expect(t, len(got) == len(want) && got["bash: go test"] == want["bash: go test"] && got["bash: git push --force"] == want["bash: git push --force"] && got["bash: ls"] == want["bash: ls"],
+	force := "bash: git push --force, protected target, cannot undo"
+	want := map[string][2]int{"bash: go test": {1, 1}, force: {0, 1}, "bash: ls": {1, 0}}
+	expect(t, len(got) == len(want) && got["bash: go test"] == want["bash: go test"] && got[force] == want[force] && got["bash: ls"] == want["bash: ls"],
 		"entries %v, want %v", got, want)
 	expect(t, len(labels) > 0 && labels[0] == "bash: go test", "entries %v, want the most answered first", labels)
 	expect(t, l.Model.Answers <= 4 && len(l.Recent) <= 20, "model %+v, %d trend points", l.Model, len(l.Recent))
@@ -931,8 +1130,9 @@ func learnedEntries(t *testing.T, target Target) {
 }
 
 // previews (spec 009): a preview re-thresholds the recorded predictions in
-// its window under the costs it names, and counts the errors among the
-// answered ones.
+// its window under the costs it names, holds an allow to the cover each
+// prediction recorded (spec 011), and counts the errors among the answered
+// ones.
 func previews(t *testing.T, target Target) {
 	approvals := map[string]float64{"pv1": 0.97, "pv2": 0.5, "pv3": 0.1, "pv4": 0.97, "pv5": 0.1}
 	newService := func() limen.Service {
@@ -942,6 +1142,9 @@ func previews(t *testing.T, target Target) {
 		return target.Steered(t, func(a limen.Action) (float64, float64) { return approvals[a.ActionID], 0.1 })
 	}
 	s := newService()
+	if target.Steered != nil {
+		meetTheCover(t, s, "pv")
+	}
 	costs := limen.Costs{FalseAllow: 20, FalseBlock: 5, Ask: 1}
 	th, err := costs.Thresholds()
 	must(t, err)
@@ -949,7 +1152,11 @@ func previews(t *testing.T, target Target) {
 	for _, id := range []string{"pv1", "pv2", "pv3", "pv4", "pv5"} {
 		a := action(id)
 		p := predict(t, s, a)
+		// A preview holds an allow to the cover the prediction recorded.
 		v := th.Verdict(p.Approve)
+		if v == limen.Allow && !p.Cover.Covered {
+			v = limen.Ask
+		}
 		want.Records++
 		want.Would[v]++
 		if id == "pv4" || id == "pv5" {

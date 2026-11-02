@@ -37,8 +37,14 @@ type Case struct {
 	// Label names the action for a person, from the featurizer's closed
 	// vocabulary, never from the input; Labels names that vocabulary. A
 	// case from before labels has neither (spec 009).
-	Label      string            `json:"label,omitempty"`
-	Labels     string            `json:"labels,omitempty"`
+	Label  string `json:"label,omitempty"`
+	Labels string `json:"labels,omitempty"`
+	// Scope is the reach of the action as Limen read it when the case was
+	// made, and Families its families for the cover rule, both in words of
+	// the vocabularies alone (spec 011). A case from before labels/2 has
+	// neither, and the cover rule reads them from its records.
+	Scope      *limen.Reach      `json:"scope,omitempty"`
+	Families   []string          `json:"families,omitempty"`
 	Prediction *limen.Prediction `json:"prediction,omitempty"`
 	// PredictedBy is the number of answers the model that made Prediction
 	// was fitted through, nil for a case from before models were named.

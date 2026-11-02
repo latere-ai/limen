@@ -115,4 +115,9 @@ type Certificate struct {
 	// Needed is [CertificationSize] of Alpha and Delta.
 	Needed int  `json:"needed"`
 	Holds  bool `json:"holds"`
+	// Considered counts the audits in the clean run whose answer is
+	// considered, with weight 1 under weights/1 (spec 011). The claim and
+	// its arithmetic do not read it: a reader can see whether the
+	// certificate rests on quick answers.
+	Considered int `json:"considered"`
 }

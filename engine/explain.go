@@ -15,36 +15,28 @@ import (
 	"latere.ai/x/limen/engine/gp"
 	"latere.ai/x/limen/engine/kernel"
 	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/limen/estimate"
 )
 
-// EvidenceCut is the evidence ratio below which an ask is
-// [limen.AskUnsure] and at or above which it is [limen.AskSplit]: whether
-// the person's answers removed less or more than half of the prior
-// variance at the action (spec 009).
-const EvidenceCut = 0.5
+// EvidenceCut is the evidence ratio below which an ask in the ask band is
+// [limen.AskUnsure], and at or above which it is [limen.AskSplit] or
+// [limen.AskShort]: whether the person's answers removed less or more than
+// half of the prior variance at the action (specs 009 and 011). It is
+// [estimate.EvidenceCut].
+const EvidenceCut = estimate.EvidenceCut
 
-// The number of answers an explanation lists on each side.
+// The number of answers an explanation lists on each side, and of the
+// approvals nearest to covering its action.
 const (
 	evidenceFor     = 3
 	evidenceAgainst = 2
+	nearest         = 3
 )
 
 // maxTrend bounds the points of a learned model's trend.
 const maxTrend = 20
 
 var _ limen.Explainer = (*Engine)(nil)
-
-// askKind names the uncertainty behind a verdict: the kind of an ask, and
-// nothing for an allow or a block.
-func askKind(v limen.Verdict, evidenceRatio float64) string {
-	switch {
-	case v != limen.Ask:
-		return ""
-	case evidenceRatio < EvidenceCut:
-		return limen.AskUnsure
-	}
-	return limen.AskSplit
-}
 
 // evidenceRatio is 1 - σ²/v₀, the share of the prior variance at a point
 // that the answers removed, held to [0, 1] against rounding.
@@ -109,14 +101,13 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 			Detail: fmt.Sprintf("no case %s for %s in %s", k.ActionID, k.Subject, k.Org)}
 	}
 	var th limen.Thresholds
+	prof, err := e.effective(ctx, limen.ScopeOf(c.Action), k.Subject)
+	if err != nil {
+		return limen.Explanation{}, err
+	}
+	th = prof.Thresholds
 	if c.Prediction != nil {
 		th = c.Prediction.Thresholds
-	} else {
-		prof, err := e.effective(ctx, limen.ScopeOf(c.Action), k.Subject)
-		if err != nil {
-			return limen.Explanation{}, err
-		}
-		th = prof.Thresholds
 	}
 	m, err := e.model(ctx, subjectKey{k.Org, k.Subject})
 	if err != nil {
@@ -124,40 +115,34 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 	}
 	post := m.post.Load()
 	ex := post.Explain(point(c, c.T))
-	v := th.Verdict(ex.Approve)
-	var cases []store.Case
-	if len(ex.Contributions) > 0 || e.holds(v) {
-		if cases, err = e.st.Cases(ctx, k.Org, k.Subject); err != nil {
-			return limen.Explanation{}, err
-		}
+	cases, err := e.st.Cases(ctx, k.Org, k.Subject)
+	if err != nil {
+		return limen.Explanation{}, err
 	}
-	why := reason(ex.Approve, th, post.Len())
-	var held limen.Minimum
-	if e.holds(v) {
-		if v, held = limen.Hold(v, e.tally(cases, label(c))); held.Held() {
-			why = heldReason(ex.Approve, th, held, true)
-		}
-	}
+	s, fams := reach(c)
+	recs := records(cases)
+	set := e.settings(prof)
+	j := estimate.Judge(ex.Approve, ex.EvidenceRatio, th, fams, s, recs, e.policy.Weigh(recs), set)
 	out := limen.Explanation{
 		Key:           k,
 		Model:         post.ref(),
 		Approve:       ex.Approve,
 		Uncertainty:   math.Sqrt(ex.Var),
-		Verdict:       v,
+		Verdict:       j.Verdict,
 		Thresholds:    th,
-		Minimum:       held,
-		Reason:        why,
+		Cover:         limen.ExplainedCover{Cover: j.Cover, Nearest: estimate.Nearest(fams, s, recs, set, nearest)},
+		Reason:        reason(ex.Approve, th, post.Len(), j, label(c)),
 		Mean:          ex.Mean,
 		Parts:         parts(ex),
 		EvidenceRatio: ex.EvidenceRatio,
-		AskKind:       askKind(v, ex.EvidenceRatio),
+		AskKind:       j.Kind,
 		Evidence:      []limen.Evidence{},
 	}
 	if c.Prediction != nil && c.PredictedBy != nil {
 		out.PredictedBy = &limen.ModelRef{Source: c.Prediction.Source, Answers: *c.PredictedBy}
 	}
 	if len(ex.Contributions) > 0 {
-		out.Evidence = evidence(ex, cases, v)
+		out.Evidence = evidence(ex, cases, j.Verdict)
 	}
 	return out, nil
 }
@@ -237,28 +222,20 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 		now = max(now, c.T+1)
 	}
 	// One entry per label, at its most recent answered case, which the
-	// cases' order of T makes the last one seen. The approvals of a label
-	// are tallied over every kind, as a prediction tallies them.
+	// cases' order of T makes the last one seen. The cover of an entry is
+	// read over every kind, as a prediction reads it.
 	type group struct {
 		rep              store.Case
 		approved, denied int
 	}
 	groups := map[string]*group{}
-	tallies := map[string]*limen.Tally{}
 	var order []string
 	for _, c := range cases {
 		a, ok := latest(c)
-		if !ok {
+		if !ok || (q.Kind != "" && c.Action.Kind != q.Kind) {
 			continue
 		}
 		l := label(c)
-		if tallies[l] == nil {
-			tallies[l] = &limen.Tally{}
-		}
-		tallies[l].Add(c.Action, c.Answers)
-		if q.Kind != "" && c.Action.Kind != q.Kind {
-			continue
-		}
 		g := groups[l]
 		if g == nil {
 			g = &group{}
@@ -272,6 +249,8 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 			g.denied++
 		}
 	}
+	recs := records(cases)
+	w := e.policy.Weigh(recs)
 	for _, l := range order {
 		g := groups[l]
 		prof, err := e.effective(ctx, limen.Scope{Org: q.Org, Kind: g.rep.Action.Kind, Agent: q.Agent}, q.Subject)
@@ -279,17 +258,14 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 			return limen.Learned{}, err
 		}
 		ex := post.Explain(point(g.rep, now))
-		v := prof.Thresholds.Verdict(ex.Approve)
-		var held limen.Minimum
-		if e.holds(v) {
-			v, held = limen.Hold(v, tallies[l].Minimum(e.minAllows, e.minSessions))
-		}
+		s, fams := reach(g.rep)
+		j := estimate.Judge(ex.Approve, ex.EvidenceRatio, prof.Thresholds, fams, s, recs, w, e.settings(prof))
 		out.Entries = append(out.Entries, limen.LearnedEntry{
 			Label: l, Kind: g.rep.Action.Kind, Name: g.rep.Action.Name,
 			Approved: g.approved, Denied: g.denied,
-			Approve: ex.Approve, Uncertainty: math.Sqrt(ex.Var), Verdict: v,
-			EvidenceRatio: ex.EvidenceRatio, AskKind: askKind(v, ex.EvidenceRatio),
-			Thresholds: prof.Thresholds, Minimum: held,
+			Approve: ex.Approve, Uncertainty: math.Sqrt(ex.Var), Verdict: j.Verdict,
+			EvidenceRatio: ex.EvidenceRatio, AskKind: j.Kind,
+			Thresholds: prof.Thresholds, Cover: j.Cover,
 		})
 	}
 	slices.SortStableFunc(out.Entries, func(a, b limen.LearnedEntry) int {
@@ -346,8 +322,8 @@ func (e *Engine) Preview(ctx context.Context, r limen.PreviewRequest) (limen.Pre
 	return preview(r, th, cases), nil
 }
 
-// preview re-thresholds the recorded predictions in the window. The stub
-// shares it, so both report the same counts for the same cases.
+// preview re-thresholds the recorded predictions in the window, with the
+// cover rule as each prediction recorded it.
 func preview(r limen.PreviewRequest, th limen.Thresholds, cases []store.Case) limen.Preview {
 	out := limen.Preview{PreviewRequest: r, Thresholds: th,
 		Would: map[limen.Verdict]int{limen.Allow: 0, limen.Ask: 0, limen.Block: 0}}
@@ -356,7 +332,7 @@ func preview(r limen.PreviewRequest, th limen.Thresholds, cases []store.Case) li
 			continue
 		}
 		out.Records++
-		v := th.Verdict(c.Prediction.Approve)
+		v := estimate.Previewed(th, *c.Prediction)
 		out.Would[v]++
 		a, ok := latest(c)
 		if !ok {

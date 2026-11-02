@@ -6,6 +6,7 @@ package limen
 import (
 	"encoding/json"
 	"math"
+	"slices"
 	"strconv"
 
 	"latere.ai/x/pkg/verdict"
@@ -95,6 +96,11 @@ type Action struct {
 	Input       json.RawMessage `json:"input,omitempty"`
 	Target      *Target         `json:"target,omitempty"`
 	Environment *Environment    `json:"environment,omitempty"`
+	// Scope is what the decision point knows about the reach of the
+	// action, in the words of the vocabularies (spec 011). Limen reads the
+	// reach from the input and these fields as well, and the prediction
+	// gives the scope it used.
+	Scope *ReachClaim `json:"scope,omitempty"`
 	// Attributes are further observable facts the decision point's domain
 	// has, such as an amount or whether a branch is protected. Values are
 	// strings, numbers or booleans.
@@ -111,8 +117,9 @@ type Actor struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id,omitempty"`
 	// Session is the run the action belongs to, when there is one, such
-	// as an agent's session. The answer minimum counts the sessions of a
-	// person's approvals by it ([SessionOf]).
+	// as an agent's session. The cover rule counts the sessions of a
+	// person's approvals by it, and the weight of an answer counts the
+	// answers before it in its session ([SessionOf]).
 	Session string `json:"session,omitempty"`
 }
 
@@ -124,6 +131,9 @@ type Target struct {
 	ID   string `json:"id"`
 	// Sensitivity runs from 0, a scratch directory, to 1, production.
 	Sensitivity *float64 `json:"sensitivity,omitempty"`
+	// Class is the class of the target, a value of [TargetClasses], when
+	// the decision point knows it: a claim of the scope (spec 011).
+	Class string `json:"class,omitempty"`
 }
 
 // Environment is where an action runs.
@@ -134,7 +144,16 @@ type Environment struct {
 	// Credentialed is true when the environment holds a credential that
 	// reaches outside it, so an action there can act beyond its boundary.
 	Credentialed bool `json:"credentialed"`
+	// Holds are the limits the environment enforces, from [Holds]. A hold
+	// outside the vocabulary is no hold.
+	Holds []string `json:"holds,omitempty"`
+	// Repositories is the visibility of the repositories the session
+	// pushes to, from [Repositories], when the decision point knows it.
+	Repositories string `json:"repositories,omitempty"`
 }
+
+// Held reports whether the environment names the hold h.
+func (e *Environment) Held(h string) bool { return e != nil && slices.Contains(e.Holds, h) }
 
 // Signal is one other opinion about an action. Source names who gave it,
 // in the form "<kind>/<name>": "rules/1", "classifier/claude-auto-mode".

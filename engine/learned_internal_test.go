@@ -21,16 +21,19 @@ func TestLearnedEntriesAreExplanations(t *testing.T) {
 	ctx := context.Background()
 	e := New(Options{Inline: 1})
 	t.Cleanup(func() { e.Close() })
+	n := 0
 	ask := func(id, cmd string, approve bool) {
 		in, _ := json.Marshal(map[string]string{"command": cmd})
-		a := limen.Action{Org: "o", Subject: "s", ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: in}
+		n++
+		a := limen.Action{Org: "o", Subject: "s", ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: in,
+			Actor: &limen.Actor{Kind: "agent", Session: fmt.Sprint(n / 2 % 2)}}
 		if _, err := e.Predict(ctx, a); err != nil {
 			t.Fatal(err)
 		}
 		if err := e.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "manual"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: approve}); err != nil {
+		if err := e.Answer(ctx, limen.Answer{Key: a.Key, Approve: approve, DetailsOpened: new(true)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -64,8 +67,9 @@ func TestLearnedEntriesAreExplanations(t *testing.T) {
 		if !found {
 			t.Fatalf("entry %q has no case", entry.Label)
 		}
-		if math.Abs(entry.EvidenceRatio-x) > 1e-12 || entry.AskKind != askKind(entry.Verdict, x) {
-			t.Errorf("entry %+v, an explanation at its point has ratio %v and kind %q", entry, x, askKind(entry.Verdict, x))
+		inBand := entry.AskKind == limen.AskUnsure || entry.AskKind == limen.AskSplit || entry.AskKind == limen.AskShort
+		if math.Abs(entry.EvidenceRatio-x) > 1e-12 || (inBand && (entry.AskKind == limen.AskUnsure) != (x < EvidenceCut)) {
+			t.Errorf("entry %+v, an explanation at its point has ratio %v", entry, x)
 		}
 		kinds[entry.Label] = entry.AskKind
 	}

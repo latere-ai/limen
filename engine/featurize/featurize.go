@@ -44,6 +44,23 @@
 //     and counts /lib32, /lib64, /libx32, /private/etc and /private/var as
 //     outside the workspace.
 //   - An attribute number that is NaN or infinite adds nothing.
+//
+// [Read] reads the scope of an action for consent (spec 011): the shell
+// table of features/2's scope part over each segment, the class of the
+// destinations of a git push, the outside-workspace rule, the publishing
+// commands, and the effect and reversible of any other action; the holds
+// of the environment bound that reading, and the claims of the decision
+// point are merged with it. It also gives the families of the action and
+// its label of labels/2. Where the spec leaves a choice open, it takes the
+// reading that finds more danger: a destructive pattern of features/1 is
+// irreversible in any row, a segment of class network with no row of its
+// own (http) reaches the remote and maybe the network, a git push with
+// --all, --mirror or --branches is primary, and an interpreter's -c or an
+// eval has the reach of its script, or of a segment no table names at the
+// depth bound. Remote no makes network, organization and public no,
+// because each of them reaches another system. [Migrated] reads the scope
+// of a case from before labels/2 from its stored vectors and label, with
+// unknown in place of a middle value the input would decide.
 package featurize
 
 import (
@@ -193,16 +210,22 @@ func Of(a limen.Action) Features {
 	return Features{A: A, C: C}
 }
 
-// LabelsVersion names the vocabulary of [Label]: a case keeps the version
-// its label was written with (spec 009).
-const LabelsVersion = "labels/1"
+// LabelsVersion names the vocabulary of the labels of new cases, labels/2
+// ([Read]): the label of [Label] and a phrase of the scope. A case keeps
+// the version its label was written with (spec 009), and a case of
+// [Labels1] keeps its label (spec 011).
+const LabelsVersion = "labels/2"
+
+// Labels1 names the vocabulary of [Label], the labels of cases from
+// before labels/2.
+const Labels1 = "labels/1"
 
 // maxLabelName bounds the part of a label that is the action's own name.
 const maxLabelName = 64
 
-// Label names an action for the person it runs for, in words a person can
-// read, from the action's kind and name and, for a shell action, the
-// segments the shell reader's tables name (spec 009): "bash: git push,
+// Label names an action for the person it runs for, in labels/1, in words
+// a person can read, from the action's kind and name and, for a shell
+// action, the segments the shell reader's tables name (spec 009): "bash: git push,
 // go test", "bash: other command", "web_fetch", "egress https". It never
 // holds text of the input, so keeping it keeps the input unkept. The kind
 // and the name are the decision point's own fields, already kept with the

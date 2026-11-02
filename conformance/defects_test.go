@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,13 +220,58 @@ var defects = []defect{
 			return p, err
 		}
 	}},
-	{"AnswerMinimum", "an allow ignores the answer minimum", func(f *faulty) {
+	{"CoverCapsAllow", "an allow ignores the cover rule", func(f *faulty) {
 		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
 			p, err := f.Service.Predict(ctx, a)
-			if p.Minimum.Held() {
-				p.Verdict, p.AskKind, p.Minimum = limen.Allow, "", limen.Minimum{}
+			if p.AskKind == limen.AskWider || p.AskKind == limen.AskFew {
+				p.Verdict, p.AskKind = limen.Allow, ""
 			}
 			return p, err
+		}
+	}},
+	{"ScopeOfAnAction", "a claim makes the scope narrower", func(f *faulty) {
+		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+			p, err := f.Service.Predict(ctx, a)
+			if a.Scope != nil && a.Scope.Undo != "" {
+				p.Scope.Undo = a.Scope.Undo
+			}
+			if p.Scope.Undo == limen.UndoIrreversible {
+				p.Scope.Undo = limen.UndoRecoverable
+			}
+			return p, err
+		}
+	}},
+	{"AnswerWeights", "a quick approval counts", func(f *faulty) {
+		f.answer = func(ctx context.Context, a limen.Answer) error {
+			if a.Surface == "" {
+				a.DetailsOpened = new(true)
+			}
+			return f.Service.Answer(ctx, a)
+		}
+	}},
+	{"ConsentOfAProfile", "a profile loses its settings of consent", func(f *faulty) {
+		f.putProfile = func(ctx context.Context, p limen.Profile) (limen.Profile, error) {
+			if p.Consent.MinWeight >= 0 && p.Consent.MinSessions >= 0 {
+				p.Consent = limen.Consent{}
+			}
+			return f.Service.PutProfile(ctx, p)
+		}
+	}},
+	{"AskReasons", "an ask states its probability", func(f *faulty) {
+		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+			p, err := f.Service.Predict(ctx, a)
+			if p.Verdict == limen.Ask {
+				p.Reason = "The approval probability is " + strconv.FormatFloat(p.Approve, 'f', 2, 64) + ". Limen suggests ask."
+			}
+			return p, err
+		}
+	}},
+	{"AnswerFields", "an answer drops how the person gave it", func(f *faulty) {
+		f.answer = func(ctx context.Context, a limen.Answer) error {
+			if a.Validate() == nil {
+				a.HowAnswered = limen.HowAnswered{}
+			}
+			return f.Service.Answer(ctx, a)
 		}
 	}},
 	{"ProfilePrecedence", "the profile of an agent is never found", func(f *faulty) {

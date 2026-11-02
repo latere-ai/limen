@@ -152,20 +152,26 @@ func TestBasePath(t *testing.T) {
 	}
 }
 
-// The answer minimum is the contract's by default, and LIMEN_MIN_ALLOWS
-// and LIMEN_MIN_SESSIONS set it: one approval of a publish under an allow
-// threshold of 0.65 is held as an ask by default, held by the minimums
-// set, and an allow with both at 0, which limend warns about.
-func TestAnswerMinimum(t *testing.T) {
+// The cover rule has the contract's settings by default, and
+// LIMEN_MIN_ALLOWS, LIMEN_MIN_SESSIONS, LIMEN_ANSWER_FLOOR_MS and
+// LIMEN_ANSWER_FATIGUE set them: one approval of a publish under an allow
+// threshold of 0.65 is a few ask by default, held by the settings set, and
+// an allow with both minimums at 0, which limend warns about. A quick
+// approval counts only with the floor at 0, which limend warns about too.
+func TestCoverSettings(t *testing.T) {
 	for _, c := range []struct {
-		vars map[string]string
-		want limen.Minimum
-		warn bool
+		vars    map[string]string
+		details bool
+		want    limen.Cover
+		warn    string
 	}{
-		{nil, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}, false},
-		{map[string]string{"LIMEN_MIN_ALLOWS": "5", "LIMEN_MIN_SESSIONS": " 1 "}, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: 5, MinSessions: 1}, false},
-		{map[string]string{"LIMEN_MIN_SESSIONS": "0"}, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows}, true},
-		{map[string]string{"LIMEN_MIN_ALLOWS": "0", "LIMEN_MIN_SESSIONS": "0"}, limen.Minimum{}, true},
+		{nil, true, limen.Cover{Weight: 1, Sessions: 1, MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}, ""},
+		{map[string]string{"LIMEN_MIN_ALLOWS": "5", "LIMEN_MIN_SESSIONS": " 1 "}, true, limen.Cover{Weight: 1, Sessions: 1, MinWeight: 5, MinSessions: 1}, ""},
+		{map[string]string{"LIMEN_MIN_SESSIONS": "0"}, true, limen.Cover{Weight: 1, Sessions: 1, MinWeight: limen.MinWeight}, "LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0."},
+		{map[string]string{"LIMEN_MIN_ALLOWS": "0", "LIMEN_MIN_SESSIONS": "0"}, true, limen.Cover{Covered: true, Weight: 1, Sessions: 1}, "LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0."},
+		{nil, false, limen.Cover{MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}, ""},
+		{map[string]string{"LIMEN_ANSWER_FLOOR_MS": "0"}, false, limen.Cover{Weight: 1, Sessions: 1, MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}, "LIMEN_ANSWER_FLOOR_MS or LIMEN_ANSWER_FATIGUE is 0."},
+		{map[string]string{"LIMEN_ANSWER_FLOOR_MS": "1", "LIMEN_ANSWER_FATIGUE": "0"}, true, limen.Cover{Weight: 1, Sessions: 1, MinWeight: limen.MinWeight, MinSessions: limen.MinSessions}, "LIMEN_ANSWER_FLOOR_MS or LIMEN_ANSWER_FATIGUE is 0."},
 	} {
 		vars := map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_SUBJECT": "me"}
 		maps.Copy(vars, c.vars)
@@ -186,7 +192,11 @@ func TestAnswerMinimum(t *testing.T) {
 		if err := c2.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm", Action: &a}); err != nil {
 			t.Fatal(err)
 		}
-		if err := c2.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
+		how := limen.HowAnswered{}
+		if c.details {
+			how.DetailsOpened = new(true)
+		}
+		if err := c2.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: how}); err != nil {
 			t.Fatal(err)
 		}
 		var p limen.Prediction
@@ -198,11 +208,13 @@ func TestAnswerMinimum(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 		code, log := stop()
-		if code != exitOK || p.Minimum != c.want || (p.Verdict == limen.Allow) == c.want.Held() {
-			t.Errorf("%v: %+v, want held by %+v: exit %d", c.vars, p, c.want, code)
+		if code != exitOK || p.Cover != c.want || (p.Verdict == limen.Allow) != c.want.Covered {
+			t.Errorf("%v: %+v, want %+v: exit %d", c.vars, p, c.want, code)
 		}
-		if strings.Contains(log, "Warning: LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0.") != c.warn {
-			t.Errorf("%v: the log %q, want a warning %v", c.vars, log, c.warn)
+		for _, w := range []string{"LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0.", "LIMEN_ANSWER_FLOOR_MS or LIMEN_ANSWER_FATIGUE is 0."} {
+			if strings.Contains(log, "Warning: "+w) != (c.warn == w) {
+				t.Errorf("%v: the log %q, want the warning %q", c.vars, log, c.warn)
+			}
 		}
 	}
 }
@@ -224,6 +236,8 @@ func TestConfiguration(t *testing.T) {
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_BASE_PATH": "/v1"}, exitConfig, "LIMEN_BASE_PATH is not correct"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MIN_ALLOWS": "three"}, exitConfig, `LIMEN_MIN_ALLOWS is not correct: "three"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MIN_SESSIONS": "-1"}, exitConfig, `LIMEN_MIN_SESSIONS is not correct: "-1"`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FLOOR_MS": "2s"}, exitConfig, `LIMEN_ANSWER_FLOOR_MS is not correct: "2s"`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FATIGUE": "-3"}, exitConfig, `LIMEN_ANSWER_FATIGUE is not correct: "-3"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}

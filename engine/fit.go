@@ -33,6 +33,10 @@ type model struct {
 	scheduled atomic.Bool
 	bytes     atomic.Int64
 	elem      *list.Element
+	// ledger is the subject's cases as the cover rule reads them, built
+	// when the model is loaded and kept with each write, so a prediction
+	// reads no case from the store. The subject's lock guards it.
+	ledger *ledger
 }
 
 func (m *model) due() int64 { return m.answers.Load() - m.fitted.Load() }
@@ -172,6 +176,7 @@ func (e *Engine) load(ctx context.Context, k subjectKey) (*model, error) {
 		answers += int64(len(c.Answers))
 	}
 	m.answers.Store(answers)
+	m.ledger = newLedger(cases)
 	post := gp.Prior(e.kern)
 	b, ok, err := e.st.Snapshot(ctx, k.org, k.subject, Version)
 	if err != nil {

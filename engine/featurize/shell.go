@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"latere.ai/x/limen"
 )
 
 // The program classes of features/1, in the order of their dimensions.
@@ -32,12 +34,35 @@ const (
 // segments whose program the tables below name, in order, each once.
 // Programs is the command's own text and is never kept; Labels holds words
 // of the tables alone (spec 009).
+//
+// The rest is the scope part of the shell table of spec 011, the reach of
+// the chain before the environment bounds it: the greatest value of its
+// segments in each dimension, in words of the vocabularies. An empty word
+// is a dimension no segment reads. Unlabeled is true when a segment has no
+// label, so the chain also belongs to the family "other command".
 type Shell struct {
 	Programs         []string
 	Classes          []string
 	Destructive      bool
 	OutsideWorkspace bool
 	Labels           []string
+
+	// Undo is a value of limen.Undos or limen.Unknown.
+	Undo string
+	// Machine, Remote, Network and Public are "no", "yes" or
+	// limen.Unknown. Public leaves out each git push, whose visibility is
+	// that of the repositories of the environment.
+	Machine, Remote, Network, Public string
+	// TargetClass is primary for gh pr merge, and empty otherwise.
+	TargetClass string
+	// Pushes is true when a segment is a git push, and PushClass the class
+	// of the destinations of its refspecs: primary or limen.Unknown.
+	Pushes    bool
+	PushClass string
+	// TargetKind is the first kind of the table of target kinds that a
+	// segment matches, or empty.
+	TargetKind string
+	Unlabeled  bool
 }
 
 // ReadShell reads a command statically, before it runs. It is a worst-case
@@ -46,12 +71,31 @@ type Shell struct {
 // class.
 func ReadShell(command string) Shell {
 	var r reading
+	r.kind = len(targetKinds)
 	r.read(command, 0)
-	out := Shell{Programs: r.programs, Destructive: r.destructive, OutsideWorkspace: r.outside, Labels: r.labels}
+	out := Shell{Programs: r.programs, Destructive: r.destructive, OutsideWorkspace: r.outside, Labels: r.labels,
+		Undo: r.undo, Remote: r.remote, Network: r.network, Public: r.public, TargetClass: r.class,
+		Pushes: r.pushes, PushClass: r.pushClass, Unlabeled: r.unlabeled}
 	for i, on := range r.classes {
 		if on {
 			out.Classes = append(out.Classes, classNames[i])
 		}
+	}
+	// The outside-workspace rule sets machine, here or in a redirection; a
+	// segment no table names leaves it unknown; a named row leaves it no.
+	out.Machine = r.machine
+	if r.outside {
+		out.Machine = "yes"
+	}
+	// A write to a block device is destructive whatever its segment.
+	if r.destructive {
+		out.Undo = undos.Join(out.Undo, limen.UndoIrreversible)
+	}
+	if r.outside && r.kind > kindPath {
+		r.kind = kindPath
+	}
+	if r.kind < len(targetKinds) {
+		out.TargetKind = targetKinds[r.kind]
 	}
 	return out
 }
@@ -67,6 +111,13 @@ type reading struct {
 	destructive bool
 	outside     bool
 	labels      []string
+
+	// The scope of the segments so far, joined (spec 011).
+	undo, machine, remote, network, public, class string
+	pushes                                        bool
+	pushClass                                     string
+	kind                                          int
+	unlabeled                                     bool
 }
 
 func (r *reading) read(command string, depth int) {
@@ -212,20 +263,29 @@ func (r *reading) segment(seg string, depth int) {
 	prog := strings.ToLower(path.Base(args[0]))
 	rest := args[1:]
 	r.programs = append(r.programs, prog)
-	r.classify(prog, rest)
-	if l := labelOf(prog, rest); l != "" && !slices.Contains(r.labels, l) {
+	classes := r.classify(prog, rest)
+	l := labelOf(prog, rest)
+	if l != "" && !slices.Contains(r.labels, l) {
 		r.labels = append(r.labels, l)
 	}
-	if r.isDestructive(seg, prog, rest) {
+	destructive := r.isDestructive(seg, prog, rest)
+	if destructive {
 		r.destructive = true
+	}
+	script, ok := nested(prog, rest)
+	// An interpreter's -c and an eval run their script and nothing else,
+	// so their segment has the reach and the families of the script; at
+	// the depth bound the script is not read, and the segment is one no
+	// table names.
+	if wrapper := ok && (interpreters[prog] || prog == "eval") && depth < maxDepth; !wrapper {
+		r.unlabeled = r.unlabeled || l == ""
+		r.reach(prog, rest, classes, destructive)
 	}
 	if writesOutside(prog, rest) {
 		r.outside = true
 	}
-	if depth < maxDepth {
-		if script, ok := nested(prog, rest); ok {
-			r.read(script, depth+1)
-		}
+	if depth < maxDepth && ok {
+		r.read(script, depth+1)
 	}
 }
 
@@ -334,9 +394,19 @@ func set(xs ...string) map[string]bool {
 	return m
 }
 
-func (r *reading) classify(prog string, args []string) {
+// classify marks the program classes of one segment and returns them.
+func (r *reading) classify(prog string, args []string) [numClasses]bool {
+	seg := classesOf(prog, args)
+	for i, on := range seg {
+		r.classes[i] = r.classes[i] || on
+	}
+	return seg
+}
+
+// classesOf is the program classes of one segment.
+func classesOf(prog string, args []string) (seg [numClasses]bool) {
 	s := sub(prog, args)
-	on := func(c int) { r.classes[c] = true }
+	on := func(c int) { seg[c] = true }
 	switch {
 	case readProgs[prog]:
 		on(clsRead)
@@ -390,6 +460,7 @@ func (r *reading) classify(prog string, args []string) {
 	case infraProgs[prog]:
 		on(clsInfra)
 	}
+	return seg
 }
 
 // labelOf names a segment in words of the tables above and nothing else, so

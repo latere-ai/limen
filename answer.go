@@ -3,7 +3,10 @@
 
 package limen
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Answer is a person's decision about an action whose decision is
 // recorded. Limen stamps the time it arrives.
@@ -25,14 +28,87 @@ type Answer struct {
 	// subject; otherwise the answerer is the caller. The answer trains the
 	// subject's model either way.
 	By string `json:"by,omitempty"`
+	// HowAnswered is how the person gave the answer, as the client and
+	// the decision point measured it (spec 011). It sets the weight of the
+	// answer for the cover rule.
+	HowAnswered
 }
 
 // Validate reports every field of a that breaks the contract, as one
 // [*Error] with [CodeInvalidAnswer], or nil.
 func (a Answer) Validate() error {
 	var p problems
-	a.check(&p, "")
+	a.Key.check(&p, "")
+	a.HowAnswered.check(&p, "")
 	return p.err(CodeInvalidAnswer)
+}
+
+// MaxAnswerMS bounds [HowAnswered.AnswerMS]: one day.
+const MaxAnswerMS = 86_400_000
+
+// The surfaces a person answers on.
+const (
+	// SurfacePrompt is a question in the conversation while the action
+	// waits.
+	SurfacePrompt = "prompt"
+	// SurfaceNotification is a system notification.
+	SurfaceNotification = "notification"
+	// SurfaceQueue is a list of waiting questions or of reviews.
+	SurfaceQueue = "queue"
+	// SurfaceBulk is one gesture that answers more than one action.
+	SurfaceBulk = "bulk"
+	// SurfaceRule is a standing rule, not the person at that time.
+	SurfaceRule = "rule"
+)
+
+// Surfaces lists the surfaces, in the order of their constants.
+func Surfaces() []string {
+	return []string{SurfacePrompt, SurfaceNotification, SurfaceQueue, SurfaceBulk, SurfaceRule}
+}
+
+// HowAnswered is how a person gave an answer (spec 011). The decision
+// point relays it from the client of the person, and leaves out each field
+// it does not know. No field holds text.
+type HowAnswered struct {
+	// AnswerMS is the milliseconds from the moment the question was
+	// visible to the person to the answer, measured by the client, from 0
+	// to [MaxAnswerMS].
+	AnswerMS *int64 `json:"answer_ms,omitempty"`
+	// WaitedMS is the milliseconds from the decision that showed the
+	// action to the answer, measured by the decision point, 0 or more.
+	WaitedMS *int64 `json:"waited_ms,omitempty"`
+	// DetailsOpened is true if the person opened the details of the action
+	// (the full input, the change, the target) before the answer, and
+	// false if the client offered them and the person did not open them.
+	DetailsOpened *bool `json:"details_opened,omitempty"`
+	// SuggestionShown is true if the client showed the suggestion of Limen
+	// (the verdict, the approval probability, the reason, or an
+	// explanation) before the answer.
+	SuggestionShown *bool `json:"suggestion_shown,omitempty"`
+	// Surface is where the person answered, from [Surfaces]. A surface
+	// outside the list is no surface, and it is not an error.
+	Surface string `json:"surface,omitempty"`
+	// Remembered is true if the answer also made a standing rule for
+	// later actions. The rule itself is never sent.
+	Remembered bool `json:"remembered,omitempty"`
+}
+
+func (h HowAnswered) check(p *problems, at string) {
+	if h.AnswerMS != nil && (*h.AnswerMS < 0 || *h.AnswerMS > MaxAnswerMS) {
+		p.add(at+"answer_ms", "is outside [0, 86400000]")
+	}
+	if h.WaitedMS != nil && *h.WaitedMS < 0 {
+		p.add(at+"waited_ms", "is below 0")
+	}
+}
+
+// Kept is h as Limen keeps it: a surface outside the list is dropped, so
+// a kept answer holds words of the vocabulary alone.
+func (h HowAnswered) Kept() HowAnswered {
+	if !slices.Contains(Surfaces(), h.Surface) {
+		h.Surface = ""
+	}
+	return h
 }
 
 // Case is everything Limen holds about one action: the action without its
@@ -52,6 +128,8 @@ type RecordedAnswer struct {
 	// Review is true for the answer that reviews an action the decision
 	// showed a person, the one answer that enters error estimates.
 	Review bool `json:"review"`
+	// HowAnswered is how the person gave the answer, as it was sent.
+	HowAnswered
 }
 
 // CaseQuery selects one subject's cases, oldest first, one page at a time.

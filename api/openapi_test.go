@@ -110,7 +110,10 @@ var schemaTypes = map[string]any{
 	"PreviewRequest": limen.PreviewRequest{}, "Preview": limen.Preview{},
 	"Report": limen.Report{}, "WeekReport": limen.WeekReport{}, "ReportCell": limen.ReportCell{},
 	"AgentCell": limen.AgentCell{}, "VerdictCounts": limen.VerdictCounts{}, "FlagReviews": limen.FlagReviews{},
-	"SourceRates": limen.SourceRates{}, "Minimum": limen.Minimum{},
+	// A deprecated field stays described, because its name never changes.
+	"SourceRates": limen.SourceRates{}, "Minimum": limen.Minimum{}, //nolint:staticcheck // SA1019: the schema of a deprecated field
+	"ReachClaim": limen.ReachClaim{}, "Crosses": limen.Crosses{}, "Reach": limen.Reach{}, "Cover": limen.Cover{},
+	"ExplainedCover": limen.ExplainedCover{}, "Approval": limen.Approval{}, "Consent": limen.Consent{},
 }
 
 func TestSchemasMatchTypes(t *testing.T) {
@@ -179,7 +182,21 @@ func TestEnumsMatchConstants(t *testing.T) {
 		string(limen.Allow), string(limen.Flag), string(limen.Ask), string(limen.Block))
 	check("Suggestion", strs(at(t, schemas, "Suggestion")["enum"]),
 		string(limen.Allow), string(limen.Ask), string(limen.Block))
-	check("AskKind", strs(at(t, schemas, "AskKind")["enum"]), limen.AskUnsure, limen.AskSplit)
+	check("AskKind", strs(at(t, schemas, "AskKind")["enum"]), limen.AskKinds()...)
+	check("Undo", strs(at(t, schemas, "Undo")["enum"]), append(limen.Undos(), limen.Unknown)...)
+	check("TargetClass", strs(at(t, schemas, "TargetClass")["enum"]), append(limen.TargetClasses(), limen.Unknown)...)
+	check("Contact", strs(at(t, schemas, "Contact")["enum"]), append(limen.Contacts(), limen.Unknown)...)
+	// The claims and the answer fields are open on the wire, as examples:
+	// a word outside a list is unknown, and it is not an error.
+	check("Target.class", strs(at(t, schemas, "Target", "properties", "class")["examples"]), limen.TargetClasses()...)
+	check("Environment.holds", strs(at(t, schemas, "Environment", "properties", "holds", "items")["examples"]), limen.Holds()...)
+	check("Environment.repositories", strs(at(t, schemas, "Environment", "properties", "repositories")["examples"]), limen.Repositories()...)
+	check("ReachClaim.undo", strs(at(t, schemas, "ReachClaim", "properties", "undo")["examples"]), limen.Undos()...)
+	check("ReachClaim.contact", strs(at(t, schemas, "ReachClaim", "properties", "contact")["examples"]), limen.ContactFirst, limen.ContactRepeat)
+	check("Surface", strs(at(t, schemas, "Surface")["examples"]), limen.Surfaces()...)
+	if max := at(t, schemas, "AnswerMS")["maximum"]; fmt.Sprint(max) != strconv.Itoa(limen.MaxAnswerMS) {
+		t.Errorf("AnswerMS maximum %v, want %d", max, limen.MaxAnswerMS)
+	}
 	check("WeekState", strs(at(t, schemas, "WeekState")["enum"]), limen.WeekOpen, limen.WeekTooFew, limen.WeekReady)
 	for _, cell := range []string{"ReportCell", "AgentCell"} {
 		check(cell+".withheld", strs(at(t, schemas, cell, "properties", "withheld", "items")["enum"]), limen.AnswerFields()...)
