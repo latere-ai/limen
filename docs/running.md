@@ -65,6 +65,8 @@ These variables apply in both modes:
 | `LIMEN_ADDR` | The address that the server listens on. | `127.0.0.1:7720`. In the image: `:7720`. |
 | `LIMEN_DATA_DIR` | The ledger directory. | `$XDG_STATE_HOME/limen`, or `~/.local/state/limen`. In the image: `/var/lib/limen`. |
 | `LIMEN_BASE_PATH` | A second prefix for the routes, in place of `/v1`. Use it if an ingress sends a public path to `limend` without a change. | None |
+| `LIMEN_MIN_ALLOWS` | The number of approvals of actions with the same label that Limen needs before it suggests `allow`. `0` turns this part of the answer minimum off. | `3` |
+| `LIMEN_MIN_SESSIONS` | The number of different sessions that these approvals must come from. `0` turns this part of the answer minimum off. | `2` |
 
 The server always supplies each route under `/v1`. If you set
 `LIMEN_BASE_PATH`, the server also supplies each route under that prefix.
@@ -73,6 +75,17 @@ For example, with `LIMEN_BASE_PATH=/v1/oversight`, the server supplies
 route, with the same permission. The value must start with `/`, must not
 end with `/`, and must not be `/v1`. If the value is not correct,
 `limend` stops with exit code 2.
+
+`LIMEN_MIN_ALLOWS` and `LIMEN_MIN_SESSIONS` set the
+[answer minimum](theory.md#the-answer-minimum). Each value must be a
+whole number, 0 or more. If a value is not correct, `limend` stops with
+exit code 2. A prediction gives the minimums of the server in
+`minimum.min_allows` and `minimum.min_sessions`.
+
+> **Warning:** With `0` in `LIMEN_MIN_ALLOWS` or `LIMEN_MIN_SESSIONS`,
+> Limen can suggest `allow` after fewer approvals, for example after one
+> approval in one session. Use `0` only for tests. If a value is `0`,
+> `limend` writes a warning when it starts.
 
 ### One person
 

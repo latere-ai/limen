@@ -19,6 +19,11 @@
 //	LIMEN_BASE_PATH a second prefix for the API in place of /v1, for an
 //	                  ingress that forwards a public path unchanged, for
 //	                  example /v1/oversight; default none
+//	LIMEN_MIN_ALLOWS, LIMEN_MIN_SESSIONS
+//	                the answer minimum: the approvals of actions with one
+//	                  label, and the sessions they come from, that an allow
+//	                  needs; default 3 and 2 (limen.MinAllows,
+//	                  limen.MinSessions), and 0 is no minimum, for tests
 //
 // A hosted server sets LIMEN_OIDC_ISSUERS and LIMEN_OIDC_AUDIENCE in place
 // of LIMEN_TOKEN and LIMEN_SUBJECT, and LIMEN_AUTHORIZER_URL or LIMEN_ADMINS
@@ -42,6 +47,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -118,6 +124,16 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		errOut.Printf("limend: LIMEN_BASE_PATH is not correct: %v. Use an absolute path with no slash at the end, for example /v1/oversight.\n", err)
 		return exitConfig
 	}
+	minAllows, err := minimum(getenv, "LIMEN_MIN_ALLOWS")
+	if err != nil {
+		errOut.Printf("limend: %v\n", err)
+		return exitConfig
+	}
+	minSessions, err := minimum(getenv, "LIMEN_MIN_SESSIONS")
+	if err != nil {
+		errOut.Printf("limend: %v\n", err)
+		return exitConfig
+	}
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
 	dir := dataDir(getenv)
 	if dir == "" {
@@ -148,7 +164,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		}
 	}
 
-	eng := engine.New(engine.Options{Store: st, Clock: clock})
+	eng := engine.New(engine.Options{Store: st, Clock: clock, MinAllows: minAllows, MinSessions: minSessions})
 	// Close stops the fitters and cannot fail.
 	defer func() { _ = eng.Close() }()
 	o := acc.options
@@ -162,6 +178,9 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	out.Printf("Limen is available at http://%s. The ledger is in %s. Callers: %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir, acc.describe)
 	if base != "" {
 		out.Printf("The API is also available under %s.\n", base)
+	}
+	if minAllows < 0 || minSessions < 0 {
+		out.Println("Warning: LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0. Limen can suggest allow for an action after fewer approvals. Use 0 only for tests.")
 	}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
@@ -184,6 +203,24 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	}
 	out.Println("Limen stopped.")
 	return exitOK
+}
+
+// minimum reads one count of the answer minimum from the variable name, as
+// the engine's option: an empty variable is 0, the engine's default, a
+// value of 0 is -1, no minimum, and a positive count is itself.
+func minimum(getenv func(string) string, name string) (int, error) {
+	v := strings.TrimSpace(getenv(name))
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	switch {
+	case err != nil || n < 0:
+		return 0, errors.New(name + " is not correct: " + strconv.Quote(v) + ". Use a whole number, 0 or more. 0 turns this part of the answer minimum off.")
+	case n == 0:
+		return -1, nil
+	}
+	return n, nil
 }
 
 // dataDir is where the ledger lives: LIMEN_DATA_DIR, or limen under the

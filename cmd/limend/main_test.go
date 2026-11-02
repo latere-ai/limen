@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -150,6 +152,61 @@ func TestBasePath(t *testing.T) {
 	}
 }
 
+// The answer minimum is the contract's by default, and LIMEN_MIN_ALLOWS
+// and LIMEN_MIN_SESSIONS set it: one approval of a publish under an allow
+// threshold of 0.65 is held as an ask by default, held by the minimums
+// set, and an allow with both at 0, which limend warns about.
+func TestAnswerMinimum(t *testing.T) {
+	for _, c := range []struct {
+		vars map[string]string
+		want limen.Minimum
+		warn bool
+	}{
+		{nil, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows, MinSessions: limen.MinSessions}, false},
+		{map[string]string{"LIMEN_MIN_ALLOWS": "5", "LIMEN_MIN_SESSIONS": " 1 "}, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: 5, MinSessions: 1}, false},
+		{map[string]string{"LIMEN_MIN_SESSIONS": "0"}, limen.Minimum{Allows: 1, Sessions: 1, MinAllows: limen.MinAllows}, true},
+		{map[string]string{"LIMEN_MIN_ALLOWS": "0", "LIMEN_MIN_SESSIONS": "0"}, limen.Minimum{}, true},
+	} {
+		vars := map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_SUBJECT": "me"}
+		maps.Copy(vars, c.vars)
+		addr, stop := startWith(t, vars)
+		c2, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := context.Background()
+		if _, err := c2.PutProfile(ctx, limen.Profile{Org: "local", Costs: limen.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}, AuditRate: 0.05}); err != nil {
+			t.Fatal(err)
+		}
+		publish := func(id string) limen.Action {
+			return limen.Action{Org: "local", Subject: "me", ActionID: "ses/" + id, Actor: &limen.Actor{Kind: "agent", Session: "ses"},
+				Kind: "tool", Name: "publish", Effect: limen.EffectExternal}
+		}
+		a := publish("a")
+		if err := c2.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm", Action: &a}); err != nil {
+			t.Fatal(err)
+		}
+		if err := c2.Answer(ctx, limen.Answer{Key: a.Key, Approve: true}); err != nil {
+			t.Fatal(err)
+		}
+		var p limen.Prediction
+		// The model fits in the background after the answer.
+		for i := 0; i < 500 && (i == 0 || p.Approve == 0.5); i++ {
+			if p, err = c2.Predict(ctx, publish(fmt.Sprintf("probe-%d", i))); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		code, log := stop()
+		if code != exitOK || p.Minimum != c.want || (p.Verdict == limen.Allow) == c.want.Held() {
+			t.Errorf("%v: %+v, want held by %+v: exit %d", c.vars, p, c.want, code)
+		}
+		if strings.Contains(log, "Warning: LIMEN_MIN_ALLOWS or LIMEN_MIN_SESSIONS is 0.") != c.warn {
+			t.Errorf("%v: the log %q, want a warning %v", c.vars, log, c.warn)
+		}
+	}
+}
+
 func TestConfiguration(t *testing.T) {
 	cases := []struct {
 		args []string
@@ -165,6 +222,8 @@ func TestConfiguration(t *testing.T) {
 		{nil, map[string]string{"LIMEN_TOKEN": "x"}, exitConfig, "no directory for the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_BASE_PATH": "/v1/oversight/"}, exitConfig, "LIMEN_BASE_PATH is not correct"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_BASE_PATH": "/v1"}, exitConfig, "LIMEN_BASE_PATH is not correct"},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MIN_ALLOWS": "three"}, exitConfig, `LIMEN_MIN_ALLOWS is not correct: "three"`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MIN_SESSIONS": "-1"}, exitConfig, `LIMEN_MIN_SESSIONS is not correct: "-1"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}
