@@ -56,7 +56,7 @@ verdicts. The list starts with the verdict that permits the most.
 | feature extractor | A fixed program that calculates features from the input of an action. A feature extractor is not a language model. | |
 | input | The arguments of an action, for example the text of a shell command. Limen reads the input to calculate the features. Limen does not keep the input. | `input` |
 | label | A short name for the type of an action, from a fixed list of words in the feature extractor. Examples: `bash: go test`, `bash: git push --force`. A label never contains the input. | `label` |
-| explanation | The parts of one prediction: the answers that changed it most, and what the model learned about the type of action and about the recent tolerance of the person. | `Explanation` |
+| explanation | The parts of one prediction. An explanation shows the answers that changed the prediction most. It also shows what the model learned about the type of action and about the recent tolerance of the person. | `Explanation` |
 | share | The part of one answer in an explanation, from 0 to 1. | `share` |
 | evidence ratio | The part of the uncertainty before any answer that the answers of the person removed, from 0 to 1. | `evidence_ratio` |
 | unsure | An `ask` with an evidence ratio less than 0.5. The person has few answers about this type of action. More answers can change the suggestion. | `ask_kind` |
@@ -73,7 +73,7 @@ verdicts. The list starts with the verdict that permits the most.
 | thresholds | Two approval probabilities that Limen calculates from the cost profile. Above the upper threshold, Limen suggests `allow`. Below the lower threshold, Limen suggests `block`. | `allow_above`, `block_below` |
 | ask range | The approval probabilities between the two thresholds. In this range, Limen suggests `ask`. | |
 | cost profile of a person | A cost profile that a person saves for their own actions in one organization. It can make the cost profile of the organization stricter for that person. It cannot make it less strict. | `subject` in a `Profile` |
-| stricter | A cost profile is stricter than a different cost profile if its upper threshold is the same or higher and its lower threshold is the same or lower. A stricter cost profile asks about more actions. | |
+| stricter | A cost profile is stricter than a different cost profile if two conditions are true. Its upper threshold is the same or higher, and its lower threshold is the same or lower. A stricter cost profile asks about more actions. | |
 | meet | The cost profile that takes the stricter value of each number from two cost profiles. The meet of the cost profile of a person and the cost profile of the organization applies to the actions of that person. | `Stricter` |
 
 ## The ledger
@@ -100,5 +100,5 @@ verdicts. The list starts with the verdict that permits the most.
 | kept week | A closed week that a report of an organization showed. Limen keeps it, and each later report shows it with no change. | |
 | minimum group | The smallest number of persons that a number of a report of an organization must come from: 5. | `min_subjects` |
 | group rule | A week shows its numbers only if 5 or more persons took part in it. The numbers of one agent, and of the other agents together, follow the same rule. | `agents`, `other` |
-| answer rule | A number that a report of an organization calculates from reviews shows only if the reviews come from 5 or more persons and no person gave more than one half of them. | `withheld` |
+| answer rule | The rule for a number that a report of an organization calculates from reviews. The number shows only if 5 or more persons gave the reviews, and no person gave more than one half of them. | `withheld` |
 | regret | The mean cost of the decisions, minus the mean cost of the best possible decisions. The unit is the cost of one `ask`. The paper uses it to compare methods. | |

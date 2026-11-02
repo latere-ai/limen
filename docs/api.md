@@ -607,8 +607,8 @@ the report. A `too_few` week does not tell how many persons took part.
 
 A week that a report showed does not change. Limen keeps the closed week
 the first time that a report reads it. A later answer, a replay with
-`keep`, and a forget do not change a kept week. Thus two reports cannot
-show the difference of one person.
+`keep`, and a forget do not change a kept week. Because of this, two
+reports cannot show the difference of one person.
 
 > **Warning:** A replay with `keep` does not add history to a kept week.
 > If you replay the history of an organization, do the replay before you
@@ -643,10 +643,12 @@ The report follows two rules:
 `agents` has one entry for each agent with 5 or more persons in the week.
 The agent of an action is `actor.id` if `actor.kind` is `agent`. `other`
 contains all other actions: the agents with fewer persons, and the actions
-with no agent. If `other` has fewer than 5 persons, the agent with the
-fewest persons goes into `other`. If no agent is left, the week has only
-`total`. The counts of `agents` and `other` add up to the counts of
-`total`. If one of them removes a field, all of them remove it.
+with no agent.
+
+If `other` has fewer than 5 persons, the agent with the fewest persons
+goes into `other`. If no agent is left, the week has only `total`. The
+counts of `agents` and `other` add up to the counts of `total`. If one of
+them removes a field, all of them remove it.
 
 The report contains no label, no action ID, no session, no subject, and no
 time more exact than a week. The only names in it are agent IDs.
@@ -731,10 +733,12 @@ cost profile is the subject of the person, with the issuer and the `sub`
 and a pipe between them. A decision point puts the actions of a person
 without an organization in this context. Then the `Profile` resource also
 has `subject`, equal to `org`, and the shared owner policy lets the
-person read and save these cost profiles. An organization ID never
-contains a pipe. Thus the cost profiles of an organization have no
-`subject`, and only an admin can read or save them. Replays have no
-`subject`, also for the context of a person.
+person read and save these cost profiles.
+
+An organization ID never contains a pipe. Because of this, the cost
+profiles of an organization have no `subject`, and only an admin can read
+or save them. Replays have no `subject`, also for the context of a
+person.
 
 A cost profile of a person has `subject` in its `Profile` resource. The
 shared owner policy lets that person read, save, and remove it. An

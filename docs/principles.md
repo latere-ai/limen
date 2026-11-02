@@ -282,9 +282,9 @@ returns has no input.
 ## 14. The data of a person belongs to that person
 
 Limen uses the answers of a person only for that person. On request, it
-forgets all data about the person in an organization: the cases, the
-answers, the model that it learned from them, and the cost profile of the
-person. The report of an organization never shows one person. Each of its
+forgets all data about the person in an organization. The data are the
+cases, the answers, the model that it learned from them, and the cost
+profile of the person. The report of an organization never shows one person. Each of its
 numbers comes from 5 or more persons, and no person gave more than one
 half of the reviews in it.
 
