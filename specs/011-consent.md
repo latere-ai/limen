@@ -108,12 +108,12 @@ Each dimension also has the value `unknown`.
 |---|---|---|
 | `undo` | `none`, `reversible`, `recoverable`, `irreversible` | `none`: the action changes nothing. `reversible`: the change can be undone in the workspace with no loss, for example an edit of a tracked file or a local commit. `recoverable`: a copy or a second action can undo the change. Examples are a push of new commits and an update of a preview. `irreversible`: no copy brings it back, or other people already saw it. Examples are a delete with no copy, a force push that drops commits, a sent message, and a payment |
 | `crosses` | one boundary each: `machine`, `remote`, `network`, `organization`, `public`, each `no` or `yes` | `machine`: the action changes the machine outside the workspace, for example a home or system path. `remote`: the action reaches a system other than the machine. `network`: it reaches a host outside the network of the session. `organization`: it reaches a party that the organization does not own. `public`: it makes something readable by anyone |
-| `target` | `scratch`, `own`, `shared`, `primary` | the class of what the action changes. `scratch`: a disposable thing. `own`: a thing that this session or person made, for example the branch of the session or a preview. `shared`: a thing that other people use, for example another branch. `primary`: the default or protected branch, production, a live release |
+| `target_class` | `scratch`, `own`, `shared`, `primary` | the class of what the action changes. `scratch`: a disposable thing. `own`: a thing that this session or person made, for example the branch of the session or a preview. `shared`: a thing that other people use, for example another branch. `primary`: the default or protected branch, production, a live release |
 | `contact` | `repeat`, `first` | `first`: no earlier approved case of the person has the same target |
 
 The five examples of the owner map to these dimensions:
 
-| Example | `undo` | `crosses` | `target` |
+| Example | `undo` | `crosses` | `target_class` |
 |---|---|---|---|
 | a read | `none` | | |
 | a reversible write | `reversible` | | |
@@ -138,7 +138,7 @@ The order of each dimension is a partial order. For values `v0 < v1 <
 For a boundary of `crosses`, `no` is `v0` and `yes` is `vk`.
 
 The dimensions of the order are `undo`, each boundary of `crosses`,
-and `target`. A scope `s` is within a scope `a` if, in each of these
+and `target_class`. A scope `s` is within a scope `a` if, in each of these
 dimensions, the value of `s` is within the value of `a`. A scope `s` exceeds `a` if `s` is not within
 `a`. `contact` is not in the order, because each target was a first
 contact at its first approval. `contact` is a feature of the model and
@@ -163,7 +163,7 @@ knows. A dimension that nobody reads or sends is `unknown`.
 | `crosses.network` | the shell table, bounded by the hold `egress` | `scope.crosses.network` |
 | `crosses.organization` | nothing | `scope.crosses.organization` |
 | `crosses.public` | the shell table of publishing commands, and `environment.repositories` for a `git push` | `scope.crosses.public` |
-| `target` | the refspec of `git push` | `target.class` |
+| `target_class` | the refspec of `git push` | `target.class` |
 | `contact` | the stored targets of earlier approved cases | `scope.contact` |
 
 For a dimension that both Limen and the decision point give, the value
@@ -178,7 +178,7 @@ that the environment enforces, so the reach cannot occur:
 | Hold | What the environment enforces | The bound |
 |---|---|---|
 | `egress` | no host outside the network of the session is reachable without its own approval | `crosses.network` is `no` |
-| `protected_refs` | the git host refuses a push to a protected branch | a `target` of `primary` from a `git push` is `unknown` |
+| `protected_refs` | the git host refuses a push to a protected branch | a `target_class` of `primary` from a `git push` is `unknown` |
 | `checkpoints` | the decision point keeps a copy of the workspace that can restore it | if no boundary of `crosses` is `yes` or `unknown`, `undo` is at most `recoverable` |
 
 #### The shell table of `features/2`
@@ -197,7 +197,7 @@ each dimension, as with the classes of `features/1`.
 | `git pull`, `git fetch`, `git clone` | `reversible` | `remote` |
 | `git push` | `recoverable` | `remote`, and `public` from `environment.repositories` |
 | `git push` with a force or delete flag (the destructive patterns of `features/1`) | `irreversible` | `remote`, and `public` from `environment.repositories` |
-| `gh pr merge` | `recoverable` | `remote`, and `target` `primary` |
+| `gh pr merge` | `recoverable` | `remote`, and `target_class` `primary` |
 | `gh repo create --public`, `gh repo edit --visibility public` | `irreversible` | `remote`, `public` |
 | `gh repo delete`, `gh release delete` | `irreversible` | `remote` |
 | other `gh` | `unknown` | `remote` |
@@ -221,7 +221,7 @@ unknown, it is `no`.
 `crosses.public` of a `git push` is `yes` if `environment.repositories`
 is `public`, `no` if it is `private`, and `unknown` in other cases.
 
-`target` of a `git push` comes from its refspec. A destination named
+`target_class` of a `git push` comes from its refspec. A destination named
 `main`, `master`, `trunk`, `production`, `prod`, `stable`, `release`, or
 `release/` and more, with or without `refs/heads/`, is `primary`. Any
 other named destination is `unknown`. No refspec, or `HEAD`, is
@@ -247,7 +247,7 @@ an older Limen.
 | `scope.undo` | string | a value of `undo` |
 | `scope.crosses` | object of boolean | for each boundary that the decision point knows, `true` for `yes` and `false` for `no`. An absent key is `unknown` |
 | `scope.contact` | string | `first` or `repeat` |
-| `target.class` | string | a value of `target` |
+| `target.class` | string | a value of `target_class` |
 | `environment.holds` | array of string | the holds of the environment |
 | `environment.repositories` | string | the visibility of the repositories that the session pushes to: `private`, `public`, or `mixed` |
 
@@ -257,9 +257,24 @@ the cover rule compares. The decision point fills each field with
 words from these tables only. It never puts a path, a host, a branch
 name, or other text of the input in them.
 
-A prediction gives the scope that Limen used, as `scope`, with each
-dimension filled. The decision point can then see what Limen read. The
-case keeps the same scope.
+A prediction gives the scope that Limen used, as `scope`. It has the
+members `undo`, `crosses`, `target_class`, `contact` and `target_kind`.
+Each dimension has a value, `unknown` included. The decision point can
+then see what Limen read, and show it to the person. The case keeps the
+same scope.
+
+`target_kind` names the type of the target without its name. It is the
+`kind` of the `target` that the decision point sent. For a shell
+action with no `target`, it is the first row of this table that a
+segment matches. With no match, it is absent.
+
+| `target_kind` | Segments |
+|---|---|
+| `ref` | `git push`, `git branch`, `gh pr merge` |
+| `repository` | other `gh repo` commands |
+| `package` | the publishing commands of the shell table |
+| `host` | the network programs |
+| `path` | class `delete`, and the outside-workspace rule |
 
 #### The input is still never stored
 
@@ -284,7 +299,7 @@ the order of the table:
 | 2 | `crosses.public` `yes` | `public` |
 | 3 | `crosses.organization` `yes` | `outside the organization` |
 | 4 | `crosses.network` `yes` | `outside the session network` |
-| 5 | `target` `primary` | `default branch` for a target of kind `ref`, `production` for kind `app`, `deploy` or `service`, and `protected target` for other kinds |
+| 5 | `target_class` `primary` | `default branch` for `target_kind` `ref`, `production` for `app`, `deploy` or `service`, and `protected target` for other kinds |
 | 6 | `crosses.machine` `yes` | `outside the workspace` |
 | 7 | `undo` `irreversible` | `cannot undo` |
 | 8 | `contact` `first` | `first time` |
@@ -613,7 +628,7 @@ Limen reads the scope of an old case from these records:
 | `undo` | the classes and the destructive flag of the stored `features/1` vector, the words of the label (`git push --force`, `rm -r`), `effect` and `reversible`. `unknown` where the table needs the input |
 | `crosses.machine` | the outside-workspace flag of the stored `features/1` vector |
 | `crosses.remote` | the classes of the stored vector: `vcs_remote`, `network` and `infra` give `yes`, and a case with only `read`, `vcs_local` and `build_test` gives `no` |
-| `crosses.network`, `crosses.organization`, `crosses.public`, `target`, `contact` | `unknown` |
+| `crosses.network`, `crosses.organization`, `crosses.public`, `target_class`, `contact` | `unknown` |
 
 An old case gets its `labels/2` label from this scope. The weight of
 an old answer uses the time from `decided_at` to `at`, so a quick old
