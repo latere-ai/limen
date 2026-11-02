@@ -6,7 +6,7 @@ depends_on: [003-http-api.md, 004-engine.md, 008-ledger-and-estimation.md]
 affects: [explanation.go, engine/, engine/gp/, engine/featurize/, engine/store/, server/, client/, stub/, conformance/, api/openapi.yaml, docs/]
 effort: medium
 created: 2026-11-01
-updated: 2026-11-01
+updated: 2026-11-02
 author: changkun
 ---
 
@@ -56,18 +56,25 @@ denial, and larger the more the answer disagreed with the mode. So:
   whatever the time), `recent = s_g Σ k_t(t_i, t) g_i`, the shared
   tolerance (every recent answer, about any action), and
   `interaction = s_d Σ k_x k_t g_i`. They sum to `μ(x)` exactly.
-- **Two kinds of uncertainty.** The prior variance at `x` is
-  `v₀ = k(x, x)` and the predictive variance `σ²(x) ≤ v₀`. The evidence
-  ratio `e = 1 − σ² / v₀` is the share of the prior variance the answers
-  removed. For an `ask`:
+- **Two kinds of uncertainty.** *Amended 2026-11-02; see Amendments.*
+  The prior variance at `x` is `v₀ = k(x, x)` and the predictive variance
+  `σ²(x) ≤ v₀`. The evidence ratio `e = 1 − σ² / v₀` is the share of the
+  prior variance the answers removed. For an `ask`:
   - `e < 0.5` is **unsure**: the person's answers say little about this
-    action. More answers will move it.
-  - `e ≥ 0.5` is **split**: the answers say a lot, and they disagree, so
-    the approval probability sits inside the ask range on evidence. More
-    answers will not move it (paper, Proposition 3).
+    action. More answers can move it.
+  - `e ≥ 0.5` is **split**: the person's answers say much about this kind
+    of action, and the approval probability is still inside the profile's
+    ask range. That happens when the answers disagree, or when they agree
+    but not yet strongly enough for the profile's thresholds. More
+    answers that agree can still move it out of the ask range; answers
+    that disagree keep it there. The paper's Proposition 3 holds in the
+    limit of much evidence with mixed answers, not at a few answers.
 
   The cut 0.5 is a constant in `engine`, named and tested; changing it is
-  a change to this spec.
+  a change to this spec. The kind does not say the answers disagree. A
+  client that says so checks the evidence: an explanation's `evidence`
+  holding an approval and a denial with one label, or a `learned` entry
+  with `approved` and `denied` both above zero.
 
 The product kernel has no parts; an explanation of a product-kernel
 prediction carries contributions and the evidence ratio, and no parts.
@@ -247,6 +254,38 @@ with the prediction (criterion 11). Topos's `learned` mode reads
 or an `ask` with no `ask_kind`. The
 `FailClosed` fallback, which has no model behind it, is `unsure`.
 
+**2026-11-02, what a split ask means.** The owner's live test found the
+design's reading of `split` wrong. A person allowed `publish` twice and
+denied nothing. Under Careful (allow above 0.90, block below 0.25),
+Limen predicted approve 0.80, uncertainty 1.07 and so an evidence ratio
+of about 0.64, which is `ask_kind` `split`. The design said a split ask
+means the answers disagree and that more answers will not move it,
+citing Proposition 3. Both were false here: the answers agree, and more
+allows raise 0.80 past 0.90. The arithmetic, the cut and the behavior do
+not change; the reading does, in the Design above, the docs and the Go
+comments:
+
+- `split` means `e ≥ 0.5`, so the person's answers say much about this
+  kind of action, and the approval probability is still inside the
+  profile's ask range. The answers disagree, or agree but not yet
+  strongly enough for the thresholds. More answers that agree can move
+  it out; answers that disagree keep it there.
+- Proposition 3 is about a policy that knows the true approval
+  probability. The posterior nears it only with much evidence, so the
+  proposition holds for a split ask in the limit of many mixed answers,
+  not at a few answers.
+- A client that wants to say "your answers disagree" checks the
+  evidence: an explanation's `evidence` holding an approval and a denial
+  for the same label, or a `learned` entry with `approved > 0` and
+  `denied > 0`. Latere's console now does this.
+- A decision point may still keep a split ask for the person, as hosted
+  Topos does in `learned` mode. The reason is restated: the ask rests on
+  the person's own answers, not on too few of them.
+
+`TestSplitOnAnswersThatAgree` holds the case: two approvals and no
+denial under Careful are a split ask, with only approvals in its evidence
+and a learned entry with no denial, and more approvals reach an allow.
+
 ## Outcome
 
 Recorded on 2026-11-01, after v0.3.0. The three views and the evidence on a
@@ -273,7 +312,7 @@ the `oversight` package of
 |---|---|
 | 1 | `TestExplainSumsToTheMean` (`engine/gp`); the conformance case `Explanations` |
 | 2 | `TestExplainSumsToTheMean`, `TestExplanationIsThePrediction` |
-| 3 | `TestAskKinds`, `TestExplanationIsThePrediction`, `TestBlockHasNoAskKind` |
+| 3 | `TestAskKinds`, `TestSplitOnAnswersThatAgree`, `TestExplanationIsThePrediction`, `TestBlockHasNoAskKind` |
 | 4 | `TestExplanationAfterARefit` |
 | 5 | `TestLabelKeepsNoInput`, `TestLabel`; the conformance case `LearnedEntries` |
 | 6 | `TestPreview`; the server's `TestQueryErrors`; the conformance cases `Previews` and `PreviewErrors` |
