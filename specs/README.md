@@ -103,7 +103,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
 | [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | complete |
-| [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | drafted |
+| [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | in-progress |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a

@@ -1,9 +1,9 @@
 ---
 title: "Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report"
-status: drafted
+status: in-progress
 track: core
 depends_on: [002-contract.md, 004-engine.md, 006-conformance.md, 008-ledger-and-estimation.md, 009-explanations.md, 010-organizations.md]
-affects: [action.go, answer.go, prediction.go, profile.go, explanation.go, reliability.go, estimate/, engine/, engine/featurize/, engine/gp/, engine/store/, stub/, conformance/, server/, client/, api/openapi.yaml, importer/topos/, cmd/limend/, docs/]
+affects: [action.go, answer.go, prediction.go, profile.go, explanation.go, reliability.go, replay.go, reach.go, estimate/, engine/, engine/featurize/, engine/gp/, engine/store/, stub/, conformance/, server/, client/, api/openapi.yaml, importer/topos/, cmd/limend/, docs/]
 effort: large
 created: 2026-11-02
 updated: 2026-11-02
@@ -181,6 +181,32 @@ that the environment enforces, so the reach cannot occur:
 | `protected_refs` | the git host refuses a push to a protected branch | a `target_class` of `primary` from a `git push` is `unknown` |
 | `checkpoints` | the decision point keeps a copy of the workspace that can restore it | if no boundary of `crosses` is `yes` or `unknown`, `undo` is at most `recoverable` |
 
+Limen makes the scope in this order:
+
+1. Limen reads each dimension that it can read from the input and the
+   fields of the action.
+2. Each hold bounds that reading. `egress` and `protected_refs` bound
+   the reading of their dimension. `checkpoints` bounds the reading of
+   `undo`, and its test reads `crosses` after step 3.
+3. Each claim of the decision point is merged with the bounded reading:
+   the greater of the two, or the greatest value if they are not
+   comparable. A dimension that only one side gives has the value of that
+   side. A dimension that no side gives is `unknown`.
+4. `remote` is `yes` if `network`, `organization` or `public` is `yes`.
+
+A hold bounds the reading of the input, because the reading is a worst
+case. A hold does not bound a claim, because a claim is what the decision
+point knows. "At most `recoverable`" makes `irreversible` and `unknown`
+into `recoverable`. A claim without a word, or a boundary without a key,
+is no claim. A claim of `unknown`, or of a word outside the vocabulary, is
+a claim of `unknown`, so it can only make the scope wider.
+
+Limen reads `contact` from the `target` of the action if the target has
+an `id`: `first` if no case of the person whose latest answer is an
+approval has a target with the same `kind` and `id`, and `repeat` in
+other cases. The `id` is a field of the decision point, kept with the
+action as before. It never goes into the scope.
+
 #### The shell table of `features/2`
 
 The shell reader of [[004-engine]] gives the program and subcommand of
@@ -216,7 +242,29 @@ A boundary that a named row of the table leaves blank is `no` for that
 segment. Only the last row, a segment that no table names, makes each
 boundary `unknown`. The outside-workspace rule of `features/1` sets
 `crosses.machine` to `yes`. If no segment sets it and no segment is
-unknown, it is `no`.
+unknown, it is `no`. Limen reads `crosses.organization` from no row: a
+shell action has it only from a claim.
+
+The table takes the reading that finds more danger where it leaves a
+choice open:
+
+- A segment with a destructive pattern of `features/1` is
+  `irreversible`, whatever its row. For example, `git reset --hard` is
+  `irreversible`, not `reversible` as its class `vcs_local` is.
+- `git checkout` is in the first row only with the argument `--`.
+- `wget` with `--post-data`, `--post-file` or `--method` is a `wget` that
+  sends data.
+- A segment of class `network` with no row of its own, such as `http`,
+  has `undo` `unknown`, `crosses.remote` `yes` and `crosses.network`
+  `unknown`.
+- A segment that a table of labels names but whose row is not in this
+  table, such as a `git` subcommand that no table names, is a segment
+  that no table names.
+
+The greatest value of the segments uses the order of the dimensions: two values that
+are not comparable give the greatest value of the dimension. For
+example, a `go test` chained to a segment that no table names has `undo`
+`irreversible`.
 
 `crosses.public` of a `git push` is `yes` if `environment.repositories`
 is `public`, `no` if it is `private`, and `unknown` in other cases.
@@ -225,8 +273,9 @@ is `public`, `no` if it is `private`, and `unknown` in other cases.
 `main`, `master`, `trunk`, `production`, `prod`, `stable`, `release`, or
 `release/` and more, with or without `refs/heads/`, is `primary`. Any
 other named destination is `unknown`. No refspec, or `HEAD`, is
-`unknown`. The name of a ref never goes into the scope. Only its class
-does.
+`unknown`. `--all` and `--mirror` push each branch, the default branch
+too, so they are `primary`. The name of a ref never goes into the scope.
+Only its class does.
 
 For an action that is not a shell action, Limen reads `undo` and
 `crosses.remote` from the fields of the action. `effect` `none` or
@@ -259,9 +308,12 @@ name, or other text of the input in them.
 
 A prediction gives the scope that Limen used, as `scope`. It has the
 members `undo`, `crosses`, `target_class`, `contact` and `target_kind`.
-Each dimension has a value, `unknown` included. The decision point can
-then see what Limen read, and show it to the person. The case keeps the
-same scope.
+Each dimension has a value, `unknown` included. `undo`, `target_class`
+and `contact` are words. `crosses` is an object of boolean as in the
+claim: `true` for `yes`, `false` for `no`, and no key for `unknown`. The
+decision point can then see what Limen read, and show it to the person.
+The case keeps the same scope. A `FailClosed` prediction has no
+`scope`.
 
 `target_kind` names the type of the target without its name. It is the
 `kind` of the `target` that the decision point sent. For a shell
@@ -304,9 +356,12 @@ the order of the table:
 | 7 | `undo` `irreversible` | `cannot undo` |
 | 8 | `contact` `first` | `first time` |
 
-If no row from 1 to 8 applies, the phrase is `read` for `undo` `none`
-and `update` for other values. A shell label adds a phrase only from
-rows 1 to 8, because its segments already name the action.
+Row 1 holds rows 2 and 7: if row 1 applies, rows 2 and 7 do not. If no
+row from 1 to 8 applies, the phrase is `read` for `undo` `none` and
+`update` for other values, `unknown` included. A label of another kind
+is `<labels/1 label>: <phrase>`. A shell label adds a phrase only from
+rows 1 to 8, as `, <phrase>` after its segments, because its segments
+already name the action.
 
 | Action | `labels/1` | `labels/2` |
 |---|---|---|
@@ -322,10 +377,13 @@ tool, it is the name of the tool. For another kind, it is `<kind>
 <name>`. For a shell action, it is each segment word of its label, such
 as `git push` or `rm -r`. A shell segment that no table names has the
 family `other command`. A chain belongs to the family of each of its
-segments.
+segments. A label names at most two segments, so the case keeps its
+families beside its label. `git push --force` is a family of its own,
+because its label word is not `git push`.
 
-A case from before `labels/2` gets its label from its stored action
-and its stored scope ([migration](#migration-of-stored-cases)).
+A case from before `labels/2` keeps its `labels/1` label. The cover
+rule reads its scope from the migration table and its families from its
+label ([migration](#migration-of-stored-cases)).
 
 ### The cover rule
 
@@ -352,15 +410,22 @@ its receive date, one session for each UTC day.
 | `min_weight` | 3 | `LIMEN_MIN_ALLOWS`, and the `consent` of a profile |
 | `min_sessions` | 2 | `LIMEN_MIN_SESSIONS`, and the `consent` of a profile |
 
-The variables set the default for an installation. A profile can set
-greater values and not smaller ones. The meet of two profiles
-([[010-organizations]]) takes the greater value of each. A value below
-1 is refused with `invalid_profile`. With the default weights of this
-spec, an approval counts 1, so the defaults are the interim rule.
+The variables set the default for an installation, and `0` turns a
+setting off, for tests. A profile can set greater values and not smaller
+ones: the setting that applies is the greater of the installation and
+the profile. The meet of two profiles ([[010-organizations]]) takes the
+greater value of each. A value of `0`, or no value, is the setting of
+the installation. A value below 0 is refused with `invalid_profile`.
+With the default weights of this spec, a considered approval counts 1,
+so the defaults are the interim rule.
 
 The window of the cover rule is the window of the model: the 512 most
 recent answered cases. Cover has no other decay. An approval leaves the
 cover when it leaves the window, as it leaves the fit.
+
+A prediction, an explanation and a learned entry keep the field
+`minimum` of the interim rule in the API, because the name of a field
+never changes. Limen no longer sets it, and `cover` takes its place.
 
 #### The cap on `allow`
 
@@ -383,8 +448,8 @@ A capped `ask` has one of two new values of `ask_kind`:
 
 | `ask_kind` | When | Meaning for the person |
 |---|---|---|
-| `wider` | no approval of the family, of any weight, has a scope that the scope of `x` is within | the person never allowed an action of this reach |
-| `few` | approvals of the family have such a scope, but their weight or their sessions are below the settings | the person allowed this reach, but not with enough considered answers or not in enough sessions |
+| `wider` | for a family of `x`, no approval of the family, of any weight, has a scope that the scope of `x` is within | the person never allowed an action of this reach |
+| `few` | in each family of `x`, approvals have such a scope, but their weight or their sessions are below the settings | the person allowed this reach, but not with enough considered answers or not in enough sessions |
 
 A decision point that reads `ask_kind` treats an unknown value as
 `unsure`, which is what Topos does today. A decision point that keeps
@@ -420,14 +485,15 @@ A prediction carries `cover`. A `FailClosed` prediction carries none.
 | Field | Meaning |
 |---|---|
 | `cover.covered` | if the action is covered |
-| `cover.weight` | the total weight of the covering approvals, for the family with the least weight |
-| `cover.sessions` | the number of their different sessions, for that family |
+| `cover.weight` | the total weight of the covering approvals, for the family with the least weight. If a family misses a setting, only the families that miss one are compared |
+| `cover.sessions` | the number of different sessions of the covering approvals with weight, for that family |
 | `cover.min_weight`, `cover.min_sessions` | the settings that applied |
 
 An explanation also carries `cover.nearest`: up to three approved cases
 of the family whose scope `x` exceeds, each with `action_id`, `label`
 and `at`, closest first. Closest is the fewest dimensions in which `x`
-exceeds the case. A client can then say "You allowed
+exceeds the case, and then the most recent. `at` is the time of the
+latest answer of the case. A client can then say "You allowed
 `publish: update`. This is `publish: make public`."
 
 `learned` ([[009-explanations]]) applies the cap to the verdict of each
@@ -468,15 +534,30 @@ the client of the person. No field holds text.
 A decision point sends the decision of a rule as a decision, not as an
 answer. If it sends it as an answer, `surface` is `rule`.
 
+An `answer_ms` outside its range, or a `waited_ms` below 0, is refused
+with `invalid_answer`. A `surface` outside the list is no `surface`, and
+it is not an error, so a newer client works with an older Limen. Limen
+keeps the six fields with the answer, as the decision point sent them,
+and a recorded answer shows them.
+
+A replay record carries the same six fields, and `answered_at`, the time
+of the answer. A replay then records the answer at `answered_at`. A
+record without `answered_at` has its answer at `at`, the time of the
+decision, so the time that Limen measures is 0. The importer of Topos
+logs sets `answered_at` from the time of the confirmation.
+
 Limen also measures its own time from the recorded decision to the
 answer, as `decided_at` to `at`. The **time** of an answer is the
 smallest of `answer_ms`, `waited_ms` and that time. A client cannot
 make an answer look slower than the decision point and Limen measured
-it.
+it. If none of the three is known, the rule "too quick" does not
+apply.
 
 The **position** of an answer is the number of shown cases of the same
 person that have a review in the same session before it. Limen counts
-it from its records.
+it from its records. A review is before the answer if its time is
+earlier, or if the times are equal and its case is earlier. The answer
+of the case itself is not counted.
 
 #### The weight policy `weights/1`
 
@@ -630,9 +711,11 @@ Limen reads the scope of an old case from these records:
 | `crosses.remote` | the classes of the stored vector: `vcs_remote`, `network` and `infra` give `yes`, and a case with only `read`, `vcs_local` and `build_test` gives `no` |
 | `crosses.network`, `crosses.organization`, `crosses.public`, `target_class`, `contact` | `unknown` |
 
-An old case gets its `labels/2` label from this scope. The weight of
-an old answer uses the time from `decided_at` to `at`, so a quick old
-approval does not count toward the cover.
+The cover rule of wave 1 reads the scope of an old case from this
+table, and its families from the segment words of its `labels/1` label.
+An old case keeps its `labels/1` label. The weight of an old answer uses
+the time from `decided_at` to `at`, so a quick old approval does not
+count toward the cover.
 
 A decision point can start to send a dimension that it did not send
 before. Old approvals have `unknown` in that dimension. They then cover
@@ -665,9 +748,8 @@ With either way, the new release keeps the `features/1` vectors of
 each new case beside its `features/2` vectors. The release before can
 then still fit version 1.
 
-This is an open decision of the owner. The recommendation is the
-refit. The cover rule and the cap do not depend on it, because they
-apply to version 1. The ledger is days old, so a replay compares on all
+The owner decided the refit (decision 1). The cover rule and the cap
+do not depend on it, because they apply to version 1. The ledger is days old, so a replay compares on all
 of it. A second fit of each answer and the cache keyed by version are
 then not necessary.
 
@@ -735,8 +817,14 @@ reads it when Limen asks.
 | `ask_kind` | Reason |
 |---|---|
 | `unsure` | "Limen has few answers from this person about actions like this. Limen suggests ask." |
-| `split` | "The answers of this person about actions like this do not settle this action. Limen suggests ask." |
+| `split` | "The answers of this person about actions like this do not agree. Limen suggests ask." |
+| `short` | "The answers of this person about actions like this agree, but they are not enough yet to settle this action. Limen suggests ask." |
 | `wider`, `few` | the reasons of the cover rule above |
+
+An `ask` for a person with no answers keeps its reason: "Limen has no
+answers from this person yet. It suggests ask." The `few` reason holds
+the two settings, which are counts and not probabilities. No reason of
+an `ask` holds a probability or a decimal number.
 
 The reasons of `allow` and `block` keep their probabilities. Nobody is
 asked about them, and they are records.
@@ -744,10 +832,21 @@ asked about them, and they are records.
 **The rule for clients.** When an action waits for the person, the
 client shows the action, its label, and its scope. For `wider`, it can
 also show the label of the nearest approval. These are facts about the
-action, not a lean. The client does not show `approve`, the verdict of
-the suggestion, the reason, or an explanation before the person
-answers. The study of the analysts found that people follow an opinion
-that they see first, and that they repeat its reasons.
+action, not a lean. The client does not show `approve`, the reason, or
+an explanation before the person answers. The study of the analysts
+found that people follow an opinion that they see first, and that they
+repeat its reasons.
+
+**The decision on recommendations** (owner, 2026-11-02). A client can
+show a recommendation before the answer, such as a mark on one button,
+only where the `calibration` of the explanation is `calibrated` for the
+bin of the prediction. The calibration report comes in wave 2, so in
+wave 1 an explanation has no `calibration`, and no client shows a
+recommendation. A client that shows one sends `suggestion_shown` true.
+An approval that follows a shown lean (`approve` above 0.5) without
+details has weight 0 under `weights/1`, so it never builds the cover.
+A recommendation can then help the person, but it cannot teach Limen to
+run an action alone.
 
 After the answer, or if the person asks why, the client shows both
 sides of the explanation. It shows the evidence for approval and the
@@ -756,25 +855,27 @@ of the suggestion before the answer sends `suggestion_shown` true.
 
 ### Asks that a decision point keeps
 
-This part waits for a decision of the owner. Today, a `split` ask can
-rest on answers that agree ([[009-explanations]], amendment of
+The owner decided this on 2026-11-02 (decision 7). Before it, a `split`
+ask could rest on answers that agree ([[009-explanations]], amendment of
 2026-11-02). One allow gives an evidence ratio of 0.54, so the second
-action of a type is a `split` ask. In the `learned` mode of Topos, a
-`split` ask goes to the person, and the rules would have let the
-action run. Each approval then makes the next action wait for the
-person, until the probability passes the threshold.
+action of a type was a `split` ask. In the `learned` mode of Topos, a
+`split` ask goes to the person, so each approval made the next action
+wait for the person, until the probability passed the threshold.
 
-The recommendation splits `split` in two:
+An `ask` in the ask band with an evidence ratio of 0.5 or more now has
+one of two kinds:
 
 | `ask_kind` | When |
 |---|---|
-| `split` | the evidence ratio is 0.5 or more, and the answered cases of the family in the window hold an approval and a denial |
-| `short` | the evidence ratio is 0.5 or more, and the answered cases of the family agree |
+| `split` | the evidence ratio is 0.5 or more, and in a family of the action, the latest answers of the answered cases in the window hold an approval and a denial |
+| `short` | the evidence ratio is 0.5 or more, and in each family of the action, the latest answers of the answered cases in the window agree. A family with no answered case agrees |
 
 A decision point keeps `split` and `wider` for the person, and lets
 its rules decide `unsure`, `short` and `few`. An older decision point
 reads `short` as `unsure`. The cut 0.5 stays a measure of evidence. It
 is no longer the test of consent, because the cover rule is that test.
+The weight of an answer does not change the kind: a quick denial and a
+considered approval disagree.
 
 ### What not to do
 
@@ -805,6 +906,7 @@ These terms go into `docs/terms.md` with the build of each part:
 | covered | An action whose cover has enough weight from enough different sessions. | `cover.covered` |
 | wider | An `ask` for an action whose scope exceeds the scope of each approval of its family. | `ask_kind` |
 | few | An `ask` for an action that approvals cover, but not with enough weight or sessions. | `ask_kind` |
+| short | An `ask` on evidence whose answers agree, but are not enough yet to give `allow` or `block`. | `ask_kind` |
 | weight of an answer | A number from 0 to 1 that tells how much an answer counts for the model and the cover. | |
 | considered answer | An answer with weight 1. | `considered` |
 | calibration report | The approval probabilities that Limen stated, compared with the approval rates that reviews measured. | `Calibration` |
@@ -813,12 +915,12 @@ These terms go into `docs/terms.md` with the build of each part:
 
 | Spec | Change |
 |---|---|
-| [[002-contract]] | the new fields of `Action`, `Target`, `Environment`, `Answer`, `RecordedAnswer`, `Prediction` and `Profile`. The verdict of a prediction is the verdict of the thresholds after the cap |
+| [[002-contract]] | the new fields of `Action`, `Target`, `Environment`, `Answer`, `RecordedAnswer`, `ReplayRecord`, `Prediction`, `Explanation`, `LearnedEntry`, `Certificate` and `Profile`. The verdict of a prediction is the verdict of the thresholds after the cap |
 | [[003-http-api]] | the new fields, and `GET /v1/calibration` |
 | [[004-engine]] | the scope on each case, `features/2`, `learned/2`, the likelihood with weights, and the decision between a refit and criterion 10 |
 | [[006-conformance]] | `PredictionFollowsTheProfile` compares the verdict with the thresholds after the cap. New cases test the cap, the weights and the calibration report |
 | [[008-ledger-and-estimation]] | the `considered` count of the certificate, and the rule that no estimate reads the weight |
-| [[009-explanations]] | `cover` and `calibration` on an explanation, and the reasons of an `ask`. The cap applies to the verdict that an explanation calculates again, to `learned`, and to previews. If the owner decides it, also `split` and `short` |
+| [[009-explanations]] | `cover` and `calibration` on an explanation, and the reasons of an `ask`. The cap applies to the verdict that an explanation calculates again, to `learned`, and to previews. `split` and `short` (decision 7) |
 | [[010-organizations]] | the `consent` of a profile and its meet |
 
 The cover rule is shared arithmetic, like the estimates. `estimate/`
@@ -827,31 +929,32 @@ scope with `engine/featurize`, which has no numerical dependency. The
 engine and the stub then give the same verdicts and covers for the same
 ledger.
 
-## Open decisions
+## Decisions
 
-The owner decides these before the build. Each has a recommendation.
+The owner approved this design on 2026-11-02 and took each
+recommendation, with decision 7 and decision 10 as below.
 
-| # | Decision | Recommendation |
+| # | Decision | Taken |
 |---|---|---|
 | 1 | `learned/2`: a refit, or two versions side by side (criterion 10 of [[004-engine]]) | a refit, after a replay comparison. The cap ships before it, on version 1 |
 | 2 | Cover: only in the window of the model, or with its own decay | the window of the model, with no other decay |
 | 3 | The weight of an answer in the fit of `learned/2`: 0 or 1 as in the cover, or `weights/2` with values between | `weights/2` in the fit, and 0 or 1 in the cover |
 | 4 | An answer with no new fields: its weight from the time Limen measured, or weight 1 | the time Limen measured, so a quick old approval does not open the cover |
 | 5 | The floor and the fatigue count | 2,000 ms and 50, and measure them again from the first month of answer times |
-| 6 | The certificate: count only considered audits in its clean run | not now. Until clients send the new fields, most audits are not considered. Decide again when they do |
-| 7 | `split` and `short` | split them, so that agreeing answers do not make each next action wait |
+| 6 | The certificate: count only considered audits in its clean run | not now. The certificate counts them in `considered`. Decide again when clients send the new fields |
+| 7 | `split` and `short` | `short` is an ask in the ask band at an evidence ratio of 0.5 or more whose family answers agree. `split` needs an approval and a denial in the family. Decision points let the rules decide `short`, as `unsure` and `few`, and keep `split` and `wider` for the person ([Asks that a decision point keeps](#asks-that-a-decision-point-keeps)) |
 | 8 | The cut 0.5 of the evidence ratio | keep it as a measure of evidence. The cover rule is the test of consent |
-| 9 | Can a covered `allow` make an action run that the risk score of the decision point would ask about | yes, only if covered, and never above the ceiling of the rules. This is a setting of the decision point ([[005-adapters]]) |
+| 9 | Can a covered `allow` make an action run that the risk score of the decision point would ask about | yes, only if covered, and never above the ceiling of the rules. This is a setting of the decision point ([[005-adapters]]). In Topos, `TOPOS_DECISIONS_LOOSEN=covered` is the default |
+| 10 | Recommendations before the answer | only where the `calibration` of the bin is `calibrated`, and an approval that follows a shown lean without details has weight 0 ([the decision on recommendations](#asks-without-a-lean)) |
 
 ## Build waves
 
 | Wave | Limen | Proof |
 |---|---|---|
 | 0 | the interim rule on main: 3 allows of one label in 2 sessions | done outside this spec |
-| 1 | the scope of each case, `labels/2`, and the cover rule with its cap on version 1. Also the answer fields, `weights/1`, the reasons without a lean, and `cover` | criteria 1 to 14 |
-| 2 | the calibration report and the `considered` count | criteria 15 to 17 |
-| 3 | `features/2`, `learned/2` with weights, the migration, after a replay comparison | criteria 18 to 21 |
-| 4 | `split` and `short`, if the owner decides it | criterion 22 |
+| 1 | the scope of each case and the scope of old cases, `labels/2`, and the cover rule with its cap on version 1. Also the answer fields, `weights/1`, `considered` on the certificate, the reasons without a lean, `cover`, and `split` and `short` | criteria 1 to 15, 20 for the scope of old cases, 22 and 23 |
+| 2 | the calibration report, and `calibration` on an explanation | criteria 16 and 17 |
+| 3 | `features/2`, `learned/2` with weights, the refit, after a replay comparison | criteria 18, 19 and 21 |
 
 ## Acceptance criteria
 
@@ -879,3 +982,4 @@ The owner decides these before the build. Each has a recommendation.
 | 20 | An old case gets the scope of the migration table. An old approval of unknown reach never covers a new action of known greatest reach | an engine test over a ledger written by the release before |
 | 21 | A replay of the ledger gives the would-be verdicts of version 2 beside the recorded predictions of version 1 before version 2 serves | the replay command and the record of the deployment |
 | 22 | `split` needs an approval and a denial in the family, `short` is agreeing answers, and an older client reads `short` as `unsure` | an engine test and a decision point test |
+| 23 | A replay records an answer at `answered_at` with its six fields, and the importer of Topos logs sets `answered_at` from the confirmation | an engine test and an importer test |
