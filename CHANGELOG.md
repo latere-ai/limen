@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.6.0 - 2026-11-02
+
 ### Added
 
 - A prediction, an explanation, and an entry of `GET /v1/learned` have
