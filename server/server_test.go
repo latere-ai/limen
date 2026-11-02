@@ -74,6 +74,14 @@ func (s *spy) PutProfile(ctx context.Context, p limen.Profile) (limen.Profile, e
 	s.calls.Add(1)
 	return s.Service.PutProfile(ctx, p)
 }
+func (s *spy) DeleteProfile(ctx context.Context, sc limen.Scope) error {
+	s.calls.Add(1)
+	return s.Service.DeleteProfile(ctx, sc)
+}
+func (s *spy) Report(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+	s.calls.Add(1)
+	return s.Service.Report(ctx, q)
+}
 func (s *spy) Replay(ctx context.Context, r iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
 	s.calls.Add(1)
 	return s.Service.Replay(ctx, r, o)
@@ -174,6 +182,10 @@ func valid(t *testing.T) []req {
 		{http.MethodGet, "/v1/explanations?org=o&subject=" + alice + "&action_id=seed", ""},
 		{http.MethodGet, "/v1/learned?org=o&subject=" + alice + "&kind=tool", ""},
 		{http.MethodPost, "/v1/previews", body(t, preview(alice, now))},
+		{http.MethodDelete, "/v1/profiles?org=o&agent=x", ""},
+		{http.MethodGet, "/v1/reports?org=o&from=2026-09-28T00:00:00Z&to=2026-10-12T00:00:00Z", ""},
+		{http.MethodGet, "/v1/profiles?org=o&subject=" + alice, ""},
+		{http.MethodDelete, "/v1/profiles?org=o&subject=" + alice, ""},
 	}
 }
 
@@ -270,6 +282,13 @@ func TestAuthorizerQuestions(t *testing.T) {
 		{authorizer.ActionCaseList, authorizer.KindCase, map[string]any{"org": "o", "subject": alice}},
 		{authorizer.ActionCaseList, authorizer.KindCase, map[string]any{"org": "o", "subject": alice}},
 		{authorizer.ActionReliabilityRead, authorizer.KindReliability, map[string]any{"org": "o", "subject": alice}},
+		{authorizer.ActionProfileWrite, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "", "agent": "x"}},
+		{authorizer.ActionReportRead, authorizer.KindReport, map[string]any{"org": "o"}},
+		{authorizer.ActionProfileRead, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "", "agent": "", "subject": alice}},
+		{authorizer.ActionProfileWrite, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "", "agent": "", "subject": alice}},
+	}
+	if len(want) != len(valid(t)) {
+		t.Fatalf("%d questions for %d routes", len(want), len(valid(t)))
 	}
 	for i, r := range valid(t) {
 		// A fresh client per route, since a client caches its decisions
@@ -462,6 +481,79 @@ func TestQueryErrors(t *testing.T) {
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o", ""}), limen.CodeInvalidQuery, "subject", "action_id")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o&subject=s&action_id=none", ""}), limen.CodeNoCase, "action_id")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/learned?subject=s", ""}), limen.CodeInvalidQuery, "org")
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		wantCode(t, do(t, h, req{method, "/v1/profiles?kind=tool", ""}), limen.CodeInvalidQuery, "org")
+		wantCode(t, do(t, h, req{method, "/v1/profiles?org=o&subject=s&kind=tool&agent=x", ""}), limen.CodeInvalidQuery, "kind", "agent")
+		wantCode(t, do(t, h, req{method, "/v1/profiles?org=" + alice + "&subject=" + bob, ""}), limen.CodeInvalidQuery, "subject")
+	}
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reports", ""}), limen.CodeInvalidQuery, "org", "from", "to")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reports?org=o&from=monday&to=2026-10-12T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reports?org=o&from=2026-10-06T00:00:00Z&to=2026-10-12T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reports?org=o&from=2026-10-05T00:00:00Z&to=2027-01-11T00:00:00Z", ""}), limen.CodeInvalidQuery, "to")
+}
+
+// A person's own profile in an organization is theirs to read, save and
+// remove under the owner policy, and an admin's for every person; nobody
+// else reads or saves it (spec 010, criterion 6).
+func TestPersonProfileOwnership(t *testing.T) {
+	svc := stub.New(stub.Options{})
+	as := func(who string) http.Handler {
+		return New(svc, Options{Authenticator: StaticToken(tok, who), Authorizer: OwnerPolicy{Admins: []string{admin}}})
+	}
+	own := func(who string) limen.Profile {
+		return limen.Profile{Scope: limen.Scope{Org: "o", Subject: who}, Costs: limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}, AuditRate: 0.1}
+	}
+	bobs := as(bob)
+	if w := do(t, bobs, req{http.MethodPut, "/v1/profiles", body(t, own(bob))}); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"subject":"`+bob+`"`) {
+		t.Errorf("bob saving his own profile: %d %s", w.Code, w.Body.String())
+	}
+	if w := do(t, bobs, req{http.MethodGet, "/v1/profiles?org=o&subject=" + bob, ""}); w.Code != http.StatusOK {
+		t.Errorf("bob reading his own profile: %d %s", w.Code, w.Body.String())
+	}
+	for _, r := range []req{
+		{http.MethodPut, "/v1/profiles", body(t, own(alice))},
+		{http.MethodGet, "/v1/profiles?org=o&subject=" + alice, ""},
+		{http.MethodDelete, "/v1/profiles?org=o&subject=" + alice, ""},
+		{http.MethodGet, "/v1/profiles?org=o", ""},
+		{http.MethodDelete, "/v1/profiles?org=o", ""},
+	} {
+		wantCode(t, do(t, bobs, r), limen.CodeForbidden)
+	}
+	admins := as(admin)
+	if w := do(t, admins, req{http.MethodPut, "/v1/profiles", body(t, own(alice))}); w.Code != http.StatusOK {
+		t.Errorf("an admin saving alice's profile: %d %s", w.Code, w.Body.String())
+	}
+	if w := do(t, admins, req{http.MethodDelete, "/v1/profiles?org=o&subject=" + alice, ""}); w.Code != http.StatusNoContent {
+		t.Errorf("an admin removing alice's profile: %d %s", w.Code, w.Body.String())
+	}
+	if w := do(t, bobs, req{http.MethodDelete, "/v1/profiles?org=o&subject=" + bob, ""}); w.Code != http.StatusNoContent {
+		t.Errorf("bob removing his own profile: %d %s", w.Code, w.Body.String())
+	}
+	p, err := svc.Profile(context.Background(), limen.Scope{Org: "o", Subject: bob})
+	if err != nil || p.Subject != "" || !p.Default {
+		t.Errorf("after the removal bob reads %+v, %v; want the organization's default", p, err)
+	}
+	// A resource never names two subjects: in a person's own context the
+	// subject is the org.
+	if got := profileResource(limen.Scope{Org: bob, Subject: bob}); got.String("subject") != bob || got.ID != bob+"///"+bob {
+		t.Errorf("own context, own profile: %+v", got)
+	}
+}
+
+// Only an admin reads the report of an organization under the owner
+// policy, also a person who belongs to it (spec 010, criterion 14).
+func TestReportOwnerPolicy(t *testing.T) {
+	r := req{http.MethodGet, "/v1/reports?org=o&from=2026-09-28T00:00:00Z&to=2026-10-05T00:00:00Z", ""}
+	svc := seeded(t, stub.New(stub.Options{}))
+	wantCode(t, do(t, New(svc, Options{Authenticator: StaticToken(tok, alice), Authorizer: OwnerPolicy{Admins: []string{admin}}}), r), limen.CodeForbidden)
+	w := do(t, New(svc, Local(tok, admin)), r)
+	var got limen.Report
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil || len(got.Weeks) != 1 || got.MinSubjects != limen.ReportMinSubjects {
+		t.Errorf("an admin reading the report: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), alice) {
+		t.Errorf("the report names a person: %s", w.Body.String())
+	}
 }
 
 // With a base path every route is served under it as well, with the same
@@ -669,6 +761,12 @@ func TestOwnerPolicy(t *testing.T) {
 	}
 	if ask(alice, profileResource(limen.Scope{Org: "o"})) || !ask(admin, replayResource("o")) || ask("", caseResource("o", "")) {
 		t.Error("admin-only resources")
+	}
+	if ask(alice, reportResource("o")) || !ask(admin, reportResource("o")) {
+		t.Error("the report of an organization is an admin's")
+	}
+	if !ask(alice, profileResource(limen.Scope{Org: "o", Subject: alice})) || ask(bob, profileResource(limen.Scope{Org: "o", Subject: alice})) {
+		t.Error("a person's own profile is theirs")
 	}
 	if ask(admin, authz.NewResource(authorizer.KindCase, authz.ProbeID, nil)) {
 		t.Error("the probe was allowed")

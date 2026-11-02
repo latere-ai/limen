@@ -9,8 +9,10 @@
 // The stub keeps every rule of the contract that does not depend on
 // learning: idempotent predictions keyed by the action's key, one decision
 // per action, answers whose role follows from the decision, profiles with
-// their precedence and the built-in default, reliability reports computed
-// with latere.ai/x/limen/estimate, replays and forgetting. Its predictions
+// their precedence, the built-in default and a person's own profile met
+// with the organization's, reliability reports and the reports of
+// organizations computed with latere.ai/x/limen/estimate, kept weeks,
+// replays and forgetting. Its predictions
 // come from [Options.Predict], which by default knows nothing, so every
 // action is an ask. It passes latere.ai/x/limen/conformance.
 package stub
@@ -57,6 +59,14 @@ type Service struct {
 	seq      int
 	cases    map[limen.Key]*entry
 	profiles map[limen.Scope]limen.Profile
+	// weeks are the kept weeks of the reports, as JSON, so no caller
+	// reaches a kept week through a pointer it was given.
+	weeks map[weekKey][]byte
+}
+
+type weekKey struct {
+	org  string
+	from int64
 }
 
 // entry is one action's record. The action is kept without its input, and
@@ -83,6 +93,7 @@ func New(o Options) *Service {
 		clock:    o.Clock,
 		cases:    map[limen.Key]*entry{},
 		profiles: map[limen.Scope]limen.Profile{},
+		weeks:    map[weekKey][]byte{},
 	}
 	if s.predict == nil {
 		s.predict = func(limen.Action) (float64, float64) { return 0.5, 1 }
@@ -140,7 +151,7 @@ func (s *Service) predictLocked(a limen.Action, at time.Time) (limen.Prediction,
 	} else {
 		e = s.newEntry(a, d, at)
 	}
-	p := s.profileLocked(limen.ScopeOf(a))
+	p := s.effectiveLocked(limen.ScopeOf(a), a.Subject)
 	approve, uncertainty := s.predict(a)
 	v := p.Thresholds.Verdict(approve)
 	pr := limen.Prediction{
@@ -337,7 +348,7 @@ func (s *Service) Reliability(ctx context.Context, q limen.ReliabilityQuery) (li
 		ReliabilityQuery: q,
 		FalseAllow:       estimate.Rate(rows, estimate.FalseAllow),
 		FalseBlock:       estimate.Rate(rows, estimate.FalseBlock),
-		Certificate:      estimate.Certificate(rows, s.profileLocked(limen.Scope{Org: q.Org}).Certify),
+		Certificate:      estimate.Certificate(rows, s.effectiveLocked(limen.Scope{Org: q.Org}, q.Subject).Certify),
 	}, nil
 }
 
@@ -346,12 +357,42 @@ func (s *Service) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, e
 	if err := ctx.Err(); err != nil {
 		return limen.Profile{}, err
 	}
-	if sc.Org == "" {
-		return limen.Profile{}, &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
+	if err := sc.Validate(); err != nil {
+		return limen.Profile{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if sc.Subject != "" {
+		if p, ok := s.profiles[sc]; ok {
+			return p, nil
+		}
+		sc = limen.Scope{Org: sc.Org}
+	}
 	return s.profileLocked(sc), nil
+}
+
+// DeleteProfile implements [limen.Admin].
+func (s *Service) DeleteProfile(ctx context.Context, sc limen.Scope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := sc.Validate(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.profiles, sc)
+	return nil
+}
+
+// effectiveLocked is the profile that applies to an action of subject
+// within sc: the organization's, made stricter by the person's own.
+func (s *Service) effectiveLocked(sc limen.Scope, subject string) limen.Profile {
+	org := s.profileLocked(sc)
+	if own, ok := s.profiles[limen.Scope{Org: sc.Org, Subject: subject}]; ok {
+		return limen.Stricter(org, own)
+	}
+	return org
 }
 
 // profileLocked is the profile that applies to sc: the most specific saved
@@ -479,5 +520,53 @@ func (s *Service) Forget(ctx context.Context, org, subject string) error {
 			delete(s.cases, k)
 		}
 	}
+	delete(s.profiles, limen.Scope{Org: org, Subject: subject})
 	return nil
+}
+
+var _ limen.Reporter = (*Service)(nil)
+
+// Report implements [limen.Reporter] with latere.ai/x/limen/estimate, as
+// the engine does: a closed week is built once from the cases of every
+// person of the organization and kept, and every later read returns it.
+func (s *Service) Report(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+	if err := ctx.Err(); err != nil {
+		return limen.Report{}, err
+	}
+	if err := q.Validate(); err != nil {
+		return limen.Report{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.clock()
+	out := limen.Report{Org: q.Org, From: q.From.UTC(), To: q.To.UTC(), MinSubjects: limen.ReportMinSubjects, Weeks: []limen.WeekReport{}}
+	var cases []estimate.ReportCase
+	for _, e := range s.sortedLocked() {
+		if e.action.Org == q.Org && e.decision != nil {
+			cases = append(cases, estimate.ReportCase{Case: caseOf(e), ReceivedAt: e.at})
+		}
+	}
+	for _, from := range estimate.Weeks(q) {
+		if !limen.WeekClosed(from, now) {
+			out.Weeks = append(out.Weeks, estimate.OpenWeek(from))
+			continue
+		}
+		k := weekKey{q.Org, from.UnixNano()}
+		if b, ok := s.weeks[k]; ok {
+			var w limen.WeekReport
+			if err := json.Unmarshal(b, &w); err != nil {
+				return limen.Report{}, err
+			}
+			out.Weeks = append(out.Weeks, w)
+			continue
+		}
+		w := estimate.Week(from, cases)
+		b, err := json.Marshal(w)
+		if err != nil {
+			return limen.Report{}, err
+		}
+		s.weeks[k] = b
+		out.Weeks = append(out.Weeks, w)
+	}
+	return out, nil
 }

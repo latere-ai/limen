@@ -48,14 +48,25 @@ type Admin interface {
 	// Profile returns the profile that applies to the scope: the most
 	// specific saved one, or [DefaultProfile].
 	Profile(ctx context.Context, s Scope) (Profile, error)
+	// Profile with a Subject in the scope returns that person's own
+	// profile when one is saved, and otherwise the organization's profile
+	// for the scope of the org alone: what the person saved, not the meet.
+	//
 	// PutProfile validates the profile, derives its thresholds, fills a
 	// zero Certify with [DefaultCertify], stores it, and returns it.
 	PutProfile(ctx context.Context, p Profile) (Profile, error)
+	// DeleteProfile removes the profile saved for exactly the scope, so
+	// the next prediction takes the next scope in the order, and the
+	// default after the organization's. It changes no recorded
+	// prediction, and it is idempotent.
+	DeleteProfile(ctx context.Context, s Scope) error
 	// Replay predicts recorded actions in time order, each before its own
 	// answer is learned, and reports what Limen would have suggested.
 	Replay(ctx context.Context, records iter.Seq2[ReplayRecord, error], o ReplayOptions) (ReplayReport, error)
 	// Forget deletes everything Limen holds about a subject in an
-	// organization: cases, answers, and the model learned from them. It is
+	// organization: cases, answers, the model learned from them, and the
+	// person's own profile there. It leaves the kept weeks of the
+	// organization's reports, which hold no record of a person. It is
 	// idempotent.
 	Forget(ctx context.Context, org, subject string) error
 }
@@ -66,6 +77,7 @@ type Service interface {
 	Ledger
 	Admin
 	Explainer
+	Reporter
 }
 
 // FailClosed wraps a predictor so that a decision point never waits on it

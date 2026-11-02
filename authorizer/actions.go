@@ -14,14 +14,18 @@ import "latere.ai/x/pkg/authz"
 const Core = "limen"
 
 // The resource kinds of Limen's API. A Case carries the org and subject
-// it belongs to; a Profile its org, and its kind and agent when it is
-// scoped to them; a Replay and a Subject the org.
+// it belongs to; a Profile its org, its kind and agent when it is scoped
+// to them, and its subject when it is a person's own profile or the
+// profile of a person's own context; a Replay, a Subject and a Report the
+// org. A Report has no subject: it is about an organization, never one
+// person.
 const (
 	KindCase        = "Case"
 	KindReliability = "Reliability"
 	KindProfile     = "Profile"
 	KindReplay      = "Replay"
 	KindSubject     = "Subject"
+	KindReport      = "Report"
 )
 
 // The actions, one per question. A constant never changes its string and
@@ -40,12 +44,17 @@ const (
 
 	ActionReliabilityRead = "reliability.read"
 
-	ActionProfileRead  = "profile.read"
+	ActionProfileRead = "profile.read"
+	// ActionProfileWrite is also the permission to remove the profile
+	// saved for a scope.
 	ActionProfileWrite = "profile.write"
 
 	ActionReplayCreate = "replay.create"
 
 	ActionSubjectForget = "subject.forget"
+
+	// ActionReportRead reads the report of an organization (spec 010).
+	ActionReportRead = "report.read"
 )
 
 // table is the one place an action is paired with its kind, in the order
@@ -60,6 +69,7 @@ var table = []authz.Action{
 	{Name: ActionProfileWrite, Kind: KindProfile},
 	{Name: ActionReplayCreate, Kind: KindReplay},
 	{Name: ActionSubjectForget, Kind: KindSubject},
+	{Name: ActionReportRead, Kind: KindReport},
 }
 
 // labels are the names a person reads for each kind, for a grant picker.
@@ -69,6 +79,7 @@ var labels = map[string]string{
 	KindProfile:     "Cost profiles",
 	KindReplay:      "Replays",
 	KindSubject:     "People",
+	KindReport:      "Organization reports",
 }
 
 // Vocabulary returns Limen's action table. It panics only if the table

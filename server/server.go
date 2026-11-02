@@ -23,8 +23,8 @@
 // answer for them; anyone else answers as themselves.
 //
 // With no endpoint configured, [OwnerPolicy] decides: a subject acts on its
-// own cases and reports, and the admins it lists act on everything,
-// profiles and replays included. [Local] is the single-person setup, a
+// own cases, reports and profiles, and the admins it lists act on
+// everything, an organization's profiles, replays and reports included. [Local] is the single-person setup, a
 // static token whose subject is that policy's admin.
 //
 // An error the service returns that is not a contract error means Limen
@@ -143,11 +143,13 @@ var routes = []route{
 	{http.MethodGet, "/v1/reliability", authorizer.ActionReliabilityRead, (*handler).reliability},
 	{http.MethodGet, "/v1/profiles", authorizer.ActionProfileRead, (*handler).profile},
 	{http.MethodPut, "/v1/profiles", authorizer.ActionProfileWrite, (*handler).putProfile},
+	{http.MethodDelete, "/v1/profiles", authorizer.ActionProfileWrite, (*handler).deleteProfile},
 	{http.MethodPost, "/v1/replays", authorizer.ActionReplayCreate, (*handler).replay},
 	{http.MethodPost, "/v1/subjects/forget", authorizer.ActionSubjectForget, (*handler).forget},
 	{http.MethodGet, "/v1/explanations", authorizer.ActionCaseList, (*handler).explain},
 	{http.MethodGet, "/v1/learned", authorizer.ActionCaseList, (*handler).learned},
 	{http.MethodPost, "/v1/previews", authorizer.ActionReliabilityRead, (*handler).preview},
+	{http.MethodGet, "/v1/reports", authorizer.ActionReportRead, (*handler).report},
 }
 
 // New returns the handler that serves svc.
@@ -277,17 +279,32 @@ func reliabilityResource(org, subject string) authz.Resource {
 	return authz.NewResource(authorizer.KindReliability, subject, map[string]any{"org": org, "subject": subject})
 }
 
-// A profile whose org is a rendered subject, issuer and sub joined by a
-// pipe, is a person's own context, which hosted decision points key a
-// person's sessions by: it carries that subject, so the owner policy lets
-// the person read and write it. No organization id holds a pipe, so an
-// organization's profiles carry no subject and stay its admins'.
+// A person's own profile in an organization carries that person as its
+// subject, so the owner policy lets the person read, save and remove it,
+// and no one else but an admin (spec 010). A profile whose org is a
+// rendered subject, issuer and sub joined by a pipe, is a person's own
+// context, which hosted decision points key a person's sessions by: it
+// carries that subject too. No organization id holds a pipe, so an
+// organization's profiles carry no subject and stay its admins'. A
+// resource never names two subjects: in a person's own context a
+// profile's subject is its org.
 func profileResource(s limen.Scope) authz.Resource {
 	fields := map[string]any{"org": s.Org, "action_kind": s.Kind, "agent": s.Agent}
-	if strings.Contains(s.Org, "|") {
+	id := s.Org + "/" + s.Kind + "/" + s.Agent
+	switch {
+	case s.Subject != "":
+		fields["subject"] = s.Subject
+		id += "/" + s.Subject
+	case strings.Contains(s.Org, "|"):
 		fields["subject"] = s.Org
 	}
-	return authz.NewResource(authorizer.KindProfile, s.Org+"/"+s.Kind+"/"+s.Agent, fields)
+	return authz.NewResource(authorizer.KindProfile, id, fields)
+}
+
+// A report is about an organization and names no person, so it carries
+// no subject, and under the owner policy only an admin reads it.
+func reportResource(org string) authz.Resource {
+	return authz.NewResource(authorizer.KindReport, org, map[string]any{"org": org})
 }
 
 func replayResource(org string) authz.Resource {
@@ -483,14 +500,15 @@ func queryError(err error, fields []string) error {
 	return e
 }
 
-func (h *handler) reliability(c *call) error {
+// window parses the from and to of a query, and returns the names of the
+// ones that are not RFC 3339 times.
+func window(c *call, from, to *time.Time) []string {
 	q := c.r.URL.Query()
-	rq := limen.ReliabilityQuery{Org: q.Get("org"), Subject: q.Get("subject"), Of: q.Get("of")}
 	var fields []string
 	for _, p := range []struct {
 		name string
 		to   *time.Time
-	}{{"from", &rq.From}, {"to", &rq.To}} {
+	}{{"from", from}, {"to", to}} {
 		if s := q.Get(p.name); s != "" {
 			t, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
@@ -499,6 +517,13 @@ func (h *handler) reliability(c *call) error {
 			*p.to = t
 		}
 	}
+	return fields
+}
+
+func (h *handler) reliability(c *call) error {
+	q := c.r.URL.Query()
+	rq := limen.ReliabilityQuery{Org: q.Get("org"), Subject: q.Get("subject"), Of: q.Get("of")}
+	fields := window(c, &rq.From, &rq.To)
 	if err := rq.Validate(); err != nil || len(fields) > 0 {
 		return queryError(err, fields)
 	}
@@ -513,11 +538,16 @@ func (h *handler) reliability(c *call) error {
 	return nil
 }
 
-func (h *handler) profile(c *call) error {
+// scopeQuery is the scope a profile route names in its query.
+func scopeQuery(c *call) limen.Scope {
 	q := c.r.URL.Query()
-	s := limen.Scope{Org: q.Get("org"), Kind: q.Get("kind"), Agent: q.Get("agent")}
-	if s.Org == "" {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
+	return limen.Scope{Org: q.Get("org"), Kind: q.Get("kind"), Agent: q.Get("agent"), Subject: q.Get("subject")}
+}
+
+func (h *handler) profile(c *call) error {
+	s := scopeQuery(c)
+	if err := s.Validate(); err != nil {
+		return err
 	}
 	if err := h.authorize(c, profileResource(s)); err != nil {
 		return err
@@ -546,6 +576,21 @@ func (h *handler) putProfile(c *call) error {
 		return err
 	}
 	writeJSON(c.w, http.StatusOK, saved)
+	return nil
+}
+
+func (h *handler) deleteProfile(c *call) error {
+	s := scopeQuery(c)
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	if err := h.authorize(c, profileResource(s)); err != nil {
+		return err
+	}
+	if err := h.svc.DeleteProfile(c.r.Context(), s); err != nil {
+		return err
+	}
+	noContent(c.w)
 	return nil
 }
 
@@ -699,6 +744,23 @@ func trimSpace(b []byte) []byte {
 		b = b[:len(b)-1]
 	}
 	return b
+}
+
+func (h *handler) report(c *call) error {
+	rq := limen.ReportQuery{Org: c.r.URL.Query().Get("org")}
+	fields := window(c, &rq.From, &rq.To)
+	if err := rq.Validate(); err != nil || len(fields) > 0 {
+		return queryError(err, fields)
+	}
+	if err := h.authorize(c, reportResource(rq.Org)); err != nil {
+		return err
+	}
+	r, err := h.svc.Report(c.r.Context(), rq)
+	if err != nil {
+		return err
+	}
+	writeJSON(c.w, http.StatusOK, r)
+	return nil
 }
 
 func (h *handler) explain(c *call) error {

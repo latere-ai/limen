@@ -59,7 +59,7 @@ func (s *Service) Explain(ctx context.Context, k limen.Key) (limen.Explanation, 
 			Detail: fmt.Sprintf("no case %s for %s in %s", k.ActionID, k.Subject, k.Org)}
 	}
 	approve, uncertainty := s.predict(e.action)
-	th := s.profileLocked(limen.ScopeOf(e.action)).Thresholds
+	th := s.effectiveLocked(limen.ScopeOf(e.action), k.Subject).Thresholds
 	if e.prediction != nil {
 		approve, uncertainty, th = e.prediction.Approve, e.prediction.Uncertainty, e.prediction.Thresholds
 	}
@@ -113,7 +113,7 @@ func (s *Service) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Lear
 	for _, l := range order {
 		g := groups[l]
 		approve, uncertainty := s.predict(g.rep.action)
-		th := s.profileLocked(limen.Scope{Org: q.Org, Kind: g.rep.action.Kind, Agent: q.Agent}).Thresholds
+		th := s.effectiveLocked(limen.Scope{Org: q.Org, Kind: g.rep.action.Kind, Agent: q.Agent}, q.Subject).Thresholds
 		v := th.Verdict(approve)
 		out.Entries = append(out.Entries, limen.LearnedEntry{
 			Label: l, Kind: g.rep.action.Kind, Name: g.rep.action.Name, Approved: g.approved, Denied: g.denied,

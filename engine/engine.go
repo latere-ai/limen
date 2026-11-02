@@ -94,6 +94,9 @@ type Engine struct {
 
 	locksMu sync.Mutex
 	locks   map[subjectKey]*sync.Mutex
+	// reports serializes the reports of one organization, so two first
+	// reads of a closed week keep one entry.
+	reports map[string]*sync.Mutex
 
 	models *cache
 
@@ -130,6 +133,7 @@ func build(o Options) *Engine {
 		inline:  o.Inline,
 		debounc: cmp.Or(o.Debounce, time.Second),
 		locks:   map[subjectKey]*sync.Mutex{},
+		reports: map[string]*sync.Mutex{},
 		models:  newCache(cmp.Or(o.CacheBytes, 1<<30)),
 		stop:    make(chan struct{}),
 	}
@@ -226,7 +230,7 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 			return limen.Prediction{}, err
 		}
 	}
-	prof, err := e.profile(ctx, limen.ScopeOf(a))
+	prof, err := e.effective(ctx, limen.ScopeOf(a), a.Subject)
 	if err != nil {
 		return limen.Prediction{}, err
 	}
@@ -455,7 +459,7 @@ func (e *Engine) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 			rows = append(rows, r)
 		}
 	}
-	prof, err := e.profile(ctx, limen.Scope{Org: q.Org})
+	prof, err := e.effective(ctx, limen.Scope{Org: q.Org}, q.Subject)
 	if err != nil {
 		return limen.Reliability{}, err
 	}
@@ -482,15 +486,48 @@ func (e *Engine) profile(ctx context.Context, s limen.Scope) (limen.Profile, err
 	return limen.DefaultProfile(limen.Scope{Org: s.Org}), nil
 }
 
+// effective is the profile that applies to an action of subject within
+// s: the organization's for s, made stricter by the person's own profile
+// when one is saved (spec 010).
+func (e *Engine) effective(ctx context.Context, s limen.Scope, subject string) (limen.Profile, error) {
+	org, err := e.profile(ctx, s)
+	if err != nil {
+		return limen.Profile{}, err
+	}
+	own, ok, err := e.st.Profile(ctx, limen.Scope{Org: s.Org, Subject: subject})
+	if err != nil || !ok {
+		return org, err
+	}
+	return limen.Stricter(org, own), nil
+}
+
 // Profile implements [limen.Admin].
 func (e *Engine) Profile(ctx context.Context, s limen.Scope) (limen.Profile, error) {
 	if err := ctx.Err(); err != nil {
 		return limen.Profile{}, err
 	}
-	if s.Org == "" {
-		return limen.Profile{}, &limen.Error{Code: limen.CodeInvalidQuery, Fields: []string{"org"}, Detail: "org is empty"}
+	if err := s.Validate(); err != nil {
+		return limen.Profile{}, err
+	}
+	if s.Subject != "" {
+		own, ok, err := e.st.Profile(ctx, s)
+		if err != nil || ok {
+			return own, err
+		}
+		return e.profile(ctx, limen.Scope{Org: s.Org})
 	}
 	return e.profile(ctx, s)
+}
+
+// DeleteProfile implements [limen.Admin].
+func (e *Engine) DeleteProfile(ctx context.Context, s limen.Scope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.Validate(); err != nil {
+		return err
+	}
+	return e.st.DeleteProfile(ctx, s)
 }
 
 // PutProfile implements [limen.Admin].
@@ -531,6 +568,10 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: p, Detail: "forget needs an org and a subject"}
 	}
 	defer e.lock(org, subject)()
+	// Forget is idempotent, so a retry ends a Forget that failed part way.
+	if err := e.st.DeleteProfile(ctx, limen.Scope{Org: org, Subject: subject}); err != nil {
+		return err
+	}
 	e.models.drop(subjectKey{org, subject})
 	return e.st.Forget(ctx, org, subject)
 }
@@ -651,14 +692,14 @@ func decisionOf(r limen.ReplayRecord, withAction bool) limen.Decision {
 }
 
 // copyProfiles copies into dst every profile of the org that a record of
-// the replay can resolve to.
+// the replay can resolve to, the persons' own profiles included.
 func copyProfiles(ctx context.Context, e *Engine, dst store.Store, org string, recs []limen.ReplayRecord) error {
 	seen := map[limen.Scope]bool{}
 	for _, r := range recs {
 		if r.Action.Org != org {
 			continue
 		}
-		for _, c := range limen.ScopeOf(r.Action).Candidates() {
+		for _, c := range append(limen.ScopeOf(r.Action).Candidates(), limen.Scope{Org: org, Subject: r.Action.Subject}) {
 			if seen[c] {
 				continue
 			}

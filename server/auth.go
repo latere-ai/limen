@@ -110,9 +110,10 @@ func JWT(v TokenVerifier) Authenticator {
 // OwnerPolicy is the authorizer of a server with no endpoint configured,
 // latere.ai/x/pkg/authz's shared owner policy read over Limen's resources:
 // a caller acts on the cases, reports and data of its own subject, the
-// subject a Case, Reliability or Subject resource names, and on the
-// profiles of its own context, the org that is its rendered subject; the
-// Admins act on everything, an organization's profiles and every replay
+// subject a Case, Reliability or Subject resource names, on its own
+// profile in an organization, and on the profiles of its own context, the
+// org that is its rendered subject; the Admins act on everything, an
+// organization's profiles, every replay and the report of an organization
 // included, which no subject owns; the anonymous caller and the probe are
 // refused.
 type OwnerPolicy struct {

@@ -285,21 +285,20 @@ paths:
       description: >-
         The cost profile that applies to a scope: the most specific saved
         profile, in the order kind and agent, agent, kind, organization, or
-        the built-in default, which says so in default.
+        the built-in default, which says so in default. With subject, the
+        person's own profile as the person saved it, with subject in its
+        scope; when the person saved none, the organization's profile for
+        the scope of the org alone, with no subject. A prediction applies
+        the meet of the two, which this route does not return.
       x-limen-action: profile.read
       x-limen-resource:
         kind: Profile
         fields: [org, action_kind, agent, subject]
       parameters:
       - $ref: "#/components/parameters/org"
-      - name: kind
-        in: query
-        schema:
-          type: string
-      - name: agent
-        in: query
-        schema:
-          type: string
+      - $ref: "#/components/parameters/kind"
+      - $ref: "#/components/parameters/agent"
+      - $ref: "#/components/parameters/profileSubject"
       responses:
         "200":
           description: The profile with its derived thresholds.
@@ -325,7 +324,10 @@ paths:
       description: >-
         Validate and save a profile for its scope. The thresholds are derived
         from the costs, and a profile that states no certify claim takes the
-        default; values sent for thresholds or default are ignored.
+        default; values sent for thresholds or default are ignored. A
+        profile with subject is that person's own profile in the
+        organization: it has no kind and no agent, and it only ever makes
+        the organization's profile stricter for that person.
       x-limen-action: profile.write
       x-limen-resource:
         kind: Profile
@@ -353,6 +355,94 @@ paths:
           $ref: "#/components/responses/forbidden"
         "422":
           $ref: "#/components/responses/ask_too_costly"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
+    delete:
+      operationId: deleteProfile
+      summary: Remove a saved profile
+      description: >-
+        Remove the profile saved for exactly the scope the query names. The
+        next prediction takes the next scope in the order, and the default
+        after the organization's: an agent's scope goes back to the
+        organization's profile. A recorded prediction keeps its thresholds.
+        Idempotent: a scope with no saved profile is also 204. Asks
+        profile.write, as a save of the same scope does.
+      x-limen-action: profile.write
+      x-limen-resource:
+        kind: Profile
+        fields: [org, action_kind, agent, subject]
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/kind"
+      - $ref: "#/components/parameters/agent"
+      - $ref: "#/components/parameters/profileSubject"
+      responses:
+        "204":
+          description: No profile is saved for the scope.
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
+  /v1/reports:
+    get:
+      operationId: getReport
+      summary: Report an organization by week
+      description: >-
+        The actions of an organization's agents and what the reviews of all
+        its persons said, by week, never one person. from and to are each a
+        Monday at 00:00 UTC, to is after from by at most 13 weeks, and the
+        report has one entry per week. A week is open until 7 days after
+        its end; a review counts in it only when it arrived before. A closed
+        week with fewer than 5 persons is too_few and shows nothing more. A
+        ready week shows its numbers, divided by agent, under the group rule
+        and the answer rule; a field the answer rule removes is absent and
+        listed in withheld. The first read of a closed week keeps it, and
+        every later read returns it unchanged, also after a Forget.
+      x-limen-action: report.read
+      x-limen-resource:
+        kind: Report
+        fields: [org]
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          examples:
+          - "2026-10-05T00:00:00Z"
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
         "429":
           $ref: "#/components/responses/rate_limited"
         "500":
@@ -413,7 +503,9 @@ paths:
       summary: Forget a person
       description: >-
         Delete everything Limen holds about one subject in one organization:
-        cases, answers, and the model learned from them. Idempotent.
+        cases, answers, the model learned from them, and the person's own
+        profile there. The kept weeks of the organization's reports stay,
+        since they hold no record of a person. Idempotent.
       x-limen-action: subject.forget
       x-limen-resource:
         kind: Subject
@@ -596,6 +688,24 @@ components:
       name: subject
       in: query
       required: true
+      schema:
+        type: string
+    kind:
+      name: kind
+      in: query
+      description: The kind of action a profile is scoped to.
+      schema:
+        type: string
+    agent:
+      name: agent
+      in: query
+      description: The agent a profile is scoped to.
+      schema:
+        type: string
+    profileSubject:
+      name: subject
+      in: query
+      description: The person whose own profile in the organization this is. It excludes kind and agent, and in the context of a person it equals org.
       schema:
         type: string
   schemas:

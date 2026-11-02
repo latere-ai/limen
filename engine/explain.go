@@ -112,7 +112,7 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 	if c.Prediction != nil {
 		th = c.Prediction.Thresholds
 	} else {
-		prof, err := e.profile(ctx, limen.ScopeOf(c.Action))
+		prof, err := e.effective(ctx, limen.ScopeOf(c.Action), k.Subject)
 		if err != nil {
 			return limen.Explanation{}, err
 		}
@@ -254,7 +254,7 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 	}
 	for _, l := range order {
 		g := groups[l]
-		prof, err := e.profile(ctx, limen.Scope{Org: q.Org, Kind: g.rep.Action.Kind, Agent: q.Agent})
+		prof, err := e.effective(ctx, limen.Scope{Org: q.Org, Kind: g.rep.Action.Kind, Agent: q.Agent}, q.Subject)
 		if err != nil {
 			return limen.Learned{}, err
 		}

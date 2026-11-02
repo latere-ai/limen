@@ -208,17 +208,26 @@ func (c *Client) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 	return r, c.do(ctx, http.MethodGet, "/v1/reliability", v, "", nil, &r)
 }
 
+// scopeValues is the query that names a scope.
+func scopeValues(s limen.Scope) url.Values {
+	v := url.Values{"org": {s.Org}}
+	for name, x := range map[string]string{"kind": s.Kind, "agent": s.Agent, "subject": s.Subject} {
+		if x != "" {
+			v.Set(name, x)
+		}
+	}
+	return v
+}
+
 // Profile implements [limen.Admin].
 func (c *Client) Profile(ctx context.Context, s limen.Scope) (limen.Profile, error) {
-	v := url.Values{"org": {s.Org}}
-	if s.Kind != "" {
-		v.Set("kind", s.Kind)
-	}
-	if s.Agent != "" {
-		v.Set("agent", s.Agent)
-	}
 	var p limen.Profile
-	return p, c.do(ctx, http.MethodGet, "/v1/profiles", v, "", nil, &p)
+	return p, c.do(ctx, http.MethodGet, "/v1/profiles", scopeValues(s), "", nil, &p)
+}
+
+// DeleteProfile implements [limen.Admin].
+func (c *Client) DeleteProfile(ctx context.Context, s limen.Scope) error {
+	return c.do(ctx, http.MethodDelete, "/v1/profiles", scopeValues(s), "", nil, nil)
 }
 
 // PutProfile implements [limen.Admin].
@@ -294,4 +303,17 @@ func (c *Client) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 func (c *Client) Preview(ctx context.Context, r limen.PreviewRequest) (limen.Preview, error) {
 	var p limen.Preview
 	return p, c.json(ctx, http.MethodPost, "/v1/previews", r, &p)
+}
+
+// Report implements [limen.Reporter].
+func (c *Client) Report(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+	v := url.Values{"org": {q.Org}}
+	if !q.From.IsZero() {
+		v.Set("from", q.From.Format(time.RFC3339Nano))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.Format(time.RFC3339Nano))
+	}
+	var r limen.Report
+	return r, c.do(ctx, http.MethodGet, "/v1/reports", v, "", nil, &r)
 }
