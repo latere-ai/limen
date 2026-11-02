@@ -162,7 +162,7 @@ knows. A dimension that nobody reads or sends is `unknown`.
 | `crosses.remote` | the shell table, and `effect` `external` | `scope.crosses.remote` |
 | `crosses.network` | the shell table, bounded by the hold `egress` | `scope.crosses.network` |
 | `crosses.organization` | nothing | `scope.crosses.organization` |
-| `crosses.public` | the shell table of publishing commands | `scope.crosses.public` |
+| `crosses.public` | the shell table of publishing commands, and `environment.repositories` for a `git push` | `scope.crosses.public` |
 | `target` | the refspec of `git push` | `target.class` |
 | `contact` | the stored targets of earlier approved cases | `scope.contact` |
 
@@ -195,8 +195,8 @@ each dimension, as with the classes of `features/1`.
 | class `vcs_local` | `reversible` | |
 | `git restore`, `git checkout --`, `git stash drop`, `git stash clear` | `irreversible` | |
 | `git pull`, `git fetch`, `git clone` | `reversible` | `remote` |
-| `git push` | `recoverable` | `remote` |
-| `git push` with a force or delete flag (the destructive patterns of `features/1`) | `irreversible` | `remote` |
+| `git push` | `recoverable` | `remote`, and `public` from `environment.repositories` |
+| `git push` with a force or delete flag (the destructive patterns of `features/1`) | `irreversible` | `remote`, and `public` from `environment.repositories` |
 | `gh pr merge` | `recoverable` | `remote`, and `target` `primary` |
 | `gh repo create --public`, `gh repo edit --visibility public` | `irreversible` | `remote`, `public` |
 | `gh repo delete`, `gh release delete` | `irreversible` | `remote` |
@@ -214,6 +214,9 @@ each dimension, as with the classes of `features/1`.
 
 The outside-workspace rule of `features/1` sets `crosses.machine` to
 `yes`. If no segment sets it and no segment is unknown, it is `no`.
+
+`crosses.public` of a `git push` is `yes` if `environment.repositories`
+is `public`, `no` if it is `private`, and `unknown` in other cases.
 
 `target` of a `git push` comes from its refspec. A destination named
 `main`, `master`, `trunk`, `production`, `prod`, `stable`, `release`, or
@@ -243,6 +246,7 @@ an older Limen.
 | `scope.contact` | string | `first` or `repeat` |
 | `target.class` | string | a value of `target` |
 | `environment.holds` | array of string | the holds of the environment |
+| `environment.repositories` | string | the visibility of the repositories that the session pushes to: `private`, `public`, or `mixed` |
 
 The scope is a typed field, not an attribute. An attribute is an open
 fact that the featurizer hashes. The scope is a closed vocabulary that
