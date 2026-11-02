@@ -55,19 +55,21 @@ func TestReopen(t *testing.T) {
 
 // The engine over a file store passes the service contract.
 func TestEngineConformance(t *testing.T) {
+	over := func(t *testing.T, now func() time.Time) limen.Service {
+		s, err := file.OpenWith(t.TempDir(), file.Options{NoSync: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := engine.New(engine.Options{Store: s, Inline: 1, Clock: now})
+		t.Cleanup(func() {
+			_ = e.Close()
+			_ = s.Close()
+		})
+		return e
+	}
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) limen.Service {
-			s, err := file.OpenWith(t.TempDir(), file.Options{NoSync: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			e := engine.New(engine.Options{Store: s, Inline: 1})
-			t.Cleanup(func() {
-				_ = e.Close()
-				_ = s.Close()
-			})
-			return e
-		},
+		New:     func(t *testing.T) limen.Service { return over(t, nil) },
+		Clocked: over,
 	})
 }
 

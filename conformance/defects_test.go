@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/conformance"
@@ -19,21 +20,26 @@ import (
 )
 
 // faulty is the stub with a defect: each hook that is set replaces the
-// stub's method of the same name, and can call the stub.
+// stub's method of the same name, and can call the stub. The stub's clock
+// is now, or at while a hook sets it.
 type faulty struct {
 	*stub.Service
-	predict     func(context.Context, limen.Action) (limen.Prediction, error)
-	record      func(context.Context, limen.Decision) error
-	answer      func(context.Context, limen.Answer) error
-	cases       func(context.Context, limen.CaseQuery) (limen.Page, error)
-	reliability func(context.Context, limen.ReliabilityQuery) (limen.Reliability, error)
-	profile     func(context.Context, limen.Scope) (limen.Profile, error)
-	putProfile  func(context.Context, limen.Profile) (limen.Profile, error)
-	replay      func(context.Context, iter.Seq2[limen.ReplayRecord, error], limen.ReplayOptions) (limen.ReplayReport, error)
-	forget      func(ctx context.Context, org, subject string) error
-	explain     func(context.Context, limen.Key) (limen.Explanation, error)
-	learned     func(context.Context, limen.LearnedQuery) (limen.Learned, error)
-	preview     func(context.Context, limen.PreviewRequest) (limen.Preview, error)
+	now           func() time.Time
+	at            time.Time
+	deleteProfile func(context.Context, limen.Scope) error
+	report        func(context.Context, limen.ReportQuery) (limen.Report, error)
+	predict       func(context.Context, limen.Action) (limen.Prediction, error)
+	record        func(context.Context, limen.Decision) error
+	answer        func(context.Context, limen.Answer) error
+	cases         func(context.Context, limen.CaseQuery) (limen.Page, error)
+	reliability   func(context.Context, limen.ReliabilityQuery) (limen.Reliability, error)
+	profile       func(context.Context, limen.Scope) (limen.Profile, error)
+	putProfile    func(context.Context, limen.Profile) (limen.Profile, error)
+	replay        func(context.Context, iter.Seq2[limen.ReplayRecord, error], limen.ReplayOptions) (limen.ReplayReport, error)
+	forget        func(ctx context.Context, org, subject string) error
+	explain       func(context.Context, limen.Key) (limen.Explanation, error)
+	learned       func(context.Context, limen.LearnedQuery) (limen.Learned, error)
+	preview       func(context.Context, limen.PreviewRequest) (limen.Preview, error)
 }
 
 func (f *faulty) Predict(ctx context.Context, a limen.Action) (limen.Prediction, error) {
@@ -83,6 +89,48 @@ func (f *faulty) PutProfile(ctx context.Context, p limen.Profile) (limen.Profile
 		return f.putProfile(ctx, p)
 	}
 	return f.Service.PutProfile(ctx, p)
+}
+
+func (f *faulty) DeleteProfile(ctx context.Context, sc limen.Scope) error {
+	if f.deleteProfile != nil {
+		return f.deleteProfile(ctx, sc)
+	}
+	return f.Service.DeleteProfile(ctx, sc)
+}
+
+func (f *faulty) Report(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+	if f.report != nil {
+		return f.report(ctx, q)
+	}
+	return f.Service.Report(ctx, q)
+}
+
+// clock is the stub's clock: at while a hook sets it, and now otherwise.
+func (f *faulty) clock() time.Time {
+	if !f.at.IsZero() {
+		return f.at
+	}
+	return f.now()
+}
+
+// eachWeek applies edit to every week of a report the stub returns.
+func (f *faulty) eachWeek(edit func(w *limen.WeekReport)) func(context.Context, limen.ReportQuery) (limen.Report, error) {
+	return func(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+		r, err := f.Service.Report(ctx, q)
+		for i := range r.Weeks {
+			edit(&r.Weeks[i])
+		}
+		return r, err
+	}
+}
+
+// startOfWeek is the Monday at 00:00 UTC at or before t.
+func startOfWeek(t time.Time) time.Time {
+	d := t.UTC().Truncate(24 * time.Hour)
+	for d.Weekday() != time.Monday {
+		d = d.Add(-24 * time.Hour)
+	}
+	return d
 }
 
 func (f *faulty) Replay(ctx context.Context, rs iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
@@ -404,20 +452,181 @@ var defects = []defect{
 			return p, unless(err, limen.CodeAskTooCostly)
 		}
 	}},
+	{"ProfileRemoved", "a removal removes nothing", func(f *faulty) {
+		f.deleteProfile = func(_ context.Context, sc limen.Scope) error { return sc.Validate() }
+	}},
+	{"ProfileRemovalErrors", "a removal of a person's scope with a kind or an agent removes the person's profile", func(f *faulty) {
+		f.deleteProfile = func(ctx context.Context, sc limen.Scope) error {
+			if sc.Subject != "" {
+				sc.Kind, sc.Agent = "", ""
+			}
+			return f.Service.DeleteProfile(ctx, sc)
+		}
+	}},
+	{"PersonProfileIsTheMeet", "a person's own profile is saved and never applied", func(f *faulty) {
+		f.putProfile = func(ctx context.Context, p limen.Profile) (limen.Profile, error) {
+			if p.Subject == "" || p.Validate() != nil {
+				return f.Service.PutProfile(ctx, p)
+			}
+			p.Thresholds, _ = p.Costs.Thresholds()
+			if p.Certify == (limen.Certify{}) {
+				p.Certify = limen.DefaultCertify
+			}
+			return p, nil
+		}
+	}},
+	{"PersonProfileNeverLoosens", "a person's own profile replaces the organization's", func(f *faulty) {
+		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+			p, err := f.Service.Predict(ctx, a)
+			if own, oerr := f.Service.Profile(ctx, limen.Scope{Org: a.Org, Subject: a.Subject}); err == nil && oerr == nil && own.Subject != "" {
+				p.Thresholds, p.AuditRate, p.Profile = own.Thresholds, own.AuditRate, own.Scope
+			}
+			return p, err
+		}
+	}},
+	{"PersonProfileRead", "a read with a subject returns the organization's profile", func(f *faulty) {
+		f.profile = func(ctx context.Context, sc limen.Scope) (limen.Profile, error) {
+			if sc.Validate() == nil {
+				sc.Subject = ""
+			}
+			return f.Service.Profile(ctx, sc)
+		}
+	}},
+	{"PersonProfileErrors", "a person's own profile with a kind or an agent is saved without them", func(f *faulty) {
+		f.putProfile = func(ctx context.Context, p limen.Profile) (limen.Profile, error) {
+			if p.Subject != "" {
+				p.Kind, p.Agent = "", ""
+			}
+			return f.Service.PutProfile(ctx, p)
+		}
+	}},
+	{"ForgetRemovesThePersonProfile", "Forget keeps the person's own profile", func(f *faulty) {
+		f.forget = func(ctx context.Context, org, subject string) error {
+			own, _ := f.Service.Profile(ctx, limen.Scope{Org: org, Subject: subject})
+			if err := f.Service.Forget(ctx, org, subject); err != nil {
+				return err
+			}
+			if own.Subject != "" {
+				_, err := f.Service.PutProfile(ctx, own)
+				return err
+			}
+			return nil
+		}
+	}},
+	{"ReportWeeks", "a report accepts bounds that are not on a Monday", func(f *faulty) {
+		f.report = func(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+			if !q.From.IsZero() && !q.To.IsZero() {
+				q.From, q.To = startOfWeek(q.From), startOfWeek(q.To)
+				if !q.To.After(q.From) {
+					q.To = q.From.Add(limen.ReportWeek)
+				}
+				if q.To.Sub(q.From) > limen.ReportMaxWeeks*limen.ReportWeek {
+					q.To = q.From.Add(limen.ReportMaxWeeks * limen.ReportWeek)
+				}
+			}
+			return f.Service.Report(ctx, q)
+		}
+	}},
+	{"ReportNeedsAGroup", "a week with four persons shows its numbers", func(f *faulty) {
+		f.report = f.eachWeek(func(w *limen.WeekReport) {
+			if w.State == limen.WeekTooFew {
+				w.State, w.Total = limen.WeekReady, &limen.ReportCell{Subjects: 4, Withheld: []string{}}
+			}
+		})
+	}},
+	{"ReportPoolsTheEstimate", "the error rate of a cell is the mean of its persons' rates", func(f *faulty) {
+		var subjects []string
+		f.record = func(ctx context.Context, d limen.Decision) error {
+			if !slices.Contains(subjects, d.Subject) {
+				subjects = append(subjects, d.Subject)
+			}
+			return f.Service.Record(ctx, d)
+		}
+		f.report = func(ctx context.Context, q limen.ReportQuery) (limen.Report, error) {
+			r, err := f.Service.Report(ctx, q)
+			for _, w := range r.Weeks {
+				if w.Total == nil || w.Total.Applied.FalseAllow == nil {
+					continue
+				}
+				sum, n := 0.0, 0
+				for _, s := range subjects {
+					rel, err := f.Service.Reliability(ctx, limen.ReliabilityQuery{Org: q.Org, Subject: s, Of: limen.OfApplied, From: w.From, To: w.To})
+					if err == nil && rel.FalseAllow.Value != nil {
+						sum += *rel.FalseAllow.Value
+						n++
+					}
+				}
+				if n > 0 {
+					mean := sum / float64(n)
+					w.Total.Applied.FalseAllow.Value = &mean
+				}
+			}
+			return r, err
+		}
+	}},
+	{"ReportAnswerRule", "a cell lists no field as withheld", func(f *faulty) {
+		f.report = f.eachWeek(func(w *limen.WeekReport) {
+			if w.Total != nil {
+				w.Total.Withheld = []string{}
+			}
+		})
+	}},
+	{"ReportMergesSmallAgents", "the other agents are left out", func(f *faulty) {
+		f.report = f.eachWeek(func(w *limen.WeekReport) { w.Other = nil })
+	}},
+	{"ReportCountsReviewsBeforeTheClose", "an answer is stamped with the time of its decision", func(f *faulty) {
+		decided := map[limen.Key]time.Time{}
+		f.record = func(ctx context.Context, d limen.Decision) error {
+			decided[d.Key] = f.now()
+			return f.Service.Record(ctx, d)
+		}
+		f.answer = func(ctx context.Context, a limen.Answer) error {
+			f.at = decided[a.Key]
+			defer func() { f.at = time.Time{} }()
+			return f.Service.Answer(ctx, a)
+		}
+	}},
+	{"ReportKeepsAClosedWeek", "a Forget changes a kept week", func(f *faulty) {
+		forgot := false
+		f.forget = func(ctx context.Context, org, subject string) error {
+			forgot = true
+			return f.Service.Forget(ctx, org, subject)
+		}
+		f.report = f.eachWeek(func(w *limen.WeekReport) {
+			if forgot && w.Total != nil {
+				w.Total.Subjects--
+			}
+		})
+	}},
+	{"ReportNamesNoPerson", "a cell names its agent by a person who ran it", func(f *faulty) {
+		var who string
+		f.record = func(ctx context.Context, d limen.Decision) error {
+			who = d.Subject
+			return f.Service.Record(ctx, d)
+		}
+		f.report = f.eachWeek(func(w *limen.WeekReport) {
+			for i := range w.Agents {
+				w.Agents[i].Agent = who
+			}
+		})
+	}},
 }
 
 // target is the suite's target for a stub seeded with d.
 func (d defect) target() conformance.Target {
-	seeded := func(o stub.Options) limen.Service {
-		f := &faulty{Service: stub.New(o)}
+	seeded := func(o stub.Options, now func() time.Time) limen.Service {
+		f := &faulty{now: now}
+		o.Clock = f.clock
+		f.Service = stub.New(o)
 		d.seed(f)
 		return f
 	}
 	return conformance.Target{
-		New: func(*testing.T) limen.Service { return seeded(stub.Options{}) },
+		New: func(*testing.T) limen.Service { return seeded(stub.Options{}, time.Now) },
 		Steered: func(_ *testing.T, predict func(limen.Action) (float64, float64)) limen.Service {
-			return seeded(stub.Options{Predict: predict})
+			return seeded(stub.Options{Predict: predict}, time.Now)
 		},
+		Clocked: func(_ *testing.T, now func() time.Time) limen.Service { return seeded(stub.Options{}, now) },
 	}
 }
 

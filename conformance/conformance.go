@@ -16,7 +16,10 @@
 //
 // Every case builds its own actions with keys unique to the case, and
 // reads reliability over a window around the current time, so a service
-// stamps records with its own clock.
+// stamps records with its own clock. The cases of the report of an
+// organization need weeks that have closed; they run against
+// Target.Clocked, which returns a service whose clock the case sets, and
+// skip with that reason when it is nil.
 package conformance
 
 import (
@@ -40,6 +43,9 @@ type Target struct {
 	// Steered, when not nil, returns a fresh, empty service whose
 	// predictions come from predict.
 	Steered func(t *testing.T, predict func(limen.Action) (approve, uncertainty float64)) limen.Service
+	// Clocked, when not nil, returns a fresh, empty service that stamps
+	// every record with the time now returns, a clock the case sets.
+	Clocked func(t *testing.T, now func() time.Time) limen.Service
 }
 
 type rule struct {
@@ -78,6 +84,21 @@ var rules = []rule{
 	{"LearnedEntries", learnedEntries},
 	{"Previews", previews},
 	{"PreviewErrors", previewErrors},
+	{"ProfileRemoved", profileRemoved},
+	{"ProfileRemovalErrors", profileRemovalErrors},
+	{"PersonProfileIsTheMeet", personProfileIsTheMeet},
+	{"PersonProfileNeverLoosens", personProfileNeverLoosens},
+	{"PersonProfileRead", personProfileRead},
+	{"PersonProfileErrors", personProfileErrors},
+	{"ForgetRemovesThePersonProfile", forgetRemovesThePersonProfile},
+	{"ReportWeeks", reportWeeks},
+	{"ReportNeedsAGroup", reportNeedsAGroup},
+	{"ReportPoolsTheEstimate", reportPoolsTheEstimate},
+	{"ReportAnswerRule", reportAnswerRule},
+	{"ReportMergesSmallAgents", reportMergesSmallAgents},
+	{"ReportCountsReviewsBeforeTheClose", reportCountsReviewsBeforeTheClose},
+	{"ReportKeepsAClosedWeek", reportKeepsAClosedWeek},
+	{"ReportNamesNoPerson", reportNamesNoPerson},
 }
 
 // Run runs every rule against the target.

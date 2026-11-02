@@ -5,6 +5,7 @@ package conformance_test
 
 import (
 	"testing"
+	"time"
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/conformance"
@@ -18,6 +19,7 @@ func TestRunAgainstTheStub(t *testing.T) {
 		Steered: func(_ *testing.T, predict func(limen.Action) (float64, float64)) limen.Service {
 			return stub.New(stub.Options{Predict: predict})
 		},
+		Clocked: func(_ *testing.T, now func() time.Time) limen.Service { return stub.New(stub.Options{Clock: now}) },
 	})
 }
 

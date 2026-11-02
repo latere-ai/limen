@@ -77,8 +77,9 @@ func TestWeekNeedsAGroup(t *testing.T) {
 		t.Fatalf("four persons: %+v", w)
 	}
 	b, _ := json.Marshal(w)
-	if strings.Contains(string(b), "subjects") || strings.Contains(string(b), "4") {
-		t.Errorf("a too_few week tells how many took part: %s", b)
+	var fields map[string]any
+	if err := json.Unmarshal(b, &fields); err != nil || len(fields) != 3 {
+		t.Errorf("a too_few week shows more than its bounds: %s", b)
 	}
 	cases = append(cases, kase(who(4), "", limen.Block, 0, ""), kase(who(4), "", limen.Flag, 1, ""))
 	w = Week(monday, cases)

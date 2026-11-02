@@ -30,6 +30,11 @@ func TestConformance(t *testing.T) {
 			t.Cleanup(func() { e.Close() })
 			return e
 		},
+		Clocked: func(t *testing.T, now func() time.Time) limen.Service {
+			e := engine.New(engine.Options{Debounce: time.Millisecond, Clock: now})
+			t.Cleanup(func() { e.Close() })
+			return e
+		},
 	})
 }
 
@@ -37,6 +42,11 @@ func TestConformanceInline(t *testing.T) {
 	conformance.Run(t, conformance.Target{
 		New: func(t *testing.T) limen.Service {
 			e := engine.New(engine.Options{Inline: 1})
+			t.Cleanup(func() { e.Close() })
+			return e
+		},
+		Clocked: func(t *testing.T, now func() time.Time) limen.Service {
+			e := engine.New(engine.Options{Inline: 1, Clock: now})
 			t.Cleanup(func() { e.Close() })
 			return e
 		},

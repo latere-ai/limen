@@ -82,6 +82,10 @@ var listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", 
 // endpoint, instrumented as every outbound call of the family is.
 var httpClient = otel.HTTPClient
 
+// clock stamps the records the engine keeps; nil is the wall clock. A test
+// sets it to run the conformance cases that need a closed week.
+var clock func() time.Time
+
 func run(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	out, errOut := errwriter.New(stdout), errwriter.New(stderr)
 	fs := flag.NewFlagSet("limend", flag.ContinueOnError)
@@ -144,7 +148,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		}
 	}
 
-	eng := engine.New(engine.Options{Store: st})
+	eng := engine.New(engine.Options{Store: st, Clock: clock})
 	// Close stops the fitters and cannot fail.
 	defer func() { _ = eng.Close() }()
 	o := acc.options

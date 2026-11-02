@@ -39,12 +39,14 @@ func serve(t *testing.T, svc limen.Service) *client.Client {
 
 // The client, the server and the engine together hold the contract.
 func TestConformanceEngine(t *testing.T) {
+	over := func(t *testing.T, now func() time.Time) limen.Service {
+		e := engine.New(engine.Options{Inline: 1, Clock: now})
+		t.Cleanup(func() { e.Close() })
+		return serve(t, e)
+	}
 	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) limen.Service {
-			e := engine.New(engine.Options{Inline: 1})
-			t.Cleanup(func() { e.Close() })
-			return serve(t, e)
-		},
+		New:     func(t *testing.T) limen.Service { return over(t, nil) },
+		Clocked: over,
 	})
 }
 
@@ -54,6 +56,9 @@ func TestConformanceStub(t *testing.T) {
 		New: func(t *testing.T) limen.Service { return serve(t, stub.New(stub.Options{})) },
 		Steered: func(t *testing.T, predict func(limen.Action) (float64, float64)) limen.Service {
 			return serve(t, stub.New(stub.Options{Predict: predict}))
+		},
+		Clocked: func(t *testing.T, now func() time.Time) limen.Service {
+			return serve(t, stub.New(stub.Options{Clock: now}))
 		},
 	})
 }

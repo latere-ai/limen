@@ -221,20 +221,26 @@ func TestServerStops(t *testing.T) {
 // The client against a running limend passes the conformance suite
 // (spec 001, criterion 5; spec 003, criterion 7): each case starts limend
 // on a fresh ledger directory, as a person runs it, and stops it after.
+// A case that needs a closed week gives limend its clock.
 func TestConformance(t *testing.T) {
-	conformance.Run(t, conformance.Target{
-		New: func(t *testing.T) limen.Service {
-			addr, stop := start(t, t.TempDir())
-			t.Cleanup(func() {
-				if code, log := stop(); code != exitOK {
-					t.Errorf("stop: exit %d: %s", code, log)
-				}
-			})
-			c, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
-			if err != nil {
-				t.Fatal(err)
+	running := func(t *testing.T, now func() time.Time) limen.Service {
+		was := clock
+		t.Cleanup(func() { clock = was })
+		clock = now
+		addr, stop := start(t, t.TempDir())
+		t.Cleanup(func() {
+			if code, log := stop(); code != exitOK {
+				t.Errorf("stop: exit %d: %s", code, log)
 			}
-			return c
-		},
+		})
+		c, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	conformance.Run(t, conformance.Target{
+		New:     func(t *testing.T) limen.Service { return running(t, nil) },
+		Clocked: running,
 	})
 }
