@@ -1,6 +1,6 @@
 # Principles
 
-This page gives fourteen rules that each implementation of Limen obeys.
+This page gives fifteen rules that each implementation of Limen obeys.
 For each rule, the page gives what is true, the reason, and the check.
 The conformance suite in `conformance/` checks most rules. This suite runs
 against each implementation of the contract. The tests of the shared
@@ -299,3 +299,26 @@ a person in an organization. No case, no action that waits for a review,
 no reliability report, and no cost profile for that person remains in
 that organization. It also checks the group rule and the answer rule of
 the report, and that a forget does not change a kept week.
+
+## 15. One approval is not a pattern
+
+Limen suggests `allow` for an action only if the person approved actions
+with the same label 3 times or more, in 2 sessions or more. These are
+the default numbers. If the approval probability is above the upper
+threshold and the approvals are too few, Limen suggests `ask`. This rule
+applies after the model and the thresholds. It never changes a `block`
+or an `ask`. It is temporary, until a design for consent replaces it.
+
+**Why.** With few answers, the approval probability can already be above
+the upper threshold. One approval of `publish` gives 0.73. With the
+upper threshold 0.65, the next `publish` would run without a person
+after one answer. Approvals from one session can come from one task only.
+A person who approved an action in two sessions or more approved a type
+of action, not one task.
+
+**Checked by.** The conformance suite checks that an `allow` becomes
+`ask` until the approvals meet the minimum, and that the prediction gives
+the counts. It also checks that a denial never counts and that a `block`
+does not change. It checks that an action without a session counts as a
+session of its own. The tests of the engine check the same for its predictions,
+explanations, entries, and replays.

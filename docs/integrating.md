@@ -56,7 +56,7 @@ runs. The [API](api.md) page and the
 | `org` | The organization. Limen uses the cost profile of this organization. |
 | `subject` | The person for whom the action runs. Write the issuer of the token and its `sub`, with a pipe between them: `https://issuer.example\|usr_42`. Limen keeps one model for each person. If an agent acts for a person, write the person, not the agent. |
 | `action_id` | Your identifier for the action. It must be unique for the person in the organization. An example is a session identifier and a tool call identifier together. |
-| `actor` | The proposer of the action: `kind` (`agent`, `service`, or `person`), `id`, and `session`. |
+| `actor` | The proposer of the action: `kind` (`agent`, `service`, or `person`), `id`, and `session`. Send `session` for each action of an agent ([Sessions](#sessions)). |
 | `kind`, `name` | The domain and the operation. Examples: `tool` and `bash`, `egress` and `https`, `repo` and `ref.update`, `spend` and `charge`. A cost profile can apply to one kind. |
 | `effect` | `none`, `read`, `write`, or `external`. Use `write` for a change inside the system that runs the action. Use `external` for an effect outside that system: the network, a sent message, a transfer of money. If you are not sure, use `external`. |
 | `reversible` | Whether somebody can undo the action. Set it only if you know. |
@@ -73,6 +73,23 @@ If you request a prediction for the same action again, Limen returns the
 first prediction. If you request a prediction for a different action with
 an `action_id` that you used before, Limen refuses it with
 `action_conflict`. Give each action its own identifier.
+
+### Sessions
+
+Send the session of the agent in `actor.session`. Limen uses it for the
+[answer minimum](theory.md#the-answer-minimum). By default, Limen
+suggests `allow` for an action only after 3 approvals or more of
+actions with the same label. These approvals must come from 2 sessions
+or more.
+
+- Use one value for all the actions of one session. Use a different
+  value for each session.
+- If an action has no `actor.session`, Limen counts it as a session of
+  its own. Then 3 approvals of actions without a session meet the
+  minimum. Send the session if you have it.
+- Limen does not read a session from `action_id`. For example, Topos
+  sends the ID of its session in `actor.session`, and it uses
+  `<session>/<tool_use_id>` as `action_id`.
 
 ### Examples from four domains
 
@@ -189,7 +206,19 @@ probability out of the ask range. Answers that disagree keep it in the
 ask range. For example, a person approves `publish` two times and does
 not deny it. If the upper threshold is 0.90, Limen suggests `ask` with
 the approval probability 0.80 and the kind `split`. More approvals move
-the approval probability above 0.90, and then Limen suggests `allow`.
+the approval probability above 0.90. Then Limen suggests `allow` if the
+approvals come from 2 sessions or more.
+
+An `ask` can also come from the answer minimum. Then the approval
+probability is above the upper threshold, but the person has too few
+approvals of actions with this label. The prediction has `minimum`, with
+the counts, and its `reason` gives them. The `ask_kind` comes from the
+evidence ratio, as for each `ask`.
+
+For example, one approval of `publish` gives the approval probability
+0.73 and the evidence ratio 0.54. If the upper threshold is 0.65, Limen
+suggests `ask` with the kind `split`. Before the answer minimum, Limen
+suggested `allow`.
 
 The kind `split` does not tell that the answers disagree. To tell the
 person that their answers disagree, examine the answers:
@@ -221,6 +250,9 @@ v, prob := verdict.Decide(suggested, ceiling, p.AuditRate, rand.Float64())
   measure your rules.
 - Record the decision as usual, with the review probability that
   `verdict.Decide` returns.
+- An `ask` from the answer minimum with the kind `unsure` also goes to
+  your rules. Your rules decided such an action before you connected
+  Limen.
 - If Limen fails, the `FailClosed` fallback is an `unsure` ask. Then
   your rules decide, as they did before you connected Limen. The
   fallback has an audit rate of zero, so no random selection occurs. The
@@ -524,7 +556,8 @@ topos run --mode auto   "Fix the failing test."  # Then: Limen decides under the
 For a new person, Limen suggests `ask`. It suggests `allow` or `block`
 only after the answers of the person support it. Usually, auto mode asks
 about a type of call until it has approximately 30 or more answers for
-that type.
+that type. Limen suggests `allow` only after 3 approvals or more of the
+same type of call, in 2 sessions or more.
 
 #### Hosted Topos
 

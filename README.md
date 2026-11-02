@@ -140,6 +140,12 @@ These rules apply to each implementation of Limen:
   formula calculates the thresholds from these costs. Nobody adjusts the
   thresholds by hand. If Limen has no answers from a person, it suggests
   `ask`.
+- **One approval is not a pattern.** Limen suggests `allow` for an action
+  only if the person approved actions with the same label 3 times or
+  more, in 2 sessions or more. These are the default numbers. Until
+  then, Limen suggests `ask`, also if the approval probability is above
+  the upper threshold. This rule is temporary, until a design for
+  consent replaces it.
 - **Your rules have priority.** The ceiling from your rules is a limit for
   the suggested verdict. If Limen fails or does not answer in time, the
   suggested verdict is `ask`. Nothing allows the action because Limen

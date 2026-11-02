@@ -84,7 +84,7 @@ the action runs.
 | Field | Required | Meaning |
 |---|---|---|
 | `org`, `subject`, `action_id` | yes | The key. |
-| `actor` | no | The agent that proposed the action: `kind`, `id`, and `session`. If `actor` is present, `kind` is necessary. |
+| `actor` | no | The agent that proposed the action: `kind`, `id`, and `session`. If `actor` is present, `kind` is necessary. The answer minimum counts sessions with `session`. |
 | `kind`, `name` | yes | The domain of the action and the operation. |
 | `effect` | yes | `none`, `read`, `write`, or `external`. |
 | `reversible` | no | `true` if the action can be undone. |
@@ -116,16 +116,32 @@ The response is the prediction:
 
 | Field | Meaning |
 |---|---|
-| `verdict` | The suggested verdict: `allow`, `ask`, or `block`. It is never `flag`. Only the decision point applies `flag`. |
+| `verdict` | The suggested verdict: `allow`, `ask`, or `block`. It is never `flag`. Only the decision point applies `flag`. If the answer minimum holds an `allow`, the verdict is `ask`, and the prediction has `minimum`. |
 | `approve` | The approval probability. |
 | `uncertainty` | The uncertainty of the approval probability. An action that is not similar to an earlier action has a high value. |
 | `evidence_ratio` | The evidence ratio of the prediction, from 0 to 1. A value near 0 tells that the person has few answers about actions like this one. |
 | `ask_kind` | Only for an `ask`: `unsure` if `evidence_ratio` is less than 0.5, `split` if it is 0.5 or more. A decision point can let its rules decide an `unsure` ask and keep a `split` ask for the person. [Two kinds of `ask`](integrating.md#two-kinds-of-ask) gives the meaning of each kind. |
-| `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow`. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
+| `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow` if the answer minimum permits it. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
 | `profile` | The scope of the cost profile that applies. |
 | `audit_rate` | The audit rate of the cost profile. |
 | `source` | The model that made the prediction: `learned/<version>`. |
 | `reason` | One sentence for the record of the person. Do not show it to an agent. |
+| `minimum` | Only if the answer minimum changed the suggested verdict from `allow` to `ask`. `allows` is the number of actions with the same label whose most recent answer is an approval. `sessions` is the number of different sessions of these actions. `min_allows` and `min_sessions` are the minimums of the server. [Theory](theory.md#the-answer-minimum) gives the rule. |
+
+An `ask` from the answer minimum, after one approval of `publish`, under
+the upper threshold 0.65:
+
+```json
+{
+  "verdict": "ask",
+  "approve": 0.73,
+  "evidence_ratio": 0.54,
+  "ask_kind": "split",
+  "thresholds": {"allow_above": 0.65, "block_below": 0.35},
+  "minimum": {"allows": 1, "sessions": 1, "min_allows": 3, "min_sessions": 2},
+  "reason": "The approval probability is 0.73, above the allow threshold (0.65). The person approved actions with this label 1 time, in 1 session. Limen needs 3 approvals or more, in 2 sessions or more, before it suggests allow. Limen suggests ask."
+}
+```
 
 Errors: `invalid_action`, `action_conflict`, `body_too_large`, and the
 common errors. If the status is `503`, the decision point must hold the
@@ -380,8 +396,8 @@ The body is newline-delimited JSON
 ```
 
 Limen predicts the records in the order of `at`. It predicts each record
-before it learns the answer of that record. Then it reports what it would
-suggest:
+before it learns the answer of that record, with the answer minimum.
+Then it reports what it would suggest:
 
 ```json
 {
@@ -453,7 +469,9 @@ model.
 |---|---|
 | `model` | The model that gives the explanation. This is the current model of the person. `answers` is the number of answers of the person that the model learned from. |
 | `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
-| `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. |
+| `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. The answer minimum applies to `verdict`, with the approvals of the person now. |
+| `minimum` | Only if the answer minimum changed `verdict` from `allow` to `ask`. The same as in a prediction. |
+| `reason` | One sentence for the person that tells why `verdict` is what it is, as in a prediction. An older server does not send it. |
 | `thresholds` | The thresholds of the recorded prediction. If there is no recorded prediction, the thresholds of the cost profile that applies now. |
 | `mean` | The value that the model calculates before it changes it into a probability. A positive value is on the side of approval. |
 | `parts` | The parts of `mean`. Their sum is `mean`. `action` is what the model learned about this type of action. `recent` is the recent tolerance of the person, from all recent answers. `interaction` is a small part between the two. |
@@ -500,7 +518,8 @@ the most answers is first.
 | Field | Meaning |
 |---|---|
 | `approved`, `denied` | The number of cases with this label that the person approved and denied. The last answer of each case counts. |
-| `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. |
+| `approve`, `uncertainty`, `verdict` | The prediction of the model now, for the most recent case with this label. The answer minimum applies to `verdict`. |
+| `minimum` | Only if the answer minimum changed `verdict` from `allow` to `ask`. The same as in a prediction. |
 | `evidence_ratio`, `ask_kind` | The same as in an explanation, for this prediction. If `ask_kind` is `split` and `approved` and `denied` are both more than 0, the answers of the person about this label disagree. |
 | `thresholds` | The thresholds of the cost profile that applies to the kind of action and to `agent`. |
 | `recent` | The recent tolerance of the person (`parts.recent` of an explanation) at not more than 20 decisions. The decisions have equal intervals between them. `t` is the number of the decision, and `at` is the time when it arrived. |
@@ -514,7 +533,7 @@ Errors: `invalid_query` and the common errors.
 A preview shows what a different cost profile would do with the recorded
 predictions of one person in a period of time. Limen applies the
 thresholds of the costs to each recorded prediction. It does not
-calculate the model again.
+calculate the model again, and it does not apply the answer minimum.
 
 ```json
 {

@@ -11,8 +11,46 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- A prediction, an explanation, and an entry of `GET /v1/learned` have
+  `minimum` if the answer minimum changed `allow` to `ask`. It gives
+  `allows`, `sessions`, `min_allows`, and `min_sessions`. An explanation
+  also has `reason`, one sentence for the person. In Go, they are
+  `Minimum` and `Explanation.Reason`, with `MinAllows`, `MinSessions`,
+  `SessionOf`, `Tally`, and `Hold`.
+- `LIMEN_MIN_ALLOWS` and `LIMEN_MIN_SESSIONS` set the answer minimum of
+  `limend`. The defaults are 3 and 2. `0` turns a part off, for tests,
+  and `limend` writes a warning. In Go, they are `MinAllows` and
+  `MinSessions` in `engine.Options` and `stub.Options`. A negative value
+  turns a part off.
+- The conformance case `AnswerMinimum`.
+
 ### Changed
 
+- A safety rule, the answer minimum. Limen suggests `allow` for an action
+  only if the person approved actions with the same label 3 times or
+  more, in 2 sessions or more. Until then, an `allow` from the thresholds
+  becomes `ask`. The rule is temporary, until a design for consent
+  replaces it.
+  - Limen counts each action whose most recent answer is an approval. A
+    denial never counts.
+  - Limen counts the sessions by `actor.session`. An action without a
+    session is a session of its own.
+  - The rule applies to predictions, explanations, the entries of
+    `GET /v1/learned`, and replays. It never changes a `block` or an
+    `ask`.
+  - Previews and reliability reports read the recorded predictions and
+    do not change.
+  - If Limen cannot count the approvals, it suggests `ask`.
+
+  For example, one approval of `publish` gave the approval probability
+  0.73. With the upper threshold 0.65, Limen suggested `allow`. Now it
+  suggests a `split` ask, which hosted Topos in `learned` mode shows to
+  the person.
+- Send `actor.session` for each action of an agent. Without it, each
+  action is a session of its own, and the minimum of sessions has no
+  effect. Topos already sends it.
 - The integration page tells how hosted Topos v0.68.0 sets the
   organization of a call with `TOPOS_DECISIONS_ORG`. With `agent`, a call
   of an agent that an organization owns goes to Limen with the ID of that

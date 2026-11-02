@@ -222,7 +222,8 @@ Answers that agree can give a `split` ask. With the default kernel, two
 approvals of one action and no denial give $e \approx 0.64$ and
 $\hat p \approx 0.80$. With the safety-weighted profile, Limen suggests
 `allow` only above 0.90, so the `ask_kind` is `split`. More approvals
-move $\hat p$ above 0.90, and then Limen suggests `allow`.
+move $\hat p$ above 0.90. Then Limen suggests `allow` if the approvals
+also meet the [answer minimum](#the-answer-minimum).
 
 Proposition 3 is about a policy that knows $q(x)$. The model comes near
 $q(x)$ only with many answers. Because of this, Proposition 3 applies to
@@ -237,6 +238,55 @@ the answers disagree. [Integration](integrating.md#two-kinds-of-ask)
 tells how a client finds this. A decision point can let its rules decide
 an `unsure` ask and keep a `split` ask for the person. A `split` ask comes
 from the answers of that person.
+
+## The answer minimum
+
+The answer minimum applies after the model and the decision rule. With
+few answers, $\hat p$ can already be above $\tau_{\text{high}}$. For
+example, one approval of `publish` and no denial give
+$\hat p \approx 0.73$ and $e \approx 0.54$. With the symmetric profile,
+$\tau_{\text{high}} = 0.65$, so the decision rule gives `allow` after
+one answer. One approval is not a pattern. Approvals from one session
+can also come from one task only.
+
+Let $n$ be the number of actions with the same label as the action whose
+most recent answer is an approval. Let $s$ be the number of different
+sessions of these actions. Limen suggests `allow` only if
+
+$$
+\hat p > \tau_{\text{high}}, \qquad n \ge n_{\min}, \qquad s \ge s_{\min}.
+$$
+
+If $\hat p > \tau_{\text{high}}$ and $n$ or $s$ is too small, Limen
+suggests `ask`. The defaults are $n_{\min} = 3$ and $s_{\min} = 2$, the
+constants `limen.MinAllows` and `limen.MinSessions`. A denial never
+counts. An approval that the person later changed to a denial does not
+count. An action without a session is a session of its own. Only the
+answers of the person in the same organization count.
+
+The answer minimum does not change $\hat p$, the uncertainty, the
+evidence ratio, or the thresholds. It never changes a `block` or an
+`ask`. It only changes some `allow` suggestions to `ask`, so it only adds
+asks. The paper has no proposition about it. It is a temporary rule,
+until a design for consent replaces it.
+
+| Answers of `publish` | $\hat p$ | $e$ | Symmetric (0.65) | Safety-weighted (0.90) |
+|---|---|---|---|---|
+| 1 approval | 0.73 | 0.54 | `ask`, held (before: `allow`) | `ask` |
+| 3 approvals in 1 session | 0.85 | 0.69 | `ask`, held (before: `allow`) | `ask` |
+| 3 approvals in 2 sessions | 0.85 | 0.69 | `allow` | `ask` |
+
+An `ask` from the answer minimum gets its `ask_kind` from the evidence
+ratio, as each `ask` does. One approval of `publish` gives
+$e \approx 0.54$, so the `ask` is `split`. Then a decision point that
+keeps `split` asks for the person shows the action to the person. The
+prediction has `minimum`, with the counts and the minimums. Its `reason`
+gives the counts.
+
+Explanations, the entries of `GET /v1/learned`, and replays also apply
+the answer minimum. A preview and a reliability report read the recorded
+predictions. A preview applies different thresholds to the recorded
+approval probabilities, without the answer minimum.
 
 ## Explanations
 
