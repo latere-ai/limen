@@ -165,6 +165,73 @@ func TestAskKinds(t *testing.T) {
 	}
 }
 
+// Spec 009, criterion 3, as amended on 2026-11-02: a split ask does not
+// mean answers that disagree. Two approvals of an action and no denial,
+// under Careful, remove more than half of the prior variance at it while
+// the approval probability is still below the allow threshold, 0.90: the
+// owner's live case. Its evidence and its learned entry hold approvals
+// only, and more approvals move it out of the ask band to an allow.
+func TestSplitOnAnswersThatAgree(t *testing.T) {
+	e := taught(t, 0)
+	careful := limen.Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}
+	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Costs: careful, AuditRate: 0.05}); err != nil {
+		t.Fatal(err)
+	}
+	th, err := careful.Thresholds()
+	if err != nil || math.Abs(th.AllowAbove-0.9) > 1e-12 || math.Abs(th.BlockBelow-0.25) > 1e-12 {
+		t.Fatalf("Careful's thresholds: %+v, %v", th, err)
+	}
+	publish := func(id string) limen.Action {
+		return limen.Action{Org: "o", Subject: "s", ActionID: id, Actor: &limen.Actor{Kind: "agent", ID: "agt", Session: "ses"},
+			Kind: "tool", Name: "publish", Effect: limen.EffectExternal}
+	}
+	answer(t, e, publish("a-0"), true)
+	answer(t, e, publish("a-1"), true)
+	probe := publish("probe")
+	p, err := e.Predict(ctx, probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Thresholds != th || p.Verdict != limen.Ask || p.AskKind != limen.AskSplit || p.EvidenceRatio < engine.EvidenceCut ||
+		p.Approve <= 0.5 || p.Approve >= th.AllowAbove {
+		t.Fatalf("two approvals and no denial: %+v", p)
+	}
+	x, err := e.Explain(ctx, probe.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x.AskKind != limen.AskSplit || len(x.Evidence) != 2 {
+		t.Fatalf("the explanation of a split ask on two approvals: %+v", x)
+	}
+	for _, ev := range x.Evidence {
+		if !ev.Approve {
+			t.Errorf("a denial in the evidence of two approvals: %+v", ev)
+		}
+	}
+	l, err := e.Learned(ctx, limen.LearnedQuery{Org: "o", Subject: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Entries) != 1 || l.Entries[0].Approved != 2 || l.Entries[0].Denied != 0 || l.Entries[0].AskKind != limen.AskSplit {
+		t.Fatalf("what the model learned from two approvals: %+v", l.Entries)
+	}
+	for i := 2; p.Verdict == limen.Ask; i++ {
+		if i > 20 {
+			t.Fatalf("%d approvals and no denial are still an ask: %+v", i, p)
+		}
+		if p.AskKind != limen.AskSplit {
+			t.Fatalf("after %d approvals: %+v", i, p)
+		}
+		answer(t, e, publish(fmt.Sprintf("a-%d", i)), true)
+		if p, err = e.Predict(ctx, publish(fmt.Sprintf("probe-%d", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p.Verdict != limen.Allow || p.AskKind != "" || p.Approve <= th.AllowAbove {
+		t.Errorf("more approvals: %+v, want an allow above %v", p, th.AllowAbove)
+	}
+}
+
 // Spec 009, criterion 4: after the model learns more, an explanation is the
 // current model's and says the prediction came from an earlier one; an
 // action without a prediction is explained under the profile that applies.
