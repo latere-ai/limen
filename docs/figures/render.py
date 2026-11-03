@@ -39,7 +39,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import seaborn as sns  # noqa: E402
-from matplotlib import patheffects  # noqa: E402
 from matplotlib.colors import BoundaryNorm, Colormap, to_hex  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
@@ -132,9 +131,10 @@ def density(ax, x, y, th: Theme, *, levels: int = 10, thresh: float = 0.03, z: f
     sns.kdeplot(x=x, y=y, ax=ax, levels=5, color=th.line, linewidths=0.6, alpha=0.75, zorder=2.5, **kw)
 
 
-def halo(th: Theme) -> list:
-    """A stroke of the background around text set over data."""
-    return [patheffects.withStroke(linewidth=2.6, foreground=th.bg, alpha=0.85)]
+def backing(th: Theme) -> dict:
+    """A rounded patch of the page color behind text set over data, so
+    dots and contours do not run through the numbers."""
+    return dict(boxstyle="round,pad=0.3,rounding_size=0.35", facecolor=th.bg, edgecolor="none", alpha=0.75)
 
 
 def unit_axes(ax, th: Theme) -> None:
@@ -162,7 +162,7 @@ def teaser(d: pd.DataFrame, meta: dict, th: Theme) -> plt.Figure:
     # decision cp + 1: the third phase starts there.
     phases = [
         (0, 150, "Limen knows little"),
-        (150, cp, "Trust has built"),
+        (150, cp, "Trust built up"),
         (cp, n, "After the trust reset"),
     ]
     n_dots = min(int(((d.t >= a) & (d.t < b)).sum()) for a, b, _ in phases)
@@ -199,6 +199,26 @@ def teaser(d: pd.DataFrame, meta: dict, th: Theme) -> plt.Figure:
             ax.text((x0 + x1) / 2, 1.02, f"{v}\n{pct(share.get(v, 0.0))}", ha="center", va="bottom",
                     fontsize=9.5, color=th.fg, linespacing=1.2, clip_on=False)
 
+        # The person's veto: an irreversible action on a sensitive target
+        # while trust is low (experiment/oracle.py _veto_active), the blob
+        # at the bottom. The note sits just above it, the arrow at its
+        # middle.
+        veto = p[p.vetoed == 1]
+        fa_y = 0.09
+        if len(veto):
+            vc = veto.verdict.value_counts()
+            allowed = int(vc.get("allow", 0))
+            parts = [f"{int(vc[v]):,} {w}" for v, w in (("ask", "asked"), ("block", "blocked")) if vc.get(v, 0)]
+            ax.annotate(
+                f"the person's veto: {len(veto):,} of {len(p):,}\n"
+                f"{f'{allowed:,}' if allowed else 'none'} allowed ({', '.join(parts)})",
+                xy=(veto.p_hat.median(), 0.015), xytext=(0.035, 0.1), ha="left", va="bottom",
+                fontsize=8.3, color=th.fg, linespacing=1.35, zorder=5, bbox=backing(th),
+                arrowprops=dict(arrowstyle="-|>", color=th.fg, lw=0.8, shrinkA=0, shrinkB=1, mutation_scale=8),
+            )
+            fa_y = 0.245
+
+        # False allows: an allow the person would more likely deny.
         allows = p[p.verdict == "allow"]
         fa = allows[allows.p_star < 0.5]
         total_fa += len(fa)
@@ -207,8 +227,17 @@ def teaser(d: pd.DataFrame, meta: dict, th: Theme) -> plt.Figure:
         if len(allows):
             lines[0] += f" ({pct(len(fa) / len(allows))})"
             lines.append(f"lowest true approval allowed: {allows.p_star.min():.2f}")
-        ax.text(hi - 0.025, 0.075, "\n".join(lines), ha="right", va="bottom", fontsize=8.8,
-                color=th.fg, linespacing=1.35, zorder=5, path_effects=halo(th))
+        ax.text(hi - 0.03, fa_y, "\n".join(lines), ha="right", va="bottom", fontsize=8.3,
+                color=th.fg, linespacing=1.35, zorder=5, bbox=backing(th))
+
+        # Above the diagonal, Limen's probability is below the person's:
+        # where it errs, it errs toward asking.
+        above = float((p.p_star > p.p_hat).mean())
+        note = f"above the diagonal: {pct(above)}"
+        if b == n:
+            note += "\nLimen's probability is below the\nperson's: it errs toward asking"
+        ax.text(0.035, 0.965, note, ha="left", va="top", fontsize=8.3, color=th.fg, linespacing=1.35,
+                zorder=5, bbox=backing(th))
 
         unit_axes(ax, th)
         ax.set_xlabel("Limen's approval probability")
