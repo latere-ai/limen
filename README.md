@@ -8,6 +8,15 @@
 run without a question. It also measures how often each automatic decision
 is wrong.**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/teaser-dark.svg">
+  <img alt="Three density plots of the approval probability of the model of Limen against the true approval probability of simulated persons, early, after trust built up, and after a trust reset." src="docs/figures/teaser.svg">
+</picture>
+
+*The approval probability that the model of Limen gives, against the true
+approval probability of 20 simulated persons, in three parts of 1,500
+decisions ([how the figures are made](docs/figures/README.md)).*
+
 An AI agent proposes actions: a shell command, a push, a deploy, a
 payment. Before each action runs, a program decides to run it, to ask a
 person, or to stop it. These documents call this program the decision
