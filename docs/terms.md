@@ -118,7 +118,7 @@ verdicts. The list starts with the verdict that permits the most.
 | not estimable | A bin whose reviews have an effective size less than 20. Its measured approval rate is `null`. | `not_estimable` |
 | certificate | A test that the false allow rate of a source is below a limit, with a stated confidence. | `certificate` |
 | replay | A run of recorded decisions through Limen in time order. A replay shows what Limen would suggest. | `Replay` |
-| comparison | A replay of recorded decisions, or of the cases of a ledger, through two model versions. A comparison shows where the suggested verdicts are different. | `limen compare` |
+| model comparison | A replay of recorded decisions, or of the cases of a ledger, through two model versions. A model comparison shows where the suggested verdicts are different. | `limen compare` |
 | Brier score | The mean of the squared difference between the approval probability and the answer, with 1 for an approval and 0 for a denial. A lower score is better. | `brier_base`, `brier_next` |
 | ledger directory | The directory where `limend` keeps the ledger on disk. Only one process can use a ledger directory at a time. | `LIMEN_DATA_DIR` |
 | report of an organization | The counts and the error rates of the actions of an organization, for all its persons together, by week. It never shows the records of one person. | `Report` |

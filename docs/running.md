@@ -196,23 +196,24 @@ To compare the two versions, do these steps:
 1. Copy the ledger directory.
 2. On a system other than Linux or macOS, remove the file `LOCK` from the
    copy.
-3. Run the comparison on the copy:
+3. Run the model comparison on the copy:
 
    ```sh
    limen compare ledger --store /path/to/the/copy
    ```
 
-You do not have to stop `limend` before the copy. The comparison
+You do not have to stop `limend` before the copy. The model comparison
 discards an incomplete last line of a log, and it changes nothing in the
 ledger of `limend`.
 
 `limen compare` replays the cases of the ledger through each version, in
 the order of time. Each version learns an answer before the next
-prediction. The comparison keeps nothing. It reads the features and the
-scope that each case kept, because the ledger does not keep the input.
-A ledger with thousands of answers can take some minutes.
+prediction. The model comparison keeps nothing. It reads the features
+and the scope that each case kept, because the ledger does not keep the
+input. A ledger with thousands of answers can take some minutes.
 
-The comparison gives these numbers for all persons, and for each person:
+The model comparison gives these numbers for all persons, and for each
+person:
 
 - The verdicts that each version suggests, with the kind of each `ask`.
 - The actions where the verdict is different, from the verdict of
@@ -220,8 +221,13 @@ The comparison gives these numbers for all persons, and for each person:
 - The allows of `learned/1` that `learned/2` does not give, and the
   allows of `learned/2` that `learned/1` does not give.
 - The verdicts of `learned/2` that permit more than the verdicts of
-  `learned/1`. The comparison lists each one, and tells if the cover rule
-  holds it.
+  `learned/1`. The model comparison lists each one, and tells if the
+  cover rule holds it.
+- The calibration error of each version, from the
+  [calibration report](integrating.md#the-calibration-report) of its
+  replayed predictions with the reviews of the ledger. A bin counts only
+  if its reviews have an effective size of 20 or more. If no bin counts,
+  the calibration error is not known.
 - The Brier score of each version: the mean of the squared difference
   between the approval probability and the answer. A lower score is
   better. The answers are only the answers to the actions that a person

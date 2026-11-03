@@ -473,7 +473,7 @@ For example, a quick approval that followed a suggestion has the weight
 weight.
 
 The table gives the approval probability of a `publish: update` after
-each approval. The engine tests and the replay comparison measure these
+each approval. The engine tests and the model comparison measure these
 numbers. With the safety-weighted profile, Limen suggests `allow` only
 above 0.90.
 

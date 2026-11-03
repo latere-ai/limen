@@ -13,13 +13,15 @@ import (
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine/store"
+	"latere.ai/x/limen/estimate"
 )
 
 // The replay comparison of two model versions (spec 011, criterion 21):
 // before an operator switches an installation from learned/1 to learned/2,
 // a history is replayed through both, each version in its own scratch
-// engine, and the would-be suggestions are put side by side. The cover
-// rule reads weights/1 and the same cases in both, so a verdict that
+// engine, and the would-be suggestions are put side by side, with the
+// calibration report of each version over its replayed predictions. The
+// cover rule reads weights/1 and the same cases in both, so a verdict that
 // differs comes from the model: its approval probability.
 
 // CompareOptions control a comparison.
@@ -88,6 +90,14 @@ type Tally struct {
 	// estimate the error over all actions.
 	BrierBase *float64 `json:"brier_base"`
 	BrierNext *float64 `json:"brier_next"`
+	// CalibrationBase and CalibrationNext are the calibration report of
+	// each version (GET /v1/calibration) over the replayed predictions of
+	// the version and the reviews of the history: its ten bins, and its
+	// error, the mean distance between the stated approval probability and
+	// the approval rate that the reviews measured over the bins that are
+	// estimable, null where none is.
+	CalibrationBase limen.Calibration `json:"calibration_base"`
+	CalibrationNext limen.Calibration `json:"calibration_next"`
 	// Recorded counts the verdicts of the predictions a ledger recorded,
 	// which a replay of decision point logs does not have, and Agree the
 	// records where Base suggests the recorded verdict again.
@@ -368,6 +378,42 @@ func (e *Engine) compare(ctx context.Context, steps []step, o CompareOptions) (C
 			c.Looser, c.Outside = looser(base, next)
 		}
 	}
+	// Each report reads the window of its history: the time of the first
+	// action, and of the last one included.
+	windowOf := func(keep func(step) bool) limen.CalibrationQuery {
+		var q limen.CalibrationQuery
+		for _, st := range steps {
+			if !keep(st) {
+				continue
+			}
+			if q.From.IsZero() {
+				q.From = st.at
+			}
+			q.To = st.at.Add(time.Nanosecond)
+		}
+		return q
+	}
+	window := windowOf(func(step) bool { return true })
+	var all [2][]estimate.Row
+	for k, t := range persons {
+		q := windowOf(func(st step) bool { return st.action.Org == k.org && st.action.Subject == k.subject })
+		q.Org, q.Subject = k.org, k.subject
+		for i, x := range scratch {
+			rows, err := x.replayRows(ctx, k)
+			if err != nil {
+				return Comparison{}, err
+			}
+			all[i] = append(all[i], rows...)
+			c := estimate.Calibrate(q, rows)
+			if i == 0 {
+				t.CalibrationBase = c
+			} else {
+				t.CalibrationNext = c
+			}
+		}
+	}
+	out.Overall.CalibrationBase = estimate.Calibrate(window, all[0])
+	out.Overall.CalibrationNext = estimate.Calibrate(window, all[1])
 	out.Overall.finish()
 	for _, t := range persons {
 		t.finish()
@@ -402,6 +448,26 @@ func (e *Engine) predictStep(ctx context.Context, s step) (limen.Prediction, str
 	}
 	c, _, err := e.st.Case(ctx, s.action.Key)
 	return p, label(c), err
+}
+
+// replayRows are the rows of the learned source over the cases a scratch
+// engine replayed for the person k, as its calibration report reads them:
+// each recorded prediction with its decision and its review, and whether
+// the review is considered.
+func (e *Engine) replayRows(ctx context.Context, k subjectKey) ([]estimate.Row, error) {
+	cases, err := e.st.Cases(ctx, k.org, k.subject)
+	if err != nil {
+		return nil, err
+	}
+	w := e.policy.Weigh(records(cases))
+	var rows []estimate.Row
+	for i, c := range cases {
+		if r, ok := estimate.RowOf(limen.Case{Prediction: c.Prediction, Decision: c.Decision, Answers: c.Answers}, limen.OfLearned); ok {
+			r.Considered = w[i].Review == 1
+			rows = append(rows, r)
+		}
+	}
+	return rows, nil
 }
 
 func newTally(org, subject string) Tally {

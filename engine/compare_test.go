@@ -129,6 +129,18 @@ func TestCompareThePublishHistory(t *testing.T) {
 		t.Errorf("Brier scores: considered %v %v, mixed %v %v, quick %v %v", *considered.BrierBase, *considered.BrierNext,
 			*mixed.BrierBase, *mixed.BrierNext, *quick.BrierBase, *quick.BrierNext)
 	}
+	// The calibration report of each version over its replayed predictions:
+	// learned/1 states 0.85 for 27 updates in one bin whose reviews all
+	// approve, so the bin is underconfident; learned/2 spreads its
+	// predictions over more bins, and no bin has 20 reviews.
+	cb, cn := o.CalibrationBase, o.CalibrationNext
+	if cb.Error == nil || fmt.Sprintf("%.4f %.3f", *cb.Error, cb.Estimable) != "0.1536 0.692" || cb.Bins[8].State != limen.Underconfident ||
+		cn.Error != nil || cn.Estimable != 0 || len(cn.Bins) != limen.CalibrationBins || !cb.From.Equal(publishHistory(t)[0].At) {
+		t.Errorf("calibration reports: %+v\n%+v", cb, cn)
+	}
+	if considered.CalibrationBase.Error != nil || considered.CalibrationBase.Subject != "considered" || considered.CalibrationBase.Bins[8].Cases != 9 {
+		t.Errorf("the calibration report of one person: %+v", considered.CalibrationBase)
+	}
 	if considered.Recorded != nil || considered.Agree != 0 {
 		t.Errorf("records of a decision point have no recorded prediction: %+v", considered)
 	}

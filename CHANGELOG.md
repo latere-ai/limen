@@ -70,9 +70,11 @@ the commit log.
   the cases of a ledger, through `learned/1` and `learned/2`. For all
   persons and for each person, they give the verdicts of each version,
   the changes, the allows that `learned/2` does not give or gives, the
-  verdicts of `learned/2` that permit more, and the Brier score of each
-  version. A comparison of a ledger reads the features and the scope that
-  each case kept.
+  verdicts of `learned/2` that permit more, and the calibration error and
+  the Brier score of each version. The calibration error comes from the
+  calibration report of each version over its replayed predictions. A
+  model comparison of a ledger reads the features and the scope that each
+  case kept.
 - `limen replay --model` replays with `learned/1` or `learned/2`.
 - In Go: `engine.Model`, `engine.Learned1`, `engine.Learned2`,
   `engine.ParseModel`, `engine.Options.Model`, `Engine.Compare`,

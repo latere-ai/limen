@@ -11,10 +11,12 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 	"text/tabwriter"
 
 	"latere.ai/x/pkg/errwriter"
 
+	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/engine/store"
 	"latere.ai/x/limen/engine/store/file"
@@ -180,6 +182,18 @@ func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[strin
 		w.Printf("  %s: %.4f\n  %s: %.4f\n", c.Base, *o.BrierBase, c.Next, *o.BrierNext)
 		w.Println("  The answers are only those of the actions that a person saw.")
 	}
+	w.Println("\nThe calibration error of each model, from the calibration report (lower is better):")
+	for _, x := range []struct {
+		m engine.Model
+		c limen.Calibration
+	}{{c.Base, o.CalibrationBase}, {c.Next, o.CalibrationNext}} {
+		if x.c.Error == nil {
+			w.Printf("  %s: no bin has enough reviews to estimate it.\n", x.m)
+			continue
+		}
+		w.Printf("  %s: %.4f, from the bins that hold %s of the actions (%s)\n", x.m, *x.c.Error, pct(x.c.Estimable), states(x.c))
+	}
+	w.Printf("  A bin needs reviews with an effective size of %d or more.\n", limen.CalibrationMinEffective)
 	if o.Recorded != nil {
 		w.Printf("\n%s suggests the verdict that the ledger recorded for %d of %d %s.\n", c.Base, o.Agree, total(o.Recorded),
 			plural(total(o.Recorded), "prediction", "predictions"))
@@ -207,17 +221,43 @@ func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[strin
 
 	w.Println("\nFor each person:")
 	tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	twPrintf(tw, "  person\tactions\tanswers\tallows of %s\tallows of %s\tpermit more\tnot held\tBrier %s\tBrier %s\n",
-		c.Base, c.Next, c.Base, c.Next)
+	twPrintf(tw, "  person\tactions\tanswers\tallows of %s\tallows of %s\tpermit more\tnot held\tBrier %s\tBrier %s\terror %s\terror %s\n",
+		c.Base, c.Next, c.Base, c.Next, c.Base, c.Next)
 	for _, p := range c.Persons {
 		bb, bn := "-", "-"
 		if p.BrierBase != nil {
 			bb, bn = fmt.Sprintf("%.4f", *p.BrierBase), fmt.Sprintf("%.4f", *p.BrierNext)
 		}
-		twPrintf(tw, "  %s/%s\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\n", p.Org, p.Subject, p.Records, p.Answered,
-			p.Base["allow"], p.Next["allow"], p.Looser, p.Outside, bb, bn)
+		twPrintf(tw, "  %s/%s\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n", p.Org, p.Subject, p.Records, p.Answered,
+			p.Base["allow"], p.Next["allow"], p.Looser, p.Outside, bb, bn, errorOf(p.CalibrationBase), errorOf(p.CalibrationNext))
 	}
 	_ = tw.Flush()
+}
+
+// errorOf is the calibration error of a report, or - where no bin is
+// estimable.
+func errorOf(c limen.Calibration) string {
+	if c.Error == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.4f", *c.Error)
+}
+
+// states counts the estimable bins of a report by their state.
+func states(c limen.Calibration) string {
+	n := map[string]int{}
+	for _, b := range c.Bins {
+		if b.State != limen.NotEstimable {
+			n[b.State]++
+		}
+	}
+	var out []string
+	for _, st := range []string{limen.Calibrated, limen.Overconfident, limen.Underconfident} {
+		if n[st] > 0 {
+			out = append(out, fmt.Sprintf("%d %s", n[st], st))
+		}
+	}
+	return strings.Join(out, ", ")
 }
 
 // kinds are the kinds of suggestion in either count: allow, the kinds of

@@ -13,6 +13,7 @@ import (
 
 	"latere.ai/x/pkg/errwriter"
 
+	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/engine/store/file"
 )
@@ -37,6 +38,9 @@ func TestCompareFile(t *testing.T) {
 		"Verdicts of learned/2 that permit more than the verdicts of learned/1: 3",
 		"Of these, verdicts that the cover rule does not hold: 0",
 		"The Brier score of each model, from 39 answers",
+		"The calibration error of each model, from the calibration report (lower is better):",
+		"learned/1: 0.1536, from the bins that hold 69.2% of the actions (1 underconfident)",
+		"learned/2: no bin has enough reviews to estimate it.",
 		"example/considered  ses-0/10  publish: update  ask (split) 0.821 -> allow 0.904  covered",
 		"For each person:",
 	} {
@@ -163,11 +167,13 @@ func TestCompareUsage(t *testing.T) {
 // person with no answer.
 func TestComparisonPieces(t *testing.T) {
 	brier := 0.1
+	cal := limen.Calibration{Error: &brier, Estimable: 0.5, Bins: []limen.CalibrationBin{{State: limen.Calibrated}, {State: limen.Overconfident},
+		{State: limen.Overconfident}, {State: limen.Underconfident}, {State: limen.NotEstimable}}}
 	c := engine.Comparison{Base: engine.Learned1, Next: engine.Learned2,
 		Overall: engine.Tally{Records: 3, Answered: 1, Base: map[string]int{"block": 1, "allow": 1, "ask (few)": 1}, Next: map[string]int{"ask (short)": 2, "allow": 1},
 			Changes: map[string]int{"block -> ask (short)": 1}, Looser: 1, Outside: 1, CoverDiffers: 1, BrierBase: &brier, BrierNext: &brier,
-			Recorded: map[string]int{"allow": 2}, Agree: 1},
-		Persons: []engine.Tally{{Org: "o", Subject: "s", Records: 3}},
+			Recorded: map[string]int{"allow": 2}, Agree: 1, CalibrationBase: cal},
+		Persons: []engine.Tally{{Org: "o", Subject: "s", Records: 3, CalibrationNext: cal}},
 		Changed: []engine.Change{{Org: "o", Subject: "s", ActionID: "a", Label: "bash: rm -r", Looser: true, Outside: true,
 			Base: engine.Suggestion{Kind: "block"}, Next: engine.Suggestion{Kind: "ask (short)"}}}}
 	var buf bytes.Buffer
@@ -179,7 +185,8 @@ func TestComparisonPieces(t *testing.T) {
 		"Actions whose cover is different between the two models: 1.",
 		"learned/1 suggests the verdict that the ledger recorded for 1 of 2 predictions.",
 		"block 0.000 -> ask (short) 0.000  not held by the cover rule",
-		"o/s     3        0        0                    0                    0            0         -                -",
+		"learned/1: 0.1000, from the bins that hold 50.0% of the actions (1 calibrated, 2 overconfident, 1 underconfident)",
+		"o/s     3        0        0                    0                    0            0         -                -                -                0.1000",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
