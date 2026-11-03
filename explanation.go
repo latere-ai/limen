@@ -101,6 +101,13 @@ type Explanation struct {
 	// Cover is the cover rule for the action now, with the approvals
 	// nearest to covering it.
 	Cover ExplainedCover `json:"cover,omitzero"`
+	// Calibration is the state of the bin of the recorded prediction's
+	// approval probability in the person's calibration report for the last
+	// [CalibrationWindow], so a client need not ask for the report each
+	// time. It is absent when the action has no recorded prediction, and
+	// from an implementation from before it: a client then states no
+	// probability.
+	Calibration string `json:"calibration,omitempty"`
 	// Minimum is the answer minimum of v0.6.
 	//
 	// Deprecated: Limen no longer sets it. Read Cover.

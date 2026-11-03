@@ -1405,6 +1405,93 @@ components:
           minimum: 0
           description: The audits of the clean run whose answer is considered, with weight 1 under weights/1. The claim does not read it; it shows whether the certificate rests on quick answers.
       required: [alpha, delta, clean, needed, holds, considered]
+    Calibration:
+      type: object
+      description: The calibration report of one person over one window (spec 011).
+      properties:
+        org:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalibrationBin"
+          minItems: 10
+          maxItems: 10
+          description: The ten bins of approve, the lowest first.
+        error:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: The mean distance between stated and observed over the bins that are not not_estimable, each bin weighted by its cases. Null when no bin is estimable, which is not zero.
+        estimable:
+          $ref: "#/components/schemas/Probability"
+          description: The share of the cases of the report that are in a bin that is not not_estimable; 0 with no case.
+      required: [org, subject, from, to, bins, error, estimable]
+    CalibrationBin:
+      type: object
+      description: >-
+        One bin of a calibration report: the predictions of Limen whose
+        approve is from from up to to, the last bin to 1 included. A bin
+        below 0.5 estimates the share of approvals, and a bin of 0.5 or
+        more estimates the share of denials and observes one minus it, so
+        the observed rate of the bins above the allow threshold is one
+        minus the false-allow rate of their allows.
+      properties:
+        from:
+          $ref: "#/components/schemas/Probability"
+        to:
+          $ref: "#/components/schemas/Probability"
+        cases:
+          type: integer
+          minimum: 0
+          description: The predictions in the bin, of the cases first received in the window.
+        covered:
+          $ref: "#/components/schemas/Probability"
+          description: The share of the cases whose decision had a review probability above zero; 0 with no case.
+        stated:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: The mean approve of the covered cases. Null when the bin has none.
+        observed:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: The approval rate of the covered cases, from their reviews, each with weight one over its review probability. Null when the bin is not_estimable, which is not zero.
+        interval:
+          type: array
+          items:
+            type: number
+          minItems: 2
+          maxItems: 2
+          description: The Wilson 95% interval of observed at the Kish effective size of the reviews, present with observed.
+        reviews:
+          type: integer
+          minimum: 0
+          description: The reviews of the covered cases.
+        considered:
+          type: integer
+          minimum: 0
+          description: The reviews whose answer is considered, with weight 1 under weights/1. No number of the bin reads the weight.
+        state:
+          $ref: "#/components/schemas/CalibrationState"
+      required: [from, to, cases, covered, stated, observed, reviews, considered, state]
+    CalibrationState:
+      type: string
+      description: >-
+        not_estimable when the Kish effective size of the reviews of the
+        bin is below 20; calibrated when stated is in the interval, the
+        edges included; overconfident when stated is outside it and further
+        from 0.5 than observed; underconfident in the other cases.
+      enum: [calibrated, overconfident, underconfident, not_estimable]
     ReplayRecord:
       type: object
       description: One recorded action, one per line.
@@ -1545,6 +1632,9 @@ components:
           $ref: "#/components/schemas/Thresholds"
         cover:
           $ref: "#/components/schemas/ExplainedCover"
+        calibration:
+          $ref: "#/components/schemas/CalibrationState"
+          description: The state of the bin of the recorded prediction's approve in the person's calibration report for the last 90 days. Absent when the action has no recorded prediction, and from an older server; a client then states no probability.
         minimum:
           $ref: "#/components/schemas/Minimum"
         reason:

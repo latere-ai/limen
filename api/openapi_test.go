@@ -104,6 +104,7 @@ var schemaTypes = map[string]any{
 	"RecordedAnswer": limen.RecordedAnswer{}, "Page": limen.Page{},
 	"Profile": limen.Profile{}, "Costs": limen.Costs{}, "Certify": limen.Certify{},
 	"Reliability": limen.Reliability{}, "Estimate": limen.Estimate{}, "Certificate": limen.Certificate{},
+	"Calibration": limen.Calibration{}, "CalibrationBin": limen.CalibrationBin{},
 	"ReplayRecord": limen.ReplayRecord{}, "ReplayReport": limen.ReplayReport{},
 	"ModelRef": limen.ModelRef{}, "Parts": limen.Parts{}, "Evidence": limen.Evidence{}, "Explanation": limen.Explanation{},
 	"LearnedEntry": limen.LearnedEntry{}, "TrendPoint": limen.TrendPoint{}, "Learned": limen.Learned{},
@@ -198,6 +199,10 @@ func TestEnumsMatchConstants(t *testing.T) {
 		t.Errorf("AnswerMS maximum %v, want %d", max, limen.MaxAnswerMS)
 	}
 	check("WeekState", strs(at(t, schemas, "WeekState")["enum"]), limen.WeekOpen, limen.WeekTooFew, limen.WeekReady)
+	check("CalibrationState", strs(at(t, schemas, "CalibrationState")["enum"]), limen.CalibrationStates()...)
+	if n := fmt.Sprint(at(t, schemas, "Calibration", "properties", "bins")["minItems"]); n != strconv.Itoa(limen.CalibrationBins) {
+		t.Errorf("Calibration.bins has %s items, want %d", n, limen.CalibrationBins)
+	}
 	for _, cell := range []string{"ReportCell", "AgentCell"} {
 		check(cell+".withheld", strs(at(t, schemas, cell, "properties", "withheld", "items")["enum"]), limen.AnswerFields()...)
 	}

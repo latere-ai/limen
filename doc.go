@@ -26,7 +26,9 @@
 //     from them, and reports how often any source of decisions allows
 //     what the person would deny ([Reliability]): Limen's own predictions,
 //     the decisions applied, a rule, or an LLM judge whose verdict arrived
-//     as a [Signal].
+//     as a [Signal]. It also reports whether the approval probabilities
+//     Limen stated match the approval rates the reviews measured
+//     ([Calibration]), which a client reads before it shows a probability.
 //
 // The [Explainer] shows the person what the model decides from: why one
 // prediction is what it is ([Explanation]), what the model has learned
