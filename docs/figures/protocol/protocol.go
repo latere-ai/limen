@@ -70,6 +70,10 @@ type Record struct {
 	// verdict.Decide applies: an audited allow becomes a flag and an
 	// audited block an ask.
 	Verdict, Applied verdict.Verdict
+	// Review is the probability that the person sees the action, as
+	// verdict.Decide returns it and a decision records it: 1 for an ask,
+	// the audit rate for an automatic verdict.
+	Review float64
 	// Shown is true when the person saw the action and answered it; Approve
 	// is the answer then.
 	Shown, Approve bool
@@ -95,9 +99,9 @@ func Run(o Options) ([]Record, error) {
 		pHat := post.Predict(pt).Approve
 		suggested := o.Thresholds.Verdict(pHat)
 		// One uniform draw per action, never redrawn (verdict.Decide).
-		applied, _ := verdict.Decide(suggested, verdict.Allow, o.AuditRate, rng.Float64())
+		applied, review := verdict.Decide(suggested, verdict.Allow, o.AuditRate, rng.Float64())
 		pStar := o.Oracle.Approve(d)
-		r := Record{Decision: d, PHat: pHat, PStar: pStar, Verdict: suggested, Applied: applied,
+		r := Record{Decision: d, PHat: pHat, PStar: pStar, Verdict: suggested, Applied: applied, Review: review,
 			Vetoed: o.Oracle.Vetoed(d), Answers: post.Len()}
 		if applied.Shown() {
 			// The person answers y ~ Bernoulli(Phi(f*)),
