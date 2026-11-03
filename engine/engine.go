@@ -35,7 +35,6 @@ import (
 	"iter"
 	"math"
 	"runtime"
-	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -649,43 +648,21 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 // then recorded in this engine, as if they had arrived live, and its models
 // are fitted on them.
 func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
-	var recs []limen.ReplayRecord
-	for r, err := range records {
-		if err != nil {
-			return limen.ReplayReport{}, err
-		}
-		if len(recs) == limen.MaxReplayRecords {
-			return limen.ReplayReport{}, &limen.Error{Code: limen.CodeBodyTooLarge,
-				Detail: fmt.Sprintf("more than %d records", limen.MaxReplayRecords)}
-		}
-		if err := r.Validate(); err != nil {
-			var le *limen.Error
-			if !errors.As(err, &le) {
-				return limen.ReplayReport{}, err
-			}
-			prefix := "records[" + strconv.Itoa(len(recs)) + "]."
-			fields := make([]string, len(le.Fields))
-			for i, f := range le.Fields {
-				fields[i] = prefix + f
-			}
-			return limen.ReplayReport{}, &limen.Error{Code: limen.CodeInvalidReplay, Fields: fields, Detail: prefix + " " + le.Detail}
-		}
-		recs = append(recs, r)
+	recs, err := collect(records)
+	if err != nil {
+		return limen.ReplayReport{}, err
 	}
-	slices.SortStableFunc(recs, func(a, b limen.ReplayRecord) int { return a.At.Compare(b.At) })
 
 	// The report comes from a scratch engine, so a replay's suggestions are
 	// never mistaken for live ones; keep then adds the history itself to
 	// this engine's ledger and models.
 	mem := store.NewMemory()
-	orgs := map[string]bool{}
-	for _, r := range recs {
-		if !orgs[r.Action.Org] {
-			orgs[r.Action.Org] = true
-			if err := copyProfiles(ctx, e, mem, r.Action.Org, recs); err != nil {
-				return limen.ReplayReport{}, err
-			}
-		}
+	actions := make([]limen.Action, len(recs))
+	for i, r := range recs {
+		actions[i] = r.Action
+	}
+	if err := copyProfilesOf(ctx, e, mem, actions); err != nil {
+		return limen.ReplayReport{}, err
 	}
 	// Inline, so the scratch engine runs no fitter and needs no Close. It
 	// holds allows to this engine's cover rule and weights.
@@ -774,31 +751,19 @@ func decisionOf(r limen.ReplayRecord, withAction bool) limen.Decision {
 	return d
 }
 
-// copyProfiles copies into dst every profile of the org that a record of
-// the replay can resolve to, the persons' own profiles included.
-func copyProfiles(ctx context.Context, e *Engine, dst store.Store, org string, recs []limen.ReplayRecord) error {
-	seen := map[limen.Scope]bool{}
-	for _, r := range recs {
-		if r.Action.Org != org {
-			continue
-		}
-		for _, c := range append(limen.ScopeOf(r.Action).Candidates(), limen.Scope{Org: org, Subject: r.Action.Subject}) {
-			if seen[c] {
-				continue
-			}
-			seen[c] = true
-			p, ok, err := e.st.Profile(ctx, c)
-			if err != nil {
-				return err
-			}
-			if ok {
-				if err := dst.PutProfile(ctx, p); err != nil {
-					return err
-				}
-			}
-		}
+// prefixed is the error of the record at index i of a replay: an error of
+// the contract with each field under records[i].
+func prefixed(err error, i int) error {
+	var le *limen.Error
+	if !errors.As(err, &le) {
+		return err
 	}
-	return nil
+	prefix := "records[" + strconv.Itoa(i) + "]."
+	fields := make([]string, len(le.Fields))
+	for j, f := range le.Fields {
+		fields[j] = prefix + f
+	}
+	return &limen.Error{Code: limen.CodeInvalidReplay, Fields: fields, Detail: prefix + " " + le.Detail}
 }
 
 // snapshot is what the store keeps of a fitted model: its state and the
