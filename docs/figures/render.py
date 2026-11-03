@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Latere AI
 # SPDX-License-Identifier: Apache-2.0
-#
+
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
