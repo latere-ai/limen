@@ -34,6 +34,7 @@ type faulty struct {
 	answer        func(context.Context, limen.Answer) error
 	cases         func(context.Context, limen.CaseQuery) (limen.Page, error)
 	reliability   func(context.Context, limen.ReliabilityQuery) (limen.Reliability, error)
+	calibration   func(context.Context, limen.CalibrationQuery) (limen.Calibration, error)
 	profile       func(context.Context, limen.Scope) (limen.Profile, error)
 	putProfile    func(context.Context, limen.Profile) (limen.Profile, error)
 	replay        func(context.Context, iter.Seq2[limen.ReplayRecord, error], limen.ReplayOptions) (limen.ReplayReport, error)
@@ -76,6 +77,13 @@ func (f *faulty) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 		return f.reliability(ctx, q)
 	}
 	return f.Service.Reliability(ctx, q)
+}
+
+func (f *faulty) Calibration(ctx context.Context, q limen.CalibrationQuery) (limen.Calibration, error) {
+	if f.calibration != nil {
+		return f.calibration(ctx, q)
+	}
+	return f.Service.Calibration(ctx, q)
 }
 
 func (f *faulty) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, error) {
@@ -411,6 +419,44 @@ var defects = []defect{
 			c.Alpha, c.Delta, c.Needed = limen.DefaultCertify.Alpha, limen.DefaultCertify.Delta, 300
 			c.Holds = c.Clean >= c.Needed
 			return r, err
+		}
+	}},
+	{"Calibration", "a bin below an effective size of 20 states a rate of zero", func(f *faulty) {
+		f.calibration = func(ctx context.Context, q limen.CalibrationQuery) (limen.Calibration, error) {
+			c, err := f.Service.Calibration(ctx, q)
+			for i := range c.Bins {
+				if c.Bins[i].Observed == nil {
+					c.Bins[i].Observed = new(0.0)
+				}
+			}
+			return c, err
+		}
+	}},
+	{"CalibrationWeights", "the report counts the reviews alone, each with weight one", func(f *faulty) {
+		f.calibration = func(ctx context.Context, q limen.CalibrationQuery) (limen.Calibration, error) {
+			var rows []estimate.Row
+			for cursor := ""; ; {
+				p, err := f.Service.Cases(ctx, limen.CaseQuery{Org: q.Org, Subject: q.Subject, Cursor: cursor, Limit: limen.MaxPageLimit})
+				if err != nil {
+					return limen.Calibration{}, err
+				}
+				for _, c := range p.Entries {
+					if r, ok := estimate.RowOf(c, limen.OfLearned); ok && r.Reviewed {
+						r.Review = 1
+						rows = append(rows, r)
+					}
+				}
+				if cursor = p.NextCursor; cursor == "" {
+					return estimate.Calibrate(q, rows), nil
+				}
+			}
+		}
+	}},
+	{"ExplanationCalibration", "an explanation is calibrated in every bin", func(f *faulty) {
+		f.explain = func(ctx context.Context, k limen.Key) (limen.Explanation, error) {
+			x, err := f.Service.Explain(ctx, k)
+			x.Calibration = limen.Calibrated
+			return x, err
 		}
 	}},
 	{"PendingAndPages", "the review queue lists every case", func(f *faulty) {

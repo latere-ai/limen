@@ -15,8 +15,8 @@
 // leaves Steered nil, and those cases skip with that reason.
 //
 // Every case builds its own actions with keys unique to the case, and
-// reads reliability over a window around the current time, so a service
-// stamps records with its own clock. The cases of the report of an
+// reads reliability and calibration over a window around the current
+// time, so a service stamps records with its own clock. The cases of the report of an
 // organization need weeks that have closed; they run against
 // Target.Clocked, which returns a service whose clock the case sets, and
 // skip with that reason when it is nil.
@@ -80,6 +80,9 @@ var rules = []rule{
 	{"Sources", sources},
 	{"Learned", learned},
 	{"Certificate", certificate},
+	{"Calibration", calibration},
+	{"CalibrationWeights", calibrationWeights},
+	{"ExplanationCalibration", explanationCalibration},
 	{"PendingAndPages", pendingAndPages},
 	{"CasesNeverReturnInput", casesNeverReturnInput},
 	{"ForgetIsScoped", forgetIsScoped},
