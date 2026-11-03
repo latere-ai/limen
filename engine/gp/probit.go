@@ -45,18 +45,27 @@ func cdf(x float64) float64 { return 0.5 * math.Erfc(-x/math.Sqrt2) }
 //	grad = y phi(z) / Phi(z)
 //	W    = (phi(z)/Phi(z))^2 + z phi(z)/Phi(z)  >= 0
 //
+// With weights wt, not nil, the log likelihood is the tempered sum
+// sum wt log Phi(y f), so each answer's term, its gradient and its W are
+// wt times the probit's; W stays zero or more, so the log likelihood stays
+// concave. A nil wt is each weight 1, the same arithmetic bit for bit.
+//
 // The ratio phi/Phi is evaluated as exp(log phi - log Phi), so it stays
 // finite where Phi(z) underflows. W is floored at 1e-10, which keeps the
 // Newton system positive definite.
-func probit(f, y []float64) (sum float64, grad, w []float64) {
+func probit(f, y, wt []float64) (sum float64, grad, w []float64) {
 	grad = make([]float64, len(f))
 	w = make([]float64, len(f))
 	for i := range f {
 		z := y[i] * f[i]
 		lp := logCDF(z)
 		r := math.Exp(logPDF(z) - lp)
-		grad[i] = y[i] * r
-		w[i] = max(r*r+z*r, 1e-10)
+		g, h := y[i]*r, r*r+z*r
+		if wt != nil {
+			lp, g, h = wt[i]*lp, wt[i]*g, wt[i]*h
+		}
+		grad[i] = g
+		w[i] = max(h, 1e-10)
 		sum += lp
 	}
 	return sum, grad, w

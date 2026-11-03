@@ -6,7 +6,11 @@
 // answers, and the approval probability it predicts for a new action.
 //
 // The likelihood is Pr(approve | f) = Phi(f) (the paper, Ou, "Learning When
-// to Ask", arXiv:2605.19151, Definition 1). The posterior is approximated by
+// to Ask", arXiv:2605.19151, Definition 1). [FitWeighted] tempers it with a
+// weight w_i in [0, 1] for each answer, log p(y | f) = sum_i w_i log
+// Phi(y_i f_i) (spec 011, learned/2): the gradient and the curvature of
+// answer i are w_i times those of the probit, so the log likelihood stays
+// concave and Newton's method converges as before. The posterior is approximated by
 // Laplace's method: [Fit] finds the posterior mode by Newton's method in the
 // numerically stable form of Rasmussen and Williams, Gaussian Processes for
 // Machine Learning (2006), Algorithm 3.1, and [Posterior.Predict] follows
@@ -81,7 +85,7 @@ func (o Options) withDefaults() Options {
 type Posterior struct {
 	k     kernel.Kernel
 	train []kernel.Point
-	grad  []float64 // grad log p(y | f_hat), the weights of the mean
+	grad  []float64 // grad log p(y | f_hat), with the answers' weights, the weights of the mean
 	sW    []float64 // W^{1/2} at the mode
 	l     []float64 // lower Cholesky factor of B, row-major n by n
 	fHat  []float64
@@ -104,10 +108,30 @@ func Prior(k kernel.Kernel) *Posterior { return &Posterior{k: k} }
 
 // Fit returns the Laplace posterior given points and their answers, in
 // arrival order. It keeps the most recent o.MaxLabels of them. With no
-// answers it returns [Prior].
+// answers it returns [Prior]. It is [FitWeighted] with each weight 1.
 func Fit(k kernel.Kernel, points []kernel.Point, approve []bool, o Options) (*Posterior, error) {
+	return FitWeighted(k, points, approve, nil, o)
+}
+
+// FitWeighted returns the Laplace posterior of the tempered probit: each
+// answer's log likelihood times its weight, sum_i w_i log Phi(y_i f_i).
+// weights holds one weight in [0, 1] for each answer, or is nil for each
+// weight 1, which is [Fit] bit for bit. It keeps the most recent o.MaxLabels
+// answers first, and then leaves out each answer of weight 0, which adds
+// nothing to the likelihood: the posterior is the one without that answer,
+// and the window of the answers it reads is the one an unweighted fit reads.
+// With no answer of weight above 0 it returns [Prior].
+func FitWeighted(k kernel.Kernel, points []kernel.Point, approve []bool, weights []float64, o Options) (*Posterior, error) {
 	if len(points) != len(approve) {
 		return nil, errors.New("gp: the number of answers differs from the number of points")
+	}
+	if weights != nil && len(weights) != len(points) {
+		return nil, errors.New("gp: the number of weights differs from the number of points")
+	}
+	for _, w := range weights {
+		if !(w >= 0 && w <= 1) {
+			return nil, errors.New("gp: a weight is not in [0, 1]")
+		}
 	}
 	if err := k.Validate(); err != nil {
 		return nil, err
@@ -116,15 +140,33 @@ func Fit(k kernel.Kernel, points []kernel.Point, approve []bool, o Options) (*Po
 	if o.MaxLabels > 0 && len(points) > o.MaxLabels {
 		points = points[len(points)-o.MaxLabels:]
 		approve = approve[len(approve)-o.MaxLabels:]
+		if weights != nil {
+			weights = weights[len(weights)-o.MaxLabels:]
+		}
+	}
+	if weights != nil {
+		var (
+			kept []kernel.Point
+			ans  []bool
+			wts  []float64
+		)
+		for i, w := range weights {
+			if w > 0 {
+				kept, ans, wts = append(kept, points[i]), append(ans, approve[i]), append(wts, w)
+			}
+		}
+		points, approve, weights = kept, ans, wts
 	}
 	if len(points) == 0 {
 		return Prior(k), nil
 	}
-	return fit(k, clone(points), approve, o)
+	return fit(k, clone(points), approve, weights, o)
 }
 
-// fit is Rasmussen and Williams' Algorithm 3.1 with labels in {-1, +1}.
-func fit(k kernel.Kernel, train []kernel.Point, approve []bool, o Options) (*Posterior, error) {
+// fit is Rasmussen and Williams' Algorithm 3.1 with labels in {-1, +1},
+// and with the weights of the answers in the likelihood when wts is not
+// nil.
+func fit(k kernel.Kernel, train []kernel.Point, approve []bool, wts []float64, o Options) (*Posterior, error) {
 	n := len(train)
 	y := make([]float64, n)
 	for i, a := range approve {
@@ -146,7 +188,7 @@ func fit(k kernel.Kernel, train []kernel.Point, approve []bool, o Options) (*Pos
 	var chol mat.Cholesky
 	last := math.Inf(-1)
 	for range o.MaxIter {
-		ll, grad, w := probit(f, y)
+		ll, grad, w := probit(f, y, wts)
 		sW := sqrtAll(w)
 		if !factorize(&chol, K, sW) {
 			return nil, errors.New("gp: B is not positive definite; a point or an answer is not finite")
@@ -165,7 +207,7 @@ func fit(k kernel.Kernel, train []kernel.Point, approve []bool, o Options) (*Pos
 		last = obj
 	}
 
-	ll, grad, w := probit(f, y)
+	ll, grad, w := probit(f, y, wts)
 	sW := sqrtAll(w)
 	if !factorize(&chol, K, sW) {
 		return nil, errors.New("gp: B is not positive definite at the mode")
@@ -218,7 +260,9 @@ func (p *Posterior) Predict(q kernel.Point) Prediction {
 // Explanation is a prediction taken apart in the model's own terms
 // (spec 009). The mean is a weighted sum over the fitted answers,
 // k(x_i, q) times the gradient of the log likelihood at the mode, so each
-// answer's term is its exact share of the mean.
+// answer's term is its exact share of the mean. Under [FitWeighted] the
+// gradient carries the answer's weight, so the terms still sum to the
+// mean.
 type Explanation struct {
 	Prediction
 	// Prior is k(q, q), the variance before any answer, and EvidenceRatio
@@ -265,7 +309,8 @@ func (p *Posterior) PredictAll(qs []kernel.Point) []Prediction {
 }
 
 // LogMarginal is the Laplace approximation of the log marginal likelihood
-// of the answers, zero for the prior.
+// of the answers, zero for the prior. After [FitWeighted] it is the one of
+// the tempered likelihood.
 func (p *Posterior) LogMarginal() float64 { return p.logZ }
 
 // Len is the number of answers the posterior was fitted on.

@@ -170,9 +170,9 @@ func TestLogCDFGolden(t *testing.T) {
 func TestProbit(t *testing.T) {
 	f := []float64{0.3, -1.2, 2.1, -0.4, 0.05, -3.0}
 	y := []float64{1, -1, 1, 1, -1, -1}
-	_, grad, _ := probit(f, y)
+	_, grad, _ := probit(f, y, nil)
 	sum := func(f []float64) float64 {
-		s, _, _ := probit(f, y)
+		s, _, _ := probit(f, y, nil)
 		return s
 	}
 	const eps = 1e-6
@@ -184,7 +184,7 @@ func TestProbit(t *testing.T) {
 			t.Errorf("grad[%d] = %.8g, central difference %.8g", i, grad[i], d)
 		}
 	}
-	_, grad, w := probit([]float64{50, -50}, []float64{1, 1})
+	_, grad, w := probit([]float64{50, -50}, []float64{1, 1}, nil)
 	for i := range grad {
 		if math.IsNaN(grad[i]) || math.IsInf(grad[i], 0) || w[i] < 1e-10 {
 			t.Errorf("extreme %d: grad %v, W %v", i, grad[i], w[i])
@@ -433,7 +433,7 @@ func TestFactorizeRefusesNaN(t *testing.T) {
 	if factorize(&chol, K, []float64{1}) {
 		t.Error("a NaN kernel matrix factorized")
 	}
-	if _, err := fit(kernel.DefaultProduct(), []kernel.Point{{Tool: []float64{0}, Ctx: []float64{0}}}, []bool{true}, Options{MaxIter: 0, Jitter: math.NaN()}.withDefaults()); err == nil {
+	if _, err := fit(kernel.DefaultProduct(), []kernel.Point{{Tool: []float64{0}, Ctx: []float64{0}}}, []bool{true}, nil, Options{MaxIter: 0, Jitter: math.NaN()}.withDefaults()); err == nil {
 		t.Error("a NaN jitter fitted")
 	}
 }
