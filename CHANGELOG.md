@@ -21,6 +21,17 @@ the commit log.
 
 ### Changed
 
+- The named cost profile Strict has the costs 20, 4, and 1, and its
+  upper threshold is 0.95. Before, it had the costs 50, 4, and 1, and
+  its upper threshold was 0.98. With only approvals, the approval
+  probability of the default model stops at 0.978, so no action got
+  `allow` with the old Strict. With the new Strict, an action gets
+  `allow` after 20 approvals with the details open, from 2 sessions.
+  The `thresholds` figure, its data, the conformance cases, and specs
+  010 and 011 use the new costs. Limen keeps the costs of a saved cost
+  profile, not a name: a cost profile saved with the costs 50, 4, and 1
+  keeps the upper threshold 0.98, and a client shows it as a custom
+  profile.
 - The documents tell how Limen works and how to use it, and no longer
   give the status of a deployment. The notes for Topos are for Topos
   v0.69.0 or later.
