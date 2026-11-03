@@ -143,6 +143,7 @@ func (s *Service) Explain(ctx context.Context, k limen.Key) (limen.Explanation, 
 	if e.predictedBy != nil {
 		out.PredictedBy = &limen.ModelRef{Source: Source, Answers: *e.predictedBy}
 	}
+	out.Calibration = s.calibrationOfLocked(e)
 	return out, nil
 }
 

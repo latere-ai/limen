@@ -11,9 +11,9 @@
 // per action, answers whose role follows from the decision, profiles with
 // their precedence, the built-in default and a person's own profile met
 // with the organization's, the scope of each action and the cover rule with
-// the weight of each answer (spec 011), reliability reports and the reports
-// of organizations computed with latere.ai/x/limen/estimate, kept weeks,
-// replays and forgetting. Its predictions come from [Options.Predict],
+// the weight of each answer (spec 011), reliability reports, calibration
+// reports and the reports of organizations computed with
+// latere.ai/x/limen/estimate, kept weeks, replays and forgetting. Its predictions come from [Options.Predict],
 // which by default knows nothing, so every action is an ask. It knows no
 // variance of a model, so an ask in the band is unsure. It passes
 // latere.ai/x/limen/conformance.
