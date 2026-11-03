@@ -360,7 +360,7 @@ func TestModelSwitch(t *testing.T) {
 		if err := c.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := c.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: limen.HowAnswered{DetailsOpened: new(true)}}); err != nil {
+		if err := c.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, DetailsOpened: new(true)}); err != nil {
 			t.Fatal(err)
 		}
 	}

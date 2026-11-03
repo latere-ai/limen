@@ -137,8 +137,9 @@ func compare(args []string, stdin io.Reader, out, errOut *errwriter.Writer, gete
 // writeComparison prints a comparison for the operator who runs it.
 func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[string]int) {
 	o := c.Overall
-	w.Printf("Limen compared %s and %s on %d %s of %d %s. %d of the actions have an answer.\n",
-		c.Base, c.Next, o.Records, plural(o.Records, "action", "actions"), len(c.Persons), plural(len(c.Persons), "person", "persons"), o.Answered)
+	w.Printf("Limen compared %s and %s on %d %s of %d %s. %d of the actions %s an answer.\n",
+		c.Base, c.Next, o.Records, plural(o.Records, "action", "actions"), len(c.Persons), plural(len(c.Persons), "person", "persons"),
+		o.Answered, plural(o.Answered, "has", "have"))
 	if n := total(skipped); n > 0 {
 		w.Printf("Limen skipped %d %s. Use limen replay to see the reasons.\n", n, plural(n, "action", "actions"))
 	}

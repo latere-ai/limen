@@ -118,7 +118,7 @@ type Change struct {
 // it is so outside the cover rule: not an allow of a covered action.
 func looser(base, next limen.Prediction) (bool, bool) {
 	l := rank(next.Verdict) > rank(base.Verdict)
-	return l, l && !(next.Verdict == limen.Allow && next.Cover.Covered)
+	return l, l && (next.Verdict != limen.Allow || !next.Cover.Covered)
 }
 
 // Suggestion is what one version suggested for a record.

@@ -51,7 +51,7 @@ func TestQuickApprovalsMoveLearned2Less(t *testing.T) {
 	}
 	two := steps(t, coverEngine(t, careful, engine.Options{Model: engine.Learned2}), limen.HowAnswered{})
 	for i := 1; i < len(two); i++ {
-		if !(two[i] > two[i-1] && two[i] < carefulSteps[i]) {
+		if two[i] <= two[i-1] || two[i] >= carefulSteps[i] {
 			t.Errorf("learned/2, quick approvals: %v, each step must rise and stay below %v", two, carefulSteps)
 			break
 		}
