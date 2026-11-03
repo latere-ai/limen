@@ -61,7 +61,7 @@ func TestLearnedEntriesAreExplanations(t *testing.T) {
 		x, found := -1.0, false
 		for _, c := range cases {
 			if label(c) == entry.Label && len(c.Answers) > 0 {
-				x, found = m.post.Load().Explain(point(c, now)).EvidenceRatio, true
+				x, found = m.post.Load().Explain(e.ver.point(c, now)).EvidenceRatio, true
 			}
 		}
 		if !found {

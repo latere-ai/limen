@@ -13,7 +13,6 @@ import (
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine/featurize"
 	"latere.ai/x/limen/engine/gp"
-	"latere.ai/x/limen/engine/kernel"
 	"latere.ai/x/limen/engine/store"
 	"latere.ai/x/limen/estimate"
 )
@@ -45,17 +44,6 @@ func evidenceRatio(variance, prior float64) float64 {
 		return 0
 	}
 	return min(max(1-variance/prior, 0), 1)
-}
-
-// point is the case as the model sees it at time t. A case featurized by
-// another featurizer version is featurized again from its stored action,
-// as a fit does.
-func point(c store.Case, t int64) kernel.Point {
-	if c.Featurizer != featurize.Version {
-		f := featurize.Of(c.Action)
-		c.A, c.C = f.A, f.C
-	}
-	return kernel.Point{Tool: c.A, Ctx: c.C, T: float64(t)}
 }
 
 // label is the case's label, or for a case from before labels, the label
@@ -114,7 +102,7 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 		return limen.Explanation{}, err
 	}
 	post := m.post.Load()
-	ex := post.Explain(point(c, c.T))
+	ex := post.Explain(e.ver.point(c, c.T))
 	cases, err := e.st.Cases(ctx, k.Org, k.Subject)
 	if err != nil {
 		return limen.Explanation{}, err
@@ -258,7 +246,7 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 		if err != nil {
 			return limen.Learned{}, err
 		}
-		ex := post.Explain(point(g.rep, now))
+		ex := post.Explain(e.ver.point(g.rep, now))
 		s, fams := reach(g.rep)
 		j := estimate.Judge(ex.Approve, ex.EvidenceRatio, prof.Thresholds, fams, s, recs, w, e.settings(prof))
 		out.Entries = append(out.Entries, limen.LearnedEntry{
@@ -273,7 +261,7 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 		return cmp.Or(cmp.Compare(b.Approved+b.Denied, a.Approved+a.Denied), cmp.Compare(a.Label, b.Label))
 	})
 	if post.Len() > 0 && len(cases) > 0 {
-		out.Recent = trend(post.Posterior, cases, now)
+		out.Recent = trend(post.Posterior, e.ver, cases, now)
 	}
 	return out, nil
 }
@@ -281,7 +269,7 @@ func (e *Engine) Learned(ctx context.Context, q limen.LearnedQuery) (limen.Learn
 // trend samples the shared tolerance part at up to maxTrend evenly spaced
 // decisions, the last one the latest. The part depends on time alone, so
 // any case's features serve as the point.
-func trend(post *gp.Posterior, cases []store.Case, now int64) []limen.TrendPoint {
+func trend(post *gp.Posterior, v version, cases []store.Case, now int64) []limen.TrendPoint {
 	n := int64(min(maxTrend, len(cases)))
 	at := cases[len(cases)-1]
 	out := make([]limen.TrendPoint, 0, n)
@@ -294,7 +282,7 @@ func trend(post *gp.Posterior, cases []store.Case, now int64) []limen.TrendPoint
 			}
 			c = x
 		}
-		ex := post.Explain(point(at, t))
+		ex := post.Explain(v.point(at, t))
 		if ex.Parts == nil {
 			return []limen.TrendPoint{}
 		}

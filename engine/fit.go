@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"latere.ai/x/limen"
-	"latere.ai/x/limen/engine/featurize"
 	"latere.ai/x/limen/engine/gp"
 	"latere.ai/x/limen/engine/kernel"
+	"latere.ai/x/limen/estimate"
 )
 
 // model is one subject's fitted posterior. Predictions read post without
@@ -47,10 +47,13 @@ func (m *model) due() int64 { return m.answers.Load() - m.fitted.Load() }
 type fitted struct {
 	*gp.Posterior
 	answers int64
+	model   Model
 }
 
 // ref names the posterior as the contract does.
-func (f *fitted) ref() limen.ModelRef { return limen.ModelRef{Source: Source, Answers: f.answers} }
+func (f *fitted) ref() limen.ModelRef {
+	return limen.ModelRef{Source: string(f.model), Answers: f.answers}
+}
 
 // cache holds models under a byte budget, least recently used first out.
 type cache struct {
@@ -136,10 +139,11 @@ func (c *cache) all() []*model {
 	return out
 }
 
-// sizeOf approximates a posterior's memory: the factor and the points.
-func sizeOf(p *gp.Posterior) int64 {
+// sizeOf approximates a posterior's memory under the version v: the factor
+// and the points.
+func (v version) sizeOf(p *gp.Posterior) int64 {
 	n := int64(p.Len())
-	return 8*n*n + 8*n*int64(featurize.DimA+featurize.DimC+8) + 256
+	return 8*n*n + 8*n*int64(v.dimA+v.dimC+8) + 256
 }
 
 // model returns the subject's model, loading its stored snapshot or starting
@@ -162,9 +166,12 @@ func (e *Engine) model(ctx context.Context, k subjectKey) (*model, error) {
 	return m, nil
 }
 
-// load builds a model from the store: the stored snapshot when there is
-// one, the prior otherwise, with the subject's answer count, so a model
-// that missed answers while evicted or stopped is due at once.
+// load builds a model from the store: the stored snapshot of the engine's
+// version when there is one, the prior otherwise, with the subject's
+// answer count, so a model that missed answers while evicted or stopped,
+// or a version that has never fitted the person, is due at once. Its fit
+// runs off the hot path, so until it lands, about a second after a
+// switch of the version, the person's predictions come from the prior.
 func (e *Engine) load(ctx context.Context, k subjectKey) (*model, error) {
 	m := &model{key: k}
 	cases, err := e.st.Cases(ctx, k.org, k.subject)
@@ -178,7 +185,7 @@ func (e *Engine) load(ctx context.Context, k subjectKey) (*model, error) {
 	m.answers.Store(answers)
 	m.ledger = newLedger(cases)
 	post := gp.Prior(e.kern)
-	b, ok, err := e.st.Snapshot(ctx, k.org, k.subject, Version)
+	b, ok, err := e.st.Snapshot(ctx, k.org, k.subject, e.ver.snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -187,45 +194,61 @@ func (e *Engine) load(ctx context.Context, k subjectKey) (*model, error) {
 		if err != nil {
 			return nil, fmt.Errorf("engine: snapshot of %s in %s: %w", k.subject, k.org, err)
 		}
+		for _, p := range s.State.Train {
+			if !e.ver.fits(p) {
+				return nil, fmt.Errorf("engine: snapshot %s of %s in %s holds a vector of %d and %d dimensions, not one of %s",
+					e.ver.snapshot, k.subject, k.org, len(p.Tool), len(p.Ctx), e.ver.model)
+			}
+		}
 		if post, err = gp.Restore(e.kern, s.State); err != nil {
 			return nil, fmt.Errorf("engine: snapshot of %s in %s: %w", k.subject, k.org, err)
 		}
 		m.fitted.Store(s.Answers)
 	}
-	m.post.Store(&fitted{Posterior: post, answers: m.fitted.Load()})
-	m.bytes.Store(sizeOf(post))
+	m.post.Store(&fitted{Posterior: post, answers: m.fitted.Load(), model: e.ver.model})
+	m.bytes.Store(e.ver.sizeOf(post))
 	if m.due() > 0 && e.inline <= 0 {
 		e.schedule(m)
 	}
 	return m, nil
 }
 
-// training returns the subject's answered cases as points and their latest
-// answers, in the order of T. A case featurized by another featurizer
-// version is featurized again from its stored action, whose input is gone.
-func (e *Engine) training(ctx context.Context, k subjectKey) ([]kernel.Point, []bool, int64, error) {
+// training returns the subject's answered cases as points of the engine's
+// version and their latest answers, in the order of T, with the weight of
+// each latest answer under weights/2 when the version weighs the answers,
+// and nil weights when it does not. A case featurized by another
+// featurizer version is featurized again from its stored action, whose
+// input is gone.
+func (e *Engine) training(ctx context.Context, k subjectKey) ([]kernel.Point, []bool, []float64, int64, error) {
 	cases, err := e.st.Cases(ctx, k.org, k.subject)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	var (
 		pts     []kernel.Point
 		approve []bool
+		weights []float64
 		answers int64
+		graded  []estimate.Weights
 	)
-	for _, c := range cases {
+	if e.ver.weighted {
+		graded = e.policy.Graded(records(cases))
+	}
+	for i, c := range cases {
 		answers += int64(len(c.Answers))
 		if len(c.Answers) == 0 {
 			continue
 		}
-		if c.Featurizer != featurize.Version {
-			f := featurize.Of(c.Action)
-			c.A, c.C = f.A, f.C
-		}
-		pts = append(pts, kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
+		pts = append(pts, e.ver.point(c, c.T))
 		approve = append(approve, c.Answers[len(c.Answers)-1].Approve)
+		if graded != nil {
+			weights = append(weights, graded[i].Latest)
+		}
 	}
-	return pts, approve, answers, nil
+	if e.ver.weighted && weights == nil {
+		weights = []float64{}
+	}
+	return pts, approve, weights, answers, nil
 }
 
 // fit refits a model on the subject's answers, stores the state, and swaps
@@ -240,7 +263,7 @@ func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
 	}
 	m.fitMu.Lock()
 	defer m.fitMu.Unlock()
-	pts, approve, answers, err := e.training(ctx, m.key)
+	pts, approve, weights, answers, err := e.training(ctx, m.key)
 	unlock()
 	if err != nil {
 		return err
@@ -248,7 +271,7 @@ func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
 	if answers == m.fitted.Load() && m.post.Load() != nil {
 		return nil
 	}
-	post, err := gp.Fit(e.kern, pts, approve, e.opts)
+	post, err := gp.FitWeighted(e.kern, pts, approve, weights, e.opts)
 	if err != nil {
 		return fmt.Errorf("engine: fit of %s in %s: %w", m.key.subject, m.key.org, err)
 	}
@@ -256,12 +279,12 @@ func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
 	if err != nil {
 		return err
 	}
-	if err := e.st.PutSnapshot(ctx, m.key.org, m.key.subject, Version, b); err != nil {
+	if err := e.st.PutSnapshot(ctx, m.key.org, m.key.subject, e.ver.snapshot, b); err != nil {
 		return err
 	}
-	m.post.Store(&fitted{Posterior: post, answers: answers})
+	m.post.Store(&fitted{Posterior: post, answers: answers, model: e.ver.model})
 	m.fitted.Store(answers)
-	e.models.resize(m, sizeOf(post))
+	e.models.resize(m, e.ver.sizeOf(post))
 	return nil
 }
 

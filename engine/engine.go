@@ -48,21 +48,19 @@ import (
 	"latere.ai/x/limen/estimate"
 )
 
-// Version names the model version this engine serves: features/1, the
-// additive kernel with the research's hyperparameters, and the label cap.
-// A prediction's source is "learned/" + Version, and a model never mixes
-// versions (spec 004).
-const Version = "1"
-
-// Source is the source of every prediction this engine makes.
-const Source = "learned/" + Version
-
 // Options configure an [Engine]. The zero value is a working engine over a
 // fresh in-memory store with background fitting.
 type Options struct {
 	// Store keeps the ledger, the profiles and the fitted models; nil is a
 	// fresh [store.Memory].
 	Store store.Store
+	// Model is the model version the engine serves, the source of each of
+	// its predictions: [Learned1], the default when empty, or [Learned2].
+	// The engine reads and writes the snapshots of this version only, so
+	// the snapshots of another version stay in the store for an engine
+	// that serves it. A model the package does not know panics; read it
+	// with [ParseModel].
+	Model Model
 	// Clock stamps receive and answer times; nil is time.Now.
 	Clock func() time.Time
 	// Inline, when positive, fits a model in the caller's goroutine once it
@@ -106,6 +104,7 @@ type subjectKey struct{ org, subject string }
 type Engine struct {
 	st      store.Store
 	clock   func() time.Time
+	ver     version
 	kern    kernel.Additive
 	opts    gp.Options
 	inline  int
@@ -151,6 +150,7 @@ func build(o Options) *Engine {
 	e := &Engine{
 		st:      o.Store,
 		clock:   o.Clock,
+		ver:     versionOf(o.Model),
 		kern:    kernel.DefaultAdditive(),
 		opts:    gp.Options{MaxLabels: cmp.Or(o.MaxLabels, gp.DefaultMaxLabels)},
 		inline:  o.Inline,
@@ -175,6 +175,9 @@ func build(o Options) *Engine {
 	}
 	return e
 }
+
+// Model is the model version the engine serves.
+func (e *Engine) Model() Model { return e.ver.model }
 
 // Close stops the background fitters and waits for a fit in flight. It does
 // not close the store, which the caller opened.
@@ -274,7 +277,7 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		return limen.Prediction{}, err
 	}
 	post := m.post.Load()
-	pr := post.Predict(kernel.Point{Tool: c.A, Ctx: c.C, T: float64(c.T)})
+	pr := post.Predict(e.ver.point(c, c.T))
 	er := evidenceRatio(pr.Var, post.Kernel().Var())
 	s, fams := reach(c)
 	recs := m.ledger.recs
@@ -289,7 +292,7 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		Thresholds:    prof.Thresholds,
 		Profile:       prof.Scope,
 		AuditRate:     prof.AuditRate,
-		Source:        Source,
+		Source:        string(e.ver.model),
 		Reason:        reason(pr.Approve, prof.Thresholds, post.Len(), j, label(c)),
 		Scope:         s,
 		Cover:         j.Cover,
@@ -641,8 +644,8 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 
 // Replay implements [limen.Admin]. Records are predicted in the order of
 // their times, each before its own answer is learned, by a scratch engine
-// over a memory store that copies this engine's profiles and refits inline
-// every eight answers. With Keep, the records' decisions and answers are
+// of this engine's model over a memory store that copies this engine's
+// profiles and refits inline every eight answers. With Keep, the records' decisions and answers are
 // then recorded in this engine, as if they had arrived live, and its models
 // are fitted on them.
 func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecord, error], o limen.ReplayOptions) (limen.ReplayReport, error) {
@@ -686,7 +689,7 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	}
 	// Inline, so the scratch engine runs no fitter and needs no Close. It
 	// holds allows to this engine's cover rule and weights.
-	scratch := build(Options{Store: mem, Inline: 8, MaxLabels: e.opts.MaxLabels,
+	scratch := build(Options{Store: mem, Model: e.ver.model, Inline: 8, MaxLabels: e.opts.MaxLabels,
 		MinWeight: optionOf(e.minWeight), MinSessions: optionOf(e.minSessions),
 		AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue)})
 
