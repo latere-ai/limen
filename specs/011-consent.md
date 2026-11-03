@@ -1146,6 +1146,15 @@ after six seconds and the rest after one second.
 | covers that differ between the versions | 0 | 0 | 0 | 0 |
 | Brier score, `learned/1` | 0.1071 | 0.1071 | 0.1071 | 0.1071 |
 | Brier score, `learned/2` | 0.0738 | 0.0791 | 0.1235 | 0.0921 |
+| calibration error, `learned/1` | none estimable | none estimable | none estimable | 0.1536, one bin, 69.2% of the cases |
+| calibration error, `learned/2` | none estimable | none estimable | none estimable | none estimable |
+
+The calibration error is the `error` of the calibration report of wave 2
+over the replayed predictions of each version. Over all three persons,
+`learned/1` states about 0.85 for 27 updates in the bin `[0.8, 0.9)`,
+and each of their reviews approves, so the bin is `underconfident`.
+`learned/2` puts the same updates into more bins, and no bin reaches an
+effective size of 20. A history this small estimates few bins.
 
 The changes, by kind:
 
@@ -1168,8 +1177,10 @@ versions, with Brier scores 0.2965 and 0.2841. The Topos history of the
 command's tests (320 actions of one person in 4 sessions, approvals of
 `go test` and denials of `rm -rf`) gives the same verdicts under both
 versions (119 `allow`, 158 `block`, 31 `ask (few)`, 10 `ask (short)`, 2
-`ask (unsure)`), with Brier scores 0.0059 and 0.0060, from its logs and
-from the ledger a kept replay wrote. That comparison took 7 seconds.
+`ask (unsure)`), with Brier scores 0.0059 and 0.0060 and calibration
+errors 0.0455 and 0.0477 (93.8% of the cases in estimable bins, two of
+them `underconfident` under each version), from its logs and from the
+ledger a kept replay wrote. That comparison took 7 seconds.
 
 #### What diverges from the design as written
 
@@ -1182,7 +1193,7 @@ from the ledger a kept replay wrote. That comparison took 7 seconds.
 | the refit fits version 2 at the first prediction of each person and serves it | the first prediction of each person under `learned/2` starts the fit in the background, and is predicted from the prior: 0.5, `ask (unsure)`, about one second | a prediction never fits ([[004-engine]], criterion 6) |
 | criterion 10 of [[004-engine]]: two versions side by side | an installation serves one version and an operator chooses it; each version reads and writes its own snapshots; no second fit of each answer | decision 1 |
 | a replay of the ledger beside the recorded predictions of version 1 | `limen compare` replays both versions, and for a ledger also counts the recorded verdicts and how many the replayed `learned/1` repeats | a recorded prediction can be from a release before the cover rule, so a replayed `learned/1` is the fair base |
-| the calibration error of each version | a Brier score over the answered records | the calibration report of wave 2 is not on main. Only seen actions have answers, so the score compares the versions and estimates no error over all actions |
+| the calibration error of each version | the `error` of the calibration report of wave 2 over the replayed predictions of each version, with its bins, per person and over all; and a Brier score over the answered records beside it | wave 2 landed before wave 3 was pushed. The report needs 20 reviews in a bin, so the Brier score also compares two versions on a small history; only seen actions have answers, so it estimates no error over all actions |
 | more permissive outside the cover rule | `looser` counts each verdict of `learned/2` that permits more, and `outside` those that are not an allow of a covered action | the cover rule reads `weights/1` in both versions, so a looser verdict comes from the model, and the cover tells if the person's considered approvals hold it |
 | the reason "Limen has no answers from this person yet" | it reads the answered cases of the person, not the answers the model fitted | a model of a new version, before its first fit, gave it to a person with answers |
 | nothing about conformance | the conformance suite passes under `learned/2`, in the background and inline | the contract holds for each version |
