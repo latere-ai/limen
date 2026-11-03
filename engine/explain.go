@@ -119,7 +119,7 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 		Verdict:       j.Verdict,
 		Thresholds:    th,
 		Cover:         limen.ExplainedCover{Cover: j.Cover, Nearest: estimate.Nearest(fams, s, recs, set, nearest)},
-		Reason:        reason(ex.Approve, th, answered(recs), j, label(c)),
+		Reason:        reason(ex.Approve, th, answeredCases(recs), j, label(c)),
 		Mean:          ex.Mean,
 		Parts:         parts(ex),
 		EvidenceRatio: ex.EvidenceRatio,

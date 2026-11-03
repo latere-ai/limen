@@ -113,8 +113,8 @@ func (l *ledger) approved() []*limen.Target {
 	return out
 }
 
-// answered counts the records with an answer.
-func answered(recs []estimate.Record) int {
+// answeredCases counts the records with an answer.
+func answeredCases(recs []estimate.Record) int {
 	n := 0
 	for _, r := range recs {
 		if len(r.Answers) > 0 {

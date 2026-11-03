@@ -292,7 +292,7 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		Profile:       prof.Scope,
 		AuditRate:     prof.AuditRate,
 		Source:        string(e.ver.model),
-		Reason:        reason(pr.Approve, prof.Thresholds, answered(recs), j, label(c)),
+		Reason:        reason(pr.Approve, prof.Thresholds, answeredCases(recs), j, label(c)),
 		Scope:         s,
 		Cover:         j.Cover,
 	}
