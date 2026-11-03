@@ -118,7 +118,7 @@ func TestServe(t *testing.T) {
 	if _, err := bad.Predict(ctx, a); limen.CodeOf(err) != limen.CodeUnauthenticated {
 		t.Errorf("a wrong token: %v", err)
 	}
-	if code, log := stop(); code != exitOK || !strings.Contains(log, "Limen stopped.") {
+	if code, log := stop(); code != exitOK || !strings.Contains(log, "Limen stopped.") || !strings.Contains(log, "The model is learned/1.") {
 		t.Fatalf("stop: exit %d: %s", code, log)
 	}
 
@@ -238,6 +238,7 @@ func TestConfiguration(t *testing.T) {
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MIN_SESSIONS": "-1"}, exitConfig, `LIMEN_MIN_SESSIONS is not correct: "-1"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FLOOR_MS": "2s"}, exitConfig, `LIMEN_ANSWER_FLOOR_MS is not correct: "2s"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FATIGUE": "-3"}, exitConfig, `LIMEN_ANSWER_FATIGUE is not correct: "-3"`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MODEL": "learned/3"}, exitConfig, `LIMEN_MODEL is not correct: "learned/3" is not a model version`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}
@@ -316,4 +317,70 @@ func TestConformance(t *testing.T) {
 		New:     func(t *testing.T) limen.Service { return running(t, nil) },
 		Clocked: running,
 	})
+}
+
+// LIMEN_MODEL switches the server to learned/2 (spec 011). It fits
+// version 2 from the cases that learned/1 kept, keeps the snapshot of
+// learned/1, and names its model in each prediction; switching back
+// serves learned/1 again.
+func TestModelSwitch(t *testing.T) {
+	ledger := t.TempDir()
+	ctx := context.Background()
+	in, _ := json.Marshal(map[string]string{"command": "go test ./..."})
+	act := func(id string) limen.Action {
+		return limen.Action{Org: "local", Subject: "me", ActionID: id, Actor: &limen.Actor{Kind: "agent", Session: "ses-" + id},
+			Kind: "tool", Name: "bash", Effect: limen.EffectWrite, Input: in}
+	}
+	serve := func(model string) (*client.Client, func() (int, string)) {
+		addr, stop := startWith(t, map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": ledger, "LIMEN_SUBJECT": "me", "LIMEN_MODEL": model})
+		c, err := client.New("http://"+addr, client.Options{HTTP: http.DefaultClient, Token: "s3cret"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c, stop
+	}
+	probe := func(c *client.Client, prefix string) limen.Prediction {
+		var p limen.Prediction
+		var err error
+		// The model fits in the background after the answers and the switch.
+		for i := 0; i < 500 && (i == 0 || p.Approve == 0.5); i++ {
+			if p, err = c.Predict(ctx, act(fmt.Sprintf("%s-%d", prefix, i))); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return p
+	}
+	c, stop := serve("")
+	for i := range 4 {
+		a := act(fmt.Sprintf("t%d", i))
+		if _, err := c.Predict(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Record(ctx, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "topos/confirm"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: limen.HowAnswered{DetailsOpened: new(true)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	one := probe(c, "one")
+	if code, log := stop(); code != exitOK || one.Source != "learned/1" || one.Approve <= 0.5 || !strings.Contains(log, "The model is learned/1.") {
+		t.Fatalf("learned/1: %+v, exit %d: %s", one, code, log)
+	}
+	c, stop = serve(" learned/2 ")
+	two := probe(c, "two")
+	if code, log := stop(); code != exitOK || two.Source != "learned/2" || two.Approve <= 0.5 || !strings.Contains(log, "The model is learned/2.") {
+		t.Fatalf("learned/2: %+v, exit %d: %s", two, code, log)
+	}
+	for _, v := range []string{"1", "2"} {
+		if m, _ := filepath.Glob(filepath.Join(ledger, "subjects", "*", "*", "snapshots", v+".snap")); len(m) != 1 {
+			t.Errorf("snapshots of version %s: %v", v, m)
+		}
+	}
+	c, stop = serve("learned/1")
+	back := probe(c, "back")
+	if code, _ := stop(); code != exitOK || back.Source != "learned/1" {
+		t.Errorf("back to learned/1: %+v, exit %d", back, code)
+	}
 }
