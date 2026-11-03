@@ -1,0 +1,36 @@
+{
+  "allow_above": 0.9,
+  "audit_rate": 0.05,
+  "block_below": 0.25,
+  "changepoint": 750,
+  "decisions": 1500,
+  "kernel": {
+    "SStatic": 1.6,
+    "SGlobal": 1,
+    "SInter": 0.6,
+    "LTool": 1.1,
+    "LCtx": 1.2,
+    "Lambda": 90
+  },
+  "max_labels": 512,
+  "model": "engine/gp, kernel.DefaultAdditive",
+  "oracle": {
+    "A0": 1.4,
+    "WRisk": 3.4,
+    "Rho": 1,
+    "Theta": 1.6,
+    "Kappa": 130,
+    "Veto": 3,
+    "VetoSens": 0.65,
+    "Changepoint": 750,
+    "WRev": 0.28,
+    "WTSens": 0.32,
+    "WBlast": 0.12,
+    "WArg": 0.16,
+    "WBase": 0.12
+  },
+  "persons": 20,
+  "refit": "after every answer",
+  "seeds": "0-19",
+  "stream_seeds": "1000-1019"
+}
