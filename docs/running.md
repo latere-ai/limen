@@ -149,8 +149,7 @@ set, `limend` does not start and stops with exit code 2.
 A hosted server keeps the ledger in a directory, as a server for one
 person does. Only one process can use a ledger directory. In a container
 platform, run one replica, and put the ledger directory on a persistent
-volume. A store that more than one server can share is not ready. We
-plan to add it after Limen is open source.
+volume.
 
 ## The ledger directory
 

@@ -280,7 +280,7 @@ v, prob := verdict.Decide(suggested, ceiling, p.AuditRate, rand.Float64())
 - Use the verdict of your rules for an `ask` that is not `split` or
   `wider`. Use the suggested `block` of Limen as usual.
 - Treat an `ask` without `ask_kind`, or with a kind that you do not know,
-  as `unsure`. A server before v0.3.0 does not send the field.
+  as `unsure`. An older server does not send the field.
 - A suggested `allow` of Limen always has `cover.covered`. A server
   before the cover rule does not send `cover`. Then let your rules
   decide.
@@ -295,9 +295,10 @@ v, prob := verdict.Decide(suggested, ceiling, p.AuditRate, rand.Float64())
   verdict never permits more than the ceiling.
 
 With this policy, the suggested verdict of Limen decides only where Limen
-has evidence about the person. Hosted Topos uses this policy in its
-`learned` mode ([Topos](#topos)). Limen still suggests `ask`, and its
-reliability report (`of=learned`) still measures that suggestion.
+has evidence about the person. The `learned` mode of the Topos server
+uses this policy ([Hosted Topos](#hosted-topos)). Limen still suggests
+`ask`, and its reliability report (`of=learned`) still measures that
+suggestion.
 
 ## Record each decision
 
@@ -619,7 +620,8 @@ before it.
    You can also start with the policy in
    [Kinds of `ask`](#kinds-of-ask). Then Limen decides only where
    it has evidence about the person, and your rules decide the other
-   actions as before. Hosted Topos uses this policy.
+   actions as before. The `learned` mode of the Topos server uses this
+   policy.
 
 4. **Signals from a judge.** Attach the verdicts of your judge to the
    actions as signals. Monitor the reliability report of the judge for
@@ -629,28 +631,34 @@ before it.
 
 ### Topos
 
-[Topos](https://github.com/latere-ai/topos) is the first decision point
-that uses Limen. Topos can use any decision service that has this API.
+[Topos](https://github.com/latere-ai/topos) is an agent harness that
+can use Limen as its decision service. Topos can use any decision
+service that has this API.
+
+These notes are for Topos v0.69.0 or later. From this version, Topos
+sends the scope of each call and how the person answered, and in the
+`learned` mode a `wider` ask waits for the person. An earlier version of
+Topos can connect to Limen, but it does not do these things.
 
 The rules of Topos give the ceiling, and `verdict.Decide` combines the
 verdicts. Topos records each decision with the tool call of the session.
 Topos sends the confirmations of the person as answers.
 
-From Topos v0.68.0, the source of a decision is `topos/<mode>/<rule>`.
-`<mode>` is `confirm` or `progressive`. `<rule>` tells what decided the
-call. For example, `always_allow` is a pattern of the permitted list,
-`score` is the risk score, and `learned` is the suggested verdict of
-Limen. A decision without a `<rule>` has the source `topos/<mode>`.
-Before v0.68.0, the source was `topos/confirm` or `topos/progressive`.
+The source of a decision is `topos/<mode>/<rule>`. `<mode>` is `confirm`
+or `progressive`. `<rule>` tells what decided the call. For example,
+`always_allow` is a pattern of the permitted list, `score` is the risk
+score, and `learned` is the suggested verdict of Limen. A decision
+without a `<rule>` has the source `topos/<mode>`.
 
 #### Topos on your computer
 
-`topos run` uses Limen from Topos v0.11.0. It has two modes:
+`topos run` uses Limen if `TOPOS_DECISIONS_URL` and
+`TOPOS_DECISIONS_TOKEN` are set. It has two modes:
 
 - **Manual mode** (`topos run --mode manual`, the `confirm` mode of
-  Topos). Topos asks you about each call that is not read-only, as
-  before. Each answer teaches Limen. Topos records each prediction with
-  the call. You can see what Limen would do.
+  Topos). Topos asks you about each call that is not read-only, as it
+  does without Limen. Each answer teaches Limen. Topos records each
+  prediction with the call. You can see what Limen would do.
 - **Auto mode** (`topos run --mode auto`, the `progressive` mode of
   Topos). The suggested verdict of Limen decides each call that the rules
   of Topos do not decide. A familiar safe call runs, and Topos blocks a
@@ -658,8 +666,9 @@ Before v0.68.0, the source was `topos/confirm` or `topos/progressive`.
   still shows a part of the automatic verdicts to you for audit. With
   these audits, the ledger can measure how often auto mode is wrong.
 
-`topos run` does not read `TOPOS_DECISIONS_MODE`. Its auto mode is the
-`decide` mode of [hosted Topos](#hosted-topos).
+`topos run` reads only `TOPOS_DECISIONS_URL` and `TOPOS_DECISIONS_TOKEN`.
+It does not read `TOPOS_DECISIONS_MODE`. Its auto mode is the `decide`
+mode of [hosted Topos](#hosted-topos).
 
 Start the server of Limen. Then give Topos its address and the token:
 
@@ -684,7 +693,7 @@ more of the same family and reach, in 2 sessions or more.
 The Topos server, `toposd`, sends each tool call of each hosted session
 to Limen if `TOPOS_DECISIONS_URL` is set. `TOPOS_DECISIONS_MODE` sets how
 much the suggested verdict of Limen decides in the `progressive` mode of
-Topos. Topos v0.66.0 added this variable.
+Topos.
 
 | `TOPOS_DECISIONS_MODE` | What decides a `progressive` call |
 |---|---|
@@ -694,13 +703,14 @@ Topos. Topos v0.66.0 added this variable.
 
 In the `learned` mode, Topos does this with each kind of `ask`:
 
-| `ask_kind` | Topos v0.68.0 | Topos that reads the kinds of the cover rule |
-|---|---|---|
-| `unsure` | The rules and the risk score decide. | The rules and the risk score decide. |
-| `split` | The person decides. | The person decides. |
-| `short` | The rules and the risk score decide, as for `unsure`. | The rules and the risk score decide. |
-| `wider` | The rules and the risk score decide, as for `unsure`. | The person decides: `decided_by` is `learned`, with the review probability 1. |
-| `few` | The rules and the risk score decide, as for `unsure`. | The rules and the risk score decide. |
+| `ask_kind` | What decides the call |
+|---|---|
+| `unsure` | The rules and the risk score. |
+| `split` | The person. |
+| `short` | The rules and the risk score. |
+| `wider` | The person: `decided_by` is `learned`, with the review probability 1. |
+| `few` | The rules and the risk score. |
+| A kind that Topos does not know | The rules and the risk score. |
 
 With `TOPOS_DECISIONS_LOOSEN` set to `covered`, the default, a suggested
 `allow` of Limen decides only if the prediction has `cover.covered`
@@ -718,12 +728,11 @@ In each mode, these rules apply:
 - The lists of the organization, a tool that holds its own calls, and the
   network rules of Topos decide before Limen.
 
-From v0.66.0, Topos also sends the answer of a person to a network
-approval. The answer goes to Limen as an answer to the call whose
-connection Topos refused.
+Topos also sends the answer of a person to a network approval. The
+answer goes to Limen as an answer to the call whose connection Topos
+refused.
 
-`TOPOS_DECISIONS_ORG` sets the organization of each call in Limen. Topos
-v0.68.0 added this variable.
+`TOPOS_DECISIONS_ORG` sets the organization of each call in Limen.
 
 | `TOPOS_DECISIONS_ORG` | The `org` of a call |
 |---|---|
@@ -765,39 +774,37 @@ limen replay topos
 The data directory is `--data`, then `TOPOS_DATA_DIR`, then
 `$XDG_STATE_HOME/topos`, then `~/.local/state/topos`. A replay opens the
 directory with the session store of Topos, at the version in the `go.mod`
-file of Limen. If the directory has
-logs from a Topos version before v0.60.0, the store updates them to the
-current format one time. This is the same update that Topos does when it
-opens the directory.
+file of Limen. If the directory has logs in an older format, the store
+updates them to the current format one time. This is the same update
+that Topos does when it opens the directory.
 
 Each tool call that has a verdict becomes one record:
 
 - The action is a `tool` action with the name of the tool. Its effect is
   the declared effect of a built-in tool of Topos, or `write` for a
-  different tool. From Topos v0.56.0, it has the attribute `attended`,
-  which Topos also sends with each call. The attribute is `false` if a
-  trigger, not a person, started the turn of the call.
+  different tool. If the log records it, the action has the attribute
+  `attended`, which Topos also sends with each call. The attribute is
+  `false` if a trigger, not a person, started the turn of the call.
 - The verdict is the recorded verdict of Topos, with the source
-  `topos/<mode>/<rule>` ([Topos](#topos)). Topos v0.65.0 and later record
-  `<rule>` in the log. For a log from an earlier version, the source is
-  `topos/<mode>`.
-- The review probability is the recorded probability. A log from before
-  Topos v0.11.0 has no probability. Then the probability is 1 for an `ask`
-  or a `flag`, and 0 for an `allow` or a `block`.
-- The answer comes from the confirmations of the call by the person.
-  From Topos v0.66.0, it also comes from the confirmations of the network
-  approvals that the call caused. A record has one answer. For a call
-  that the person saw (`ask` or `flag`), it is the first answer, which is
-  the review. For a call that ran without the person, it is the last
-  answer, which the model learns.
+  `topos/<mode>/<rule>` ([Topos](#topos)). If the log does not record
+  `<rule>`, the source is `topos/<mode>`.
+- The review probability is the recorded probability. If the log has no
+  probability, the probability is 1 for an `ask` or a `flag`, and 0 for
+  an `allow` or a `block`.
+- The answer comes from the confirmations of the call by the person,
+  and from the confirmations of the network approvals that the call
+  caused. A record has one answer. For a call that the person saw
+  (`ask` or `flag`), it is the first answer, which is the review. For a
+  call that ran without the person, it is the last answer, which the
+  model learns.
 - The time of the answer is the time of its confirmation, in
   `answered_at`. Then the weight of the answer comes from the time that
   the call waited. An answer whose time the log does not give has the
   time of the call, so its approval does not build the cover.
 
 Because of this, after `limen replay topos --keep`, the ledger gives the
-error rate of each type of rule. From v0.68.0, Topos sends each live
-decision with the same source. Before v0.68.0, it sent `topos/<mode>`.
+error rate of each type of rule. Topos sends each live decision with
+the same source.
 
 A replay does not include these calls. The report gives the number of
 each:
@@ -811,10 +818,10 @@ each:
   session.
 
 A command can connect to a host outside the network of the session. Then
-Topos asks you for a network approval. From Topos v0.66.0, Topos sends
-your answer to the approval to Limen as an answer to the call that made
-the connection. A replay reads these answers in the same way. A message
-in place of an answer is not an answer.
+Topos asks you for a network approval. Topos sends your answer to the
+approval to Limen as an answer to the call that made the connection. A
+replay reads these answers in the same way. A message in place of an
+answer is not an answer.
 
 Topos can send more than one answer for a call, and the model learns the
 last answer. A replay keeps one answer for each call. Because of this,
@@ -826,9 +833,9 @@ the sessions of hosted Topos.
 
 ### Claude Code and Codex
 
-The hooks for Claude Code and Codex do not exist yet. We plan to add
-them after Limen is open source. [Spec 005](../specs/005-adapters.md)
-describes them. These notes give what a hook must do.
+Limen has no hook for Claude Code or Codex. You can write one.
+[Spec 005](../specs/005-adapters.md) gives a design. These notes give
+what a hook must do.
 
 **Claude Code** calls the server from a command hook. A `PreToolUse` hook
 returns allow, ask, or deny. Apply the verdicts as follows:
@@ -841,9 +848,7 @@ returns allow, ask, or deny. Apply the verdicts as follows:
 The permission rules of Claude Code can still ask about an action or deny
 it after the hook allowed it. The hook cannot see this. Because of this,
 the recorded review probability can be lower than the real frequency with
-which a person saw such actions. We did not yet examine how the answer of
-a person to an `ask` appears in the hook events of Claude Code. The
-design of the adapter depends on it.
+which a person saw such actions.
 
 **Codex** ([github.com/openai/codex](https://github.com/openai/codex))
 uses its auto-review reviewer only if its static rules would otherwise

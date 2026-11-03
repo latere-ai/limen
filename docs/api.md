@@ -137,7 +137,7 @@ The response is the prediction:
 | `reason` | One sentence for the record of the person. Do not show it to an agent. For an `ask`, it has no probability and no direction. |
 | `scope` | The reach of the action that Limen used: its reading of the input, the holds, and the claims. `undo`, `target_class` and `contact` are words, `unknown` included. `crosses` has a key only for each boundary that is known. `target_kind` names the type of the target without its name. Not in the `FailClosed` fallback. |
 | `cover` | The [cover rule](theory.md#the-cover-rule) for the action. `covered` is `true` if considered approvals of the person in the family of the action, whose scope the action is within, have the weight `min_weight` or more from `min_sessions` sessions or more. `weight` and `sessions` are the numbers for the family with the least weight. Not in the `FailClosed` fallback. |
-| `minimum` | Not used. A server of v0.6 sent it for the answer minimum, which the cover rule replaced. |
+| `minimum` | Not used. An older server sent it. Ignore it. |
 
 An `ask` from the cover rule, after one considered approval of
 `publish: update`, under the upper threshold 0.65:

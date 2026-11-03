@@ -11,6 +11,12 @@ the commit log.
 
 ## Unreleased
 
+### Changed
+
+- The documents tell how Limen works and how to use it, and no longer
+  give the status of a deployment. The notes for Topos are for Topos
+  v0.69.0 or later.
+
 ## v0.8.0 - 2026-11-03
 
 ### Added
