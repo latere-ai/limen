@@ -3,7 +3,7 @@
 
 GO ?= go
 
-.PHONY: build check clean fmt hooks run
+.PHONY: build check clean figures fmt hooks run
 
 # The whole bar. Every gate lives in latere.ai/x/ci-gate, pinned as a tool
 # in go.mod and configured in .lateregate.yaml, so this target is a name for
@@ -49,6 +49,15 @@ fmt:
 hooks:
 	chmod +x .githooks/*
 	git config core.hooksPath .githooks
+
+# The figures under docs/figures: Limen's model against the paper's
+# simulated person, 20 persons of 1500 decisions refitted after every
+# answer (about two minutes on 18 cores), then the drawings from that data
+# (uv reads render.py's own dependencies). docs/figures is a module of its
+# own, so the gates above do not build or test it.
+figures:
+	cd docs/figures && $(GO) run ./cmd/simulate -persons 20 -out data
+	cd docs/figures && uv run render.py
 
 # Remove the build output.
 clean:
