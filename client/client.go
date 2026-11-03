@@ -208,6 +208,19 @@ func (c *Client) Reliability(ctx context.Context, q limen.ReliabilityQuery) (lim
 	return r, c.do(ctx, http.MethodGet, "/v1/reliability", v, "", nil, &r)
 }
 
+// Calibration implements [limen.Ledger].
+func (c *Client) Calibration(ctx context.Context, q limen.CalibrationQuery) (limen.Calibration, error) {
+	v := url.Values{"org": {q.Org}, "subject": {q.Subject}}
+	if !q.From.IsZero() {
+		v.Set("from", q.From.Format(time.RFC3339Nano))
+	}
+	if !q.To.IsZero() {
+		v.Set("to", q.To.Format(time.RFC3339Nano))
+	}
+	var r limen.Calibration
+	return r, c.do(ctx, http.MethodGet, "/v1/calibration", v, "", nil, &r)
+}
+
 // scopeValues is the query that names a scope.
 func scopeValues(s limen.Scope) url.Values {
 	v := url.Values{"org": {s.Org}}

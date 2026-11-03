@@ -150,6 +150,7 @@ var routes = []route{
 	{http.MethodGet, "/v1/learned", authorizer.ActionCaseList, (*handler).learned},
 	{http.MethodPost, "/v1/previews", authorizer.ActionReliabilityRead, (*handler).preview},
 	{http.MethodGet, "/v1/reports", authorizer.ActionReportRead, (*handler).report},
+	{http.MethodGet, "/v1/calibration", authorizer.ActionReliabilityRead, (*handler).calibration},
 }
 
 // New returns the handler that serves svc.
@@ -535,6 +536,26 @@ func (h *handler) reliability(c *call) error {
 		return err
 	}
 	writeJSON(c.w, http.StatusOK, rel)
+	return nil
+}
+
+// calibration asks reliability.read about the subject's Reliability, as
+// the reliability route does: the report reads the same reviews.
+func (h *handler) calibration(c *call) error {
+	q := c.r.URL.Query()
+	cq := limen.CalibrationQuery{Org: q.Get("org"), Subject: q.Get("subject")}
+	fields := window(c, &cq.From, &cq.To)
+	if err := cq.Validate(); err != nil || len(fields) > 0 {
+		return queryError(err, fields)
+	}
+	if err := h.authorize(c, reliabilityResource(cq.Org, cq.Subject)); err != nil {
+		return err
+	}
+	cal, err := h.svc.Calibration(c.r.Context(), cq)
+	if err != nil {
+		return err
+	}
+	writeJSON(c.w, http.StatusOK, cal)
 	return nil
 }
 

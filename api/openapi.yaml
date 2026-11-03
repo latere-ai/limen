@@ -286,6 +286,61 @@ paths:
           $ref: "#/components/responses/internal"
         "503":
           $ref: "#/components/responses/service_unavailable"
+  /v1/calibration:
+    get:
+      operationId: getCalibration
+      summary: Report the calibration of Limen for a person
+      description: >-
+        The approval probabilities Limen stated for one person over one
+        window, beside the approval rates the person's reviews measured, in
+        ten bins of approve: [0, 0.1), [0.1, 0.2), and so on to [0.9, 1].
+        Each review counts with weight one over its decision's review
+        probability, as in a reliability report. A bin whose reviews have a
+        Kish effective size below 20 is not_estimable, and its observed rate
+        is null, not zero. A client shows an approval probability as a
+        number, or in words that state a probability, only where the bin of
+        the prediction is calibrated in the report for the last 90 days,
+        and for a bin above the allow threshold only while the certificate
+        of of=learned also holds. The route asks reliability.read about the
+        person's Reliability, as the reliability route does.
+      x-limen-action: reliability.read
+      x-limen-resource:
+        kind: Reliability
+        fields: [org, subject]
+      parameters:
+      - $ref: "#/components/parameters/org"
+      - $ref: "#/components/parameters/subject"
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calibration"
+        "400":
+          $ref: "#/components/responses/invalid_query"
+        "401":
+          $ref: "#/components/responses/unauthenticated"
+        "403":
+          $ref: "#/components/responses/forbidden"
+        "429":
+          $ref: "#/components/responses/rate_limited"
+        "500":
+          $ref: "#/components/responses/internal"
+        "503":
+          $ref: "#/components/responses/service_unavailable"
   /v1/profiles:
     get:
       operationId: getProfile

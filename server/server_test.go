@@ -66,6 +66,10 @@ func (s *spy) Reliability(ctx context.Context, q limen.ReliabilityQuery) (limen.
 	s.calls.Add(1)
 	return s.Service.Reliability(ctx, q)
 }
+func (s *spy) Calibration(ctx context.Context, q limen.CalibrationQuery) (limen.Calibration, error) {
+	s.calls.Add(1)
+	return s.Service.Calibration(ctx, q)
+}
 func (s *spy) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, error) {
 	s.calls.Add(1)
 	return s.Service.Profile(ctx, sc)
@@ -186,6 +190,7 @@ func valid(t *testing.T) []req {
 		{http.MethodGet, "/v1/reports?org=o&from=2026-09-28T00:00:00Z&to=2026-10-12T00:00:00Z", ""},
 		{http.MethodGet, "/v1/profiles?org=o&subject=" + alice, ""},
 		{http.MethodDelete, "/v1/profiles?org=o&subject=" + alice, ""},
+		{http.MethodGet, "/v1/calibration?org=o&subject=" + alice + "&from=" + now.Add(-time.Hour).Format(time.RFC3339) + "&to=" + now.Add(time.Hour).Format(time.RFC3339), ""},
 	}
 }
 
@@ -286,6 +291,9 @@ func TestAuthorizerQuestions(t *testing.T) {
 		{authorizer.ActionReportRead, authorizer.KindReport, map[string]any{"org": "o"}},
 		{authorizer.ActionProfileRead, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "", "agent": "", "subject": alice}},
 		{authorizer.ActionProfileWrite, authorizer.KindProfile, map[string]any{"org": "o", "action_kind": "", "agent": "", "subject": alice}},
+		// The calibration report reads the reviews a reliability report
+		// reads, so it asks the same question about the same resource.
+		{authorizer.ActionReliabilityRead, authorizer.KindReliability, map[string]any{"org": "o", "subject": alice}},
 	}
 	if len(want) != len(valid(t)) {
 		t.Fatalf("%d questions for %d routes", len(want), len(valid(t)))
@@ -369,6 +377,40 @@ func TestSubjectBinding(t *testing.T) {
 	if w := do(t, h, req{http.MethodPost, "/v1/predictions", body(t, own)}); w.Code != http.StatusOK {
 		t.Errorf("bob predicting for himself: %d %s", w.Code, w.Body.String())
 	}
+}
+
+// A person reads their own calibration report, as their own reliability
+// report, and no one else's: the route asks reliability.read about the
+// person's Reliability (spec 011, criterion 17).
+func TestCalibrationIsThePersons(t *testing.T) {
+	now := time.Now().UTC()
+	q := "?org=o&subject=%s&from=" + now.Add(-time.Hour).Format(time.RFC3339) + "&to=" + now.Add(time.Hour).Format(time.RFC3339)
+	h := New(seeded(t, stub.New(stub.Options{})), Options{Authenticator: StaticToken(tok, alice), Authorizer: OwnerPolicy{}})
+	w := do(t, h, req{http.MethodGet, "/v1/calibration" + fmt.Sprintf(q, alice), ""})
+	if w.Code != http.StatusOK {
+		t.Fatalf("alice reading her own report: %d %s", w.Code, w.Body.String())
+	}
+	var c struct {
+		Bins      []map[string]any `json:"bins"`
+		Error     *float64         `json:"error"`
+		Estimable *float64         `json:"estimable"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Bins) != limen.CalibrationBins || c.Error != nil || c.Estimable == nil {
+		t.Fatalf("report %s", w.Body.String())
+	}
+	// The seed is a prediction of 0.5 whose ask has no review: its bin has
+	// a case, a null rate and its state.
+	b := c.Bins[5]
+	if b["cases"] != 1.0 || b["observed"] != nil || b["state"] != limen.NotEstimable {
+		t.Errorf("the bin of the seed: %v", b)
+	}
+	if _, ok := b["observed"]; !ok {
+		t.Errorf("a null rate is left out: %v", b)
+	}
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/calibration" + fmt.Sprintf(q, bob), ""}), limen.CodeForbidden)
 }
 
 // A relay names who answered; anyone else answers as themselves.
@@ -477,6 +519,8 @@ func TestQueryErrors(t *testing.T) {
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/cases?subject=s&limit=501", ""}), limen.CodeInvalidQuery, "org", "limit")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned&from=yesterday&to=2026-10-02T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/reliability?org=o&subject=s&of=learned", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/calibration?org=o&subject=s&from=yesterday&to=2026-10-02T00:00:00Z", ""}), limen.CodeInvalidQuery, "from")
+	wantCode(t, do(t, h, req{http.MethodGet, "/v1/calibration?org=o&from=2026-10-03T00:00:00Z&to=2026-10-02T00:00:00Z", ""}), limen.CodeInvalidQuery, "subject", "to")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/profiles", ""}), limen.CodeInvalidQuery, "org")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o", ""}), limen.CodeInvalidQuery, "subject", "action_id")
 	wantCode(t, do(t, h, req{http.MethodGet, "/v1/explanations?org=o&subject=s&action_id=none", ""}), limen.CodeNoCase, "action_id")

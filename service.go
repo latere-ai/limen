@@ -40,6 +40,10 @@ type Ledger interface {
 	// Reliability reports one source's error rates for one person over one
 	// window.
 	Reliability(ctx context.Context, q ReliabilityQuery) (Reliability, error)
+	// Calibration reports, for one person over one window, the approval
+	// probabilities Limen stated beside the approval rates the reviews
+	// measured (spec 011).
+	Calibration(ctx context.Context, q CalibrationQuery) (Calibration, error)
 }
 
 // Admin is what an organization's operator uses: cost profiles, replays of
