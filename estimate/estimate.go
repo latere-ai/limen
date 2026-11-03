@@ -13,7 +13,9 @@
 // for the realized error rate among covered rows (Proposition 8 of the
 // research). A shown action with no review yet is treated as missing at
 // random: the reviewed weights are scaled up to the shown weights, which
-// leaves the estimator unchanged when nothing is missing.
+// leaves the estimator unchanged when nothing is missing. The calibration
+// report of spec 011 reads the same estimate in each bin of the stated
+// approval probability ([Calibrate]).
 package estimate
 
 import (
@@ -53,6 +55,9 @@ type Row struct {
 	// (spec 011). Only the certificate's count of considered audits reads
 	// it: no rate and no claim depends on the weight of an answer.
 	Considered bool
+	// Stated is the approval probability of the source's prediction, for
+	// [limen.OfLearned]; only the calibration report reads it.
+	Stated float64
 }
 
 // Automatic maps a recorded decision to the automatic verdict it stands
@@ -96,64 +101,100 @@ func Rate(rows []Row, side Side) limen.Estimate {
 	if side == FalseBlock {
 		target = limen.Block
 	}
+	// An error is a denial of an allow, or an approval of a block.
+	h := thompson(rows, func(r Row) bool { return r.Verdict == target }, func(r Row) bool { return r.Approve == (side == FalseBlock) })
+	est := limen.Estimate{Value: h.value, Interval: h.interval, Reviews: h.reviews, Audits: h.audits, Unanswered: h.unanswered}
+	if h.n > 0 {
+		est.Covered = float64(h.covered) / float64(h.n)
+	}
+	return est
+}
+
+// horvitz is one Horvitz-Thompson estimate and the counts of the rows it
+// rests on.
+type horvitz struct {
+	// n counts the rows in the population and covered those with a
+	// positive review probability.
+	n, covered int
+	// reviews counts the reviewed covered rows, audits those with a review
+	// probability below one, considered those whose review is considered,
+	// and unanswered the shown covered rows with no review.
+	reviews, audits, considered, unanswered int
+	// effective is the Kish effective size of the reviews' weights, 0 with
+	// no review.
+	effective float64
+	// value is the estimated share of the covered rows with the event, and
+	// nil when nothing could be observed; interval is its Wilson 95%
+	// interval at the effective size, [0, 1] with no review.
+	value    *float64
+	interval *[2]float64
+}
+
+// thompson is the Horvitz-Thompson estimate, over the rows in reports, of
+// the share of covered rows with event, as [Rate] describes it. Every
+// estimate of the package is this one, so a rate and a calibration report
+// weigh a review alike.
+func thompson(rows []Row, in, event func(Row) bool) horvitz {
 	var (
-		n, covered         int
-		est                limen.Estimate
-		errW, revW, shownW float64
-		sumW, sumW2        float64
+		h                    horvitz
+		eventW, revW, shownW float64
+		sumW, sumW2          float64
 	)
 	for _, r := range rows {
-		if r.Verdict != target {
+		if !in(r) {
 			continue
 		}
-		n++
+		h.n++
 		if !(r.Review > 0) {
 			continue
 		}
-		covered++
+		h.covered++
 		w := 1 / math.Min(r.Review, 1)
 		if r.Shown {
 			shownW += w
 			if !r.Reviewed {
-				est.Unanswered++
+				h.unanswered++
 			}
 		}
 		if !r.Shown || !r.Reviewed {
 			continue
 		}
-		est.Reviews++
+		h.reviews++
 		if r.Review < 1 {
-			est.Audits++
+			h.audits++
+		}
+		if r.Considered {
+			h.considered++
 		}
 		revW += w
 		sumW += w
 		sumW2 += w * w
-		if (side == FalseAllow && !r.Approve) || (side == FalseBlock && r.Approve) {
-			errW += w
+		if event(r) {
+			eventW += w
 		}
 	}
-	if n > 0 {
-		est.Covered = float64(covered) / float64(n)
+	if sumW2 > 0 {
+		h.effective = sumW * sumW / sumW2
 	}
-	if covered == 0 {
-		return est
+	if h.covered == 0 {
+		return h
 	}
 	if shownW > 0 && revW == 0 {
 		// Actions were shown but none has its review yet: nothing observed.
-		return est
+		return h
 	}
-	total := errW
+	total := eventW
 	if revW > 0 {
 		total *= shownW / revW
 	}
-	v := math.Min(total/float64(covered), 1)
-	est.Value = &v
+	v := math.Min(total/float64(h.covered), 1)
+	h.value = &v
 	iv := [2]float64{0, 1}
 	if sumW2 > 0 {
-		iv = wilson(v, sumW*sumW/sumW2)
+		iv = wilson(v, h.effective)
 	}
-	est.Interval = &iv
-	return est
+	h.interval = &iv
+	return h
 }
 
 // wilson is the 95% Wilson score interval for a proportion p observed over

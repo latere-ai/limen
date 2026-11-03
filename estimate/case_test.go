@@ -17,7 +17,7 @@ func TestRowOf(t *testing.T) {
 			{Source: "rules/1", Score: new(float64)},
 			{Source: "judge/y", Verdict: limen.Block},
 		}}
-	pred := &limen.Prediction{Key: key, Verdict: limen.Ask, Source: "learned/1"}
+	pred := &limen.Prediction{Key: key, Verdict: limen.Ask, Approve: 0.7, Source: "learned/1"}
 	dec := &limen.Decision{Key: key, Verdict: limen.Flag, ReviewProbability: 0.05, Source: "topos/auto"}
 	reviewed := limen.Case{Action: act, Prediction: pred, Decision: dec,
 		Answers: []limen.RecordedAnswer{{Approve: false, Review: true}, {Approve: true}}}
@@ -29,7 +29,7 @@ func TestRowOf(t *testing.T) {
 		ok   bool
 		want Row
 	}{
-		{"learned", reviewed, limen.OfLearned, true, Row{Verdict: limen.Ask, Review: 0.05, Shown: true, Reviewed: true, Approve: false}},
+		{"learned", reviewed, limen.OfLearned, true, Row{Verdict: limen.Ask, Review: 0.05, Shown: true, Reviewed: true, Approve: false, Stated: 0.7}},
 		{"applied: a sampled flag is an allow", reviewed, limen.OfApplied, true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
 		{"by decision source", reviewed, "topos/auto", true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
 		{"a flagged signal is an allow", reviewed, "classifier/x", true, Row{Verdict: limen.Allow, Review: 0.05, Shown: true, Reviewed: true}},
@@ -39,7 +39,7 @@ func TestRowOf(t *testing.T) {
 		{"no prediction", limen.Case{Action: act, Decision: dec}, limen.OfLearned, false, Row{}},
 		{"a fallback prediction is no suggestion", limen.Case{Action: act, Prediction: &limen.Prediction{Verdict: limen.Ask, Source: limen.SourceUnavailable}}, limen.OfLearned, false, Row{}},
 		{"no decision for applied", limen.Case{Action: act, Prediction: pred}, limen.OfApplied, false, Row{}},
-		{"undecided learned row", limen.Case{Action: act, Prediction: pred}, limen.OfLearned, true, Row{Verdict: limen.Ask}},
+		{"undecided learned row", limen.Case{Action: act, Prediction: pred}, limen.OfLearned, true, Row{Verdict: limen.Ask, Stated: 0.7}},
 	}
 	for _, c := range cases {
 		got, ok := RowOf(c.c, c.of)

@@ -27,10 +27,10 @@ func Pending(c limen.Case) bool {
 // two implementations report the same estimates for the same cases.
 //
 // The source's verdict is the prediction's for [limen.OfLearned] (a
-// fallback prediction is no suggestion and gives no row), [Automatic] of the
-// decision for [limen.OfApplied] and for a decision source, and the
-// signal's for a signal source, where a flag counts as an allow because the
-// action ran.
+// fallback prediction is no suggestion and gives no row), with its
+// approval probability as Stated, [Automatic] of the decision for
+// [limen.OfApplied] and for a decision source, and the signal's for a
+// signal source, where a flag counts as an allow because the action ran.
 func RowOf(c limen.Case, of string) (Row, bool) {
 	var r Row
 	if c.Decision != nil {
@@ -45,7 +45,7 @@ func RowOf(c limen.Case, of string) (Row, bool) {
 		if c.Prediction == nil || c.Prediction.Source == limen.SourceUnavailable {
 			return r, false
 		}
-		r.Verdict = c.Prediction.Verdict
+		r.Verdict, r.Stated = c.Prediction.Verdict, c.Prediction.Approve
 	case of == limen.OfApplied || (c.Decision != nil && c.Decision.Source == of):
 		if c.Decision == nil {
 			return r, false
