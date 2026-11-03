@@ -3,23 +3,11 @@
 Design specs for Limen, the oversight layer for automated actions: a
 shared verdict vocabulary, a ledger that measures how often any source
 of decisions is wrong, and a predictor that learns when a person needs
-to see an action. One spec covers one module. Each spec states the
-problem, the design with enough precision to build from, and acceptance
-criteria that are testable statements. Spec 001 fixes the architecture
-every other spec assumes; read it first. Spec 002 is the Go contract a
-decision point codes against and spec 003 the same contract over HTTP;
-spec 008 is the ledger's estimation arithmetic, and spec 006 the suite
-that proves an implementation serves all three. Spec 004 is the engine
-that predicts, spec 005 the adapters that put Limen behind a harness's
-decision point, and spec 007 the evidence each step of a rollout must
-produce before the next one starts. Spec 009 is the explanations: why
-a prediction is what it is, and the evidence behind an `ask`. Spec 010
-is what an organization needs: an agent that goes back to the cost
-profile of its organization, a cost profile of a person that only makes
-the cost profile of the organization stricter, and a weekly report that
-never shows one person. Spec 011 is consent: the reach of an action,
-no `allow` beyond what the approvals of the person cover, the weight of
-an answer, and a calibration report.
+to see an action. The specs are the design records for contributors.
+One spec covers one module. Each spec states the problem, the design
+with enough precision to build from, and acceptance criteria that are
+testable statements. Spec 001 fixes the architecture every other spec
+assumes; read it first.
 
 The design follows the research in Changkun Ou, *Learning When to Ask:
 Trust Calibration for Agentic Tool Use, from Known Tools to Opaque LLM
@@ -31,48 +19,16 @@ engine ports, is at that repository's tag
 [`v3`](https://github.com/changkun/trustcalib/tree/v3/go) and no longer
 on its main branch. A spec that cites a proposition cites that paper.
 
-Limen is in production since 2026-11-01, at v0.8.0 since 2026-11-03.
-Each spec's Outcome records what is built, the tests that prove it, and
-what is not built. Specs 001, 002, 003, 006, 008, 009 and 010 are
-complete. Spec 004 is at `testing`: a shared store is not built. Spec 005's hooks are not built,
-and spec 007 is a rule for deployments.
-
-Spec 004 was amended on 2026-11-02 with the answer minimum, an interim
-safety rule until a consent spec replaces it: Limen suggests `allow` only
-after the person approved actions with the same label 3 times in 2
-sessions. Spec 011 replaced it on 2026-11-03 with wave 1 of consent: the
-scope of each action, `labels/2`, the cover rule with its cap on
-`allow`, the weight of an answer, the kinds `short`, `wider` and `few`,
-and reasons of an `ask` without a lean. Specs 002, 003, 004, 006, 008,
-009 and 010 are amended for it. Wave 2 of 011, the same day, built the
-calibration report, `GET /v1/calibration`, and `calibration` on an
-explanation, and amended 003, 006, 008 and 009. Wave 3, the same day,
-built `learned/2`, with the scope in its features and the weight of each
-answer in its fit, the choice of the model version (`LIMEN_MODEL`,
-default `learned/1`), and the replay comparison `limen compare`. Spec 011
-is at `testing`: the switch of the hosted installation to `learned/2`
-waits for the owner.
-
-The owner decided on 2026-11-02 what comes after Limen is open source:
-the hooks for Claude Code and Codex (005, criteria 1 to 5), a published
-table of `verdict.Decide` cases (005, criterion 6), the shared store on
-Storage ([Arca](https://github.com/latere-ai/arca)) and two model
-versions side by side (004, with criterion 10), an asserted 99th
-percentile of a prediction (004, criterion 6), the reports of the
-evidence gates (007, criteria 1 to 5), and the signals of a model judge
-(007, gate 4). The public reference of the API under `/v1/oversight` and
-the public container image come with the open. Wave 3 of 011 built the
-second model version and the operator's choice of it (004, criterion 10)
-before the open, by the owner's build order of 2026-11-03.
+Each spec ends in an Outcome section: what is built, the tests that
+prove each acceptance criterion, and where the code differs from the
+design. The Status column of the [index](#index) gives the state of
+each spec in the [lifecycle](#lifecycle).
 
 ## Layout
 
 Flat files `specs/NNN-name.md` in one number space with `track: core` in
-the frontmatter. Numbers are stable identifiers and are never reused. Open
-specs sit here and are the work queue. A terminal spec moves to
-`specs/.archive/` keeping its number so `depends_on` paths keep resolving.
-The spec gate does not read the archive yet (`.lateregate.yaml` has no
-`archive` setting), so the complete specs stay here until it does.
+the frontmatter. Numbers are stable identifiers and are never reused.
+Complete specs stay in this directory as the record of their design.
 
 ## Lifecycle
 
@@ -117,6 +73,5 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | testing |
 
 The order of building is the order of the numbers except where a spec's
-`depends_on` says otherwise. 007 is not code; it is the rule a
-deployment of the others follows, amended on 2026-11-01 for hosted
-Topos, where Limen decides only where it has evidence about the person.
+`depends_on` says otherwise. 007 is not code: it is the rule that a
+deployment of the others follows.
