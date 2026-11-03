@@ -342,6 +342,14 @@ The refspec, the URL and each path are dropped with the input. Limen
 does not keep a hash of an input string. A hash of a host or a path can
 be found again from a list of names.
 
+The rest of the action is not input, and the case keeps it as the
+decision point sent it: the kind, the name, the effect, the `kind` and
+the `id` of the target, the environment, the attributes and the
+signals. Contact compares the `kind` and the `id` of the target with
+those of the approved cases of the person, so the `id` must stay. A
+decision point that must not store a path or a host sends an opaque
+`id` in its place.
+
 ### Labels `labels/2`
 
 A label of `labels/2` is the label of `labels/1` and a phrase from the
@@ -446,9 +454,12 @@ The cap applies after the model:
 The cap changes only the verdict. `approve`, `uncertainty` and the
 evidence ratio stay the numbers of the model. The cap can change
 `allow` to `ask` and nothing else, so it never makes a suggestion more
-permissive. There is no cap on `block`. A denial does not come from a
-habit of approval. A false block costs one more question, not an
-action that the person did not accept.
+permissive. There is no cap on `block`. The cover rule tests if the
+person consented to the run of an action. Because of this, it removes
+only `allow` from the choices. Limen then takes the verdict of least
+expected cost from the choices that are left. For an action below the
+block threshold, that verdict is still `block` (see Why this is correct
+for the model).
 
 A capped `ask` has one of two new values of `ask_kind`:
 
@@ -564,6 +575,15 @@ person that have a review in the same session before it. Limen counts
 it from its records. A review is before the answer if its time is
 earlier, or if the times are equal and its case is earlier. The answer
 of the case itself is not counted.
+
+Limen does not measure `details_opened`, `surface` or the session.
+They come from the decision point, and the session sets the
+position. If `details_opened` is true, no rule of the policy below
+applies to an approval, except the standing rule. The weights protect
+against a person who does not pay attention. They do not protect
+against a decision point or a client that reports incorrectly. Limen
+trusts the decision point to report how the person answered, as it
+trusts it to relay the answer.
 
 #### The weight policy `weights/1`
 
@@ -796,12 +816,19 @@ bins that are not `not_estimable`. `error` is the mean distance between
 `stated` and `observed` over those bins, each bin weighted by its
 `cases`. `estimable` is the share of all cases that are in those bins.
 
-The bins in the ask range get reviews from each `ask`. The bins above
-the allow threshold and below the block threshold get reviews only from
-audits, so their states need an audit rate above zero. The bins above
-the allow threshold are the bins of the allows. Their `observed` is
-one minus the false-allow rate of those allows. The certificate tests
-that rate against its claim.
+The review probability of each decision, not the thresholds, sets
+which cases get a review. Each estimate counts a review with the
+weight `1/p`. An action above the allow threshold that the cover rule
+changed to an `ask` of kind `few` or `wider` gets a review when a
+person sees it. A decision point can send a `few`, `short` or `unsure`
+ask back to its rules. If the rules then allow the action, the
+decision point records the audit rate as the review probability and
+draws an audit, as Topos does. The estimate stays unbiased. With an
+audit rate of zero, the actions that ran or were blocked without a
+person have no review, and a bin of only these actions stays
+`not_estimable`. If all the cases of a bin above the allow threshold
+are allows, its `observed` is one minus the false-allow rate of those
+allows. The certificate tests that rate against its claim.
 
 **The rule for clients.** A client shows `approve` as a number, or in
 words that state a probability such as "likely", only if two conditions
