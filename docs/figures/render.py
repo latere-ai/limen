@@ -555,7 +555,7 @@ def audits(data: Data, th: Theme) -> plt.Figure:
         err = p.estimate - p.true_rate
         holds = float(((p.lo <= p.true_rate) & (p.true_rate <= p.hi)).mean())
         ax.text(0.04, 0.965, f"mean error {err.mean():+.4f}\nspread (sd) {err.std():.3f}\n"
-                f"interval holds the truth: {pct(holds)}\naudits: {int(p.audits.median()):,} "
+                f"interval holds the truth: {pct(holds)}\nmedian: {int(p.audits.median()):,} audits "
                 f"of {int(p.allows.median()):,} allows",
                 transform=ax.transAxes, ha="left", va="top", fontsize=7.8, color=th.fg, linespacing=1.35,
                 zorder=5, bbox=backing(th))
