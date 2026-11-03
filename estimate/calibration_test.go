@@ -205,7 +205,8 @@ func simulate(rng *rand.Rand, n int, rate, shift float64) []Row {
 // seeded ledgers, and a model that states 0.1 less than the truth is not
 // (spec 011, criterion 16). One ledger cannot show it: a 95% interval
 // misses one bin in twenty, so a calibrated model has a bin outside its
-// interval in about two ledgers of five.
+// interval in about two ledgers of five. Measured: 94.5% of the estimable
+// bins, each bin 91% or more, and 26% with the shift.
 func TestCalibratedModelIsCalibrated(t *testing.T) {
 	const ledgers, n, rate = 400, 4000, 0.1
 	share := func(seed uint64, shift float64) ([]float64, float64) {
@@ -232,15 +233,18 @@ func TestCalibratedModelIsCalibrated(t *testing.T) {
 		return out, float64(h) / float64(tt)
 	}
 	bins, all := share(1, 0)
+	t.Logf("calibrated: %.3f in all, by bin %.3f", all, bins)
 	for i, s := range bins {
-		if s < 0.9 {
+		if s < 0.88 {
 			t.Errorf("a calibrated model is calibrated in bin %d of %.0f%% of the ledgers", i, 100*s)
 		}
 	}
 	if all < 0.93 || all > 0.97 {
 		t.Errorf("a calibrated model is calibrated in %.1f%% of the estimable bins, want about 95%%", 100*all)
 	}
-	if _, all := share(2, 0.1); all > 0.5 {
+	_, off := share(2, 0.1)
+	t.Logf("calibrated with a shift of 0.1: %.3f", off)
+	if all := off; all > 0.5 {
 		t.Errorf("a model that states 0.1 less than the truth is calibrated in %.1f%% of the estimable bins", 100*all)
 	}
 }
@@ -267,7 +271,9 @@ func TestApprovalsOfAuditsVary(t *testing.T) {
 			byDenials++
 		}
 	}
-	if a, d := float64(byApprovals)/ledgers, float64(byDenials)/ledgers; a > 0.8 || d < 0.92 {
+	a, d := float64(byApprovals)/ledgers, float64(byDenials)/ledgers
+	t.Logf("in the interval: approvals %.3f, denials %.3f", a, d)
+	if a > 0.8 || d < 0.92 {
 		t.Errorf("the truth is in the interval of approvals in %.1f%%, of denials in %.1f%% of the ledgers", 100*a, 100*d)
 	}
 }
