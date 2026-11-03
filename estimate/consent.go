@@ -79,7 +79,11 @@ type Weights struct {
 // Weigh gives the weights of each record's answers under p. A record's
 // position counts the reviews of shown cases in its session before an
 // answer, so Weigh reads every record of the person.
-func (p Policy) Weigh(recs []Record) []Weights {
+func (p Policy) Weigh(recs []Record) []Weights { return p.weigh(recs, p.weight) }
+
+// weigh gives the weights of each record's answers under the policy
+// weight, which reads the record, the answer and its position.
+func (p Policy) weigh(recs []Record, weight func(Record, limen.RecordedAnswer, int) float64) []Weights {
 	type mark struct {
 		at time.Time
 		t  int64
@@ -106,41 +110,50 @@ func (p Policy) Weigh(recs []Record) []Weights {
 	out := make([]Weights, len(recs))
 	for i, r := range recs {
 		if a, ok := r.latest(); ok {
-			out[i].Latest = p.weight(r, a, position(r, a))
+			out[i].Latest = weight(r, a, position(r, a))
 		}
 		if a, ok := r.review(); ok {
-			out[i].Review = p.weight(r, a, position(r, a))
+			out[i].Review = weight(r, a, position(r, a))
 		}
 	}
 	return out
 }
 
 // weight is the weight of one answer of r under weights/1 at its
-// position.
+// position: 0 if a rule applies, and 1 if none does.
 func (p Policy) weight(r Record, a limen.RecordedAnswer, position int) float64 {
-	if a.Surface == limen.SurfaceRule {
-		return 0
-	}
-	if !a.Approve {
-		// A habit gives approvals, not denials: a quick denial is evidence.
-		return 1
-	}
-	if a.DetailsOpened != nil && *a.DetailsOpened {
-		return 1
-	}
-	if a.Surface == limen.SurfaceBulk {
-		return 0
-	}
-	if t, ok := answerTime(r, a); ok && p.Floor > 0 && t < p.Floor {
-		return 0
-	}
-	if a.SuggestionShown != nil && *a.SuggestionShown && r.Suggested != nil && *r.Suggested > 0.5 {
-		return 0
-	}
-	if p.Fatigue > 0 && position >= p.Fatigue {
+	if p.rules(r, a, position) != (rules{}) {
 		return 0
 	}
 	return 1
+}
+
+// rules are the rules of the weight of an answer that apply to it.
+type rules struct {
+	// standing: a standing rule gave the answer. bulk: one gesture
+	// answered more than one action. quick: the answer was faster than the
+	// floor. lean: it followed a lean that the client showed. late: it came
+	// at the fatigue count or later in its session.
+	standing, bulk, quick, lean, late bool
+}
+
+// rules finds the rules that apply to one answer of r at its position. A
+// denial has only the rule of a standing rule, because a habit gives
+// approvals, not denials: a quick denial is evidence. An approval whose
+// details were opened has no rule but that one.
+func (p Policy) rules(r Record, a limen.RecordedAnswer, position int) rules {
+	var f rules
+	f.standing = a.Surface == limen.SurfaceRule
+	if !a.Approve || (a.DetailsOpened != nil && *a.DetailsOpened) {
+		return f
+	}
+	f.bulk = a.Surface == limen.SurfaceBulk
+	if t, ok := answerTime(r, a); ok && p.Floor > 0 && t < p.Floor {
+		f.quick = true
+	}
+	f.lean = a.SuggestionShown != nil && *a.SuggestionShown && r.Suggested != nil && *r.Suggested > 0.5
+	f.late = p.Fatigue > 0 && position >= p.Fatigue
+	return f
 }
 
 // answerTime is the time of an answer: the smallest of the time the
