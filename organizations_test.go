@@ -29,7 +29,7 @@ func saved(t *testing.T, s Scope, c Costs, audit float64, certify Certify) Profi
 var (
 	balanced = Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}
 	careful  = Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}
-	strict   = Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}
+	strict   = Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}
 )
 
 func TestScopeValidate(t *testing.T) {

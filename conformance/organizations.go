@@ -26,7 +26,7 @@ import (
 var (
 	balanced = limen.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}
 	careful  = limen.Costs{FalseAllow: 10, FalseBlock: 4, Ask: 1}
-	strict   = limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}
+	strict   = limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}
 )
 
 // other is a second person of the organization.

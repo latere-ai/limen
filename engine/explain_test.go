@@ -286,7 +286,7 @@ func TestExplanationAfterARefit(t *testing.T) {
 // suggestion now under the profile that applies, and the trend.
 func TestLearned(t *testing.T) {
 	e := taught(t, 12)
-	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Kind: "tool", Agent: "agt", Costs: limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}, AuditRate: 0.05}); err != nil {
+	if _, err := e.PutProfile(ctx, limen.Profile{Org: "o", Kind: "tool", Agent: "agt", Costs: limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}, AuditRate: 0.05}); err != nil {
 		t.Fatal(err)
 	}
 	l, err := e.Learned(ctx, limen.LearnedQuery{Org: "o", Subject: "s"})
@@ -318,7 +318,7 @@ func TestLearned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if th := strict.Entries[0].Thresholds; math.Abs(th.AllowAbove-0.98) > 1e-12 {
+	if th := strict.Entries[0].Thresholds; math.Abs(th.AllowAbove-0.95) > 1e-12 {
 		t.Errorf("the agent's profile: %+v", th)
 	}
 	none, err := e.Learned(ctx, limen.LearnedQuery{Org: "o", Subject: "s", Kind: "egress"})

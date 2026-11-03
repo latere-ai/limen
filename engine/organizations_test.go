@@ -39,7 +39,7 @@ func (c *setClock) Set(t time.Time) {
 
 var (
 	balanced = limen.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}
-	strict   = limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}
+	strict   = limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}
 )
 
 func put(t *testing.T, s limen.Service, sc limen.Scope, c limen.Costs) {
