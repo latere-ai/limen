@@ -149,10 +149,19 @@ these thresholds:
 |---|---|---|
 | Balanced | 0.65 | 0.35 |
 | Careful | 0.90 | 0.25 |
-| Strict | 0.98 | 0.25 |
+| Strict | 0.95 | 0.25 |
 
 Each one is stricter than the one above it. The meet of two of them is
 always the stricter of the two.
+
+*Amended 2026-11-03:* Strict was the costs 50, 4 and 1, with
+`allow_above` 0.98. The approval probability of the default model levels
+off at 0.978 when the model holds its 512 answers, so under that Strict
+no action got an `allow`. Strict is now the costs 20, 4 and 1. With
+limend v0.8.0, allows of `publish` with the details opened, from two
+sessions, give 0.9490 after 19 and 0.9503 after 20, so the 21st
+`publish` gets an `allow`. A profile saved with the costs 50, 4 and 1
+keeps them: Limen stores costs, not names.
 
 *Amended 2026-11-03:* a cost profile has `consent`, the settings
 `min_weight` and `min_sessions` of the cover rule of [[011-consent]]. The

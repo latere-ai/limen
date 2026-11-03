@@ -57,6 +57,11 @@ are measurements on Limen 234161e with the kernel of [[004-engine]]:
 | about 90 decisions with no answer | the next `publish` is `unsure` again (evidence ratio 0.30) |
 | allow, allow, deny | 0.61 with evidence ratio 0.84: a `split` ask from answers that disagree |
 
+*Amended 2026-11-03:* the hosted clients changed Strict to the costs 20,
+4 and 1, with allow above 0.95. With limend v0.8.0, allows with the
+details opened, from two sessions, give 0.9503 after 20, so the 21st
+`publish` is an `allow`. The row above is the old Strict.
+
 The label `publish` does not tell a person if the action made an app
 public or updated a preview. The model does not know it either.
 
