@@ -204,7 +204,7 @@ func TestCoverSettings(t *testing.T) {
 		// action: each new action advances the person's time, and a probe
 		// many decisions after the answer reads a tolerance that has drifted
 		// back toward the prior.
-		for i := 0; i < 500; i++ {
+		for range 500 {
 			x, err := c2.Explain(ctx, a.Key)
 			if err != nil {
 				t.Fatal(err)
