@@ -12,9 +12,32 @@ import (
 	"time"
 
 	"latere.ai/x/limen"
+	"latere.ai/x/limen/conformance"
 	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/engine/store"
 )
+
+// An engine of learned/2 keeps the contract (spec 004, criterion 11):
+// the conformance suite passes with background fitting and inline.
+func TestConformanceLearned2(t *testing.T) {
+	for _, o := range []engine.Options{{Debounce: time.Millisecond}, {Inline: 1}} {
+		o.Model = engine.Learned2
+		conformance.Run(t, conformance.Target{
+			New: func(t *testing.T) limen.Service {
+				e := engine.New(o)
+				t.Cleanup(func() { e.Close() })
+				return e
+			},
+			Clocked: func(t *testing.T, now func() time.Time) limen.Service {
+				c := o
+				c.Clock = now
+				e := engine.New(c)
+				t.Cleanup(func() { e.Close() })
+				return e
+			},
+		})
+	}
+}
 
 // The approval probabilities of a publish under Careful after 0 to 7
 // considered approvals, the measurement of spec 011's Overview: the owner
