@@ -30,6 +30,7 @@ The first time, read these pages in this order.
 |---|---|
 | [Principles](principles.md) | The rules that each implementation obeys, the reason for each rule, and how Limen checks it. |
 | [Theory](theory.md) | The model of the tolerance of a person, the decision rule and its thresholds, the kinds of `ask`, the cover rule and the weight of an answer, and forgetting. The estimates and the certificates, the calibration report, and what you can know about a judge. |
+| [Figures](figures/README.md) | What each figure shows, the simulations that make it, and how to make the figures again. |
 
 ## Operate Limen
 

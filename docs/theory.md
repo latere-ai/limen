@@ -162,6 +162,20 @@ says that a false allow costs as much as ten `ask`s, and a false block as
 much as four. Because of this, Limen suggests `allow` only if the approval
 probability is above 0.90.
 
+The figure below shows the two thresholds for all costs from 1.25 to 100
+times the cost of an `ask`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/thresholds-dark.svg">
+  <img alt="The width of the ask range over the cost of a false allow and the cost of a false block, with the lines of the two thresholds and three cost profiles." src="figures/thresholds.svg">
+</picture>
+
+*The thresholds that `limen.Costs.Thresholds` calculates, with an `ask` of
+cost 1. The shade is the width of the ask range. Limen refuses the costs
+in the red area, because there the ask range does not contain 1/2.
+Balanced is the symmetric profile, and Careful is the safety-weighted
+profile, the default.*
+
 The rule gives a value to an answer only for the current action. An
 answer also makes later predictions better. A rule that included this
 value could ask slightly less. But the one-step rule is the rule whose
@@ -323,6 +337,19 @@ kernel still transfers approval.
 | 3 considered approvals in 1 session | 0.85 | 0.69 | `ask`, `few` | `ask`, `short` |
 | 3 considered approvals in 2 sessions | 0.85 | 0.69 | `allow` | `ask`, `short` |
 | the same, for a `publish` that makes the app public | 0.85 | 0.69 | `ask`, `wider` | `ask`, `short` |
+
+The figure below shows the cover rule over many decisions of the engine.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/cover-dark.svg">
+  <img alt="A density plot of the approval probability against the weight of the approvals that cover each action, with the allow threshold and the weight 3 marked." src="figures/cover.svg">
+</picture>
+
+*Each point is one prediction of the engine for a new action of a
+simulated person, with the safety-weighted profile. Above 0.90, Limen
+suggests `allow` only if approvals of weight 3 or more from 2 sessions
+cover the action. The other actions above 0.90 get a `few` or a `wider`
+ask.*
 
 ### The weight of an answer
 
@@ -537,6 +564,19 @@ $90 \ln(2/0.385) \approx 148$ decisions. This occurs also if the person
 did not change. In the simulation, the prediction of the product kernel for a
 harmless file read decayed from 0.65 to 0.50 without new answers. The
 prediction of the additive kernel converged to its static part, 0.76.
+
+The figure below shows the same effect for all decisions after a trust
+reset, with the safety-weighted profile.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/forgetting-dark.svg">
+  <img alt="Two density plots of the approval probability against the true approval probability after a trust reset, for the product kernel and for the additive kernel." src="figures/forgetting.svg">
+</picture>
+
+*Decisions 751 to 1,500 of 20 simulated persons, after a trust reset. The
+product kernel forgets the risk of each action and asks about almost all
+actions. The additive kernel keeps the risk and allows about half of the
+actions.*
 
 ## Generalization has two effects
 

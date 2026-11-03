@@ -160,6 +160,18 @@ decreased (a trust reset). The judge did not change. Its false allow rate
 for this person went from 2.9% to 10.0% after the reset. Then it went
 back to 3.4%.
 
+The figure below shows how the audit rate changes the precision of an
+estimate.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/audits-dark.svg">
+  <img alt="Four density plots of the estimated false allow rate against the true false allow rate, for audit rates of 2, 5, 10, and 20 percent." src="figures/audits.svg">
+</picture>
+
+*The false allow rate that the ledger calculates from audits, against the
+true rate, for 20 simulated persons and four audit rates. The estimate
+has no bias. More audits make it more precise and its interval narrower.*
+
 ## The calibration report
 
 The calibration report uses the same estimate for a different question.
@@ -174,6 +186,19 @@ Audits are the only reviews of the bins above the allow threshold and
 below the block threshold. If your audit rate is 0, these bins stay
 `not_estimable`. The [API](api.md#calibration) describes the fields, and
 [Theory](theory.md#calibration) gives the reasons.
+
+The figure below shows the calibration reports of 20 simulated persons.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/calibration-dark.svg">
+  <img alt="The approval rate that the reviews measured against the approval probability that Limen stated, for each bin of 20 calibration reports." src="figures/calibration.svg">
+</picture>
+
+*Each point is one bin of the report of one person. Most bins are
+calibrated. The bin from 0.8 to 0.9 is underconfident for each person:
+the person approves more often than Limen states, so Limen asks more than
+necessary. Most bins below 0.3 are `not_estimable`, because a `block`
+gets a review only from an audit.*
 
 ## Mistakes that bias the record
 

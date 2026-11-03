@@ -11,6 +11,14 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- Figures from simulations that run the code of Limen, in the README, in
+  [Theory](docs/theory.md), and in [The ledger](docs/ledger.md).
+  `make figures` makes them again.
+  [Figures](docs/figures/README.md) tells what each figure shows and what
+  ran.
+
 ### Changed
 
 - The documents tell how Limen works and how to use it, and no longer
