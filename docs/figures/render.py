@@ -479,14 +479,16 @@ def thresholds(data: Data, th: Theme) -> plt.Figure:
     ax.text(96, ys[np.nanargmin(np.abs(block[:, col] - b_levels[-1]))] * 1.3, "block below", ha="right",
             va="bottom", fontsize=8.5, color=th.fg, zorder=5, bbox=backing(th))
 
+    strictest = prof.false_allow.max()
     for _, r in prof.iterrows():
         ax.scatter([r.false_allow], [r.false_block], s=48, color=th.fg, edgecolors=th.bg, linewidths=1.2, zorder=6)
-        # The strictest profile sits at the right edge: its label goes
-        # below and to the left, the others above and to the right.
-        below = r.false_allow > 20
+        # The strictest profile shares its cost of a false block with the
+        # profile to its left: its label goes below and to the right, the
+        # others above and to the right, so no label covers another.
+        below = r.false_allow == strictest
         ax.annotate(f"{r['name']}\nblock below {r.block_below:g}\nallow above {r.allow_above:g}",
-                    xy=(r.false_allow, r.false_block), xytext=(-8, -8) if below else (8, 8),
-                    textcoords="offset points", ha="right" if below else "left", va="top" if below else "bottom",
+                    xy=(r.false_allow, r.false_block), xytext=(8, -8) if below else (8, 8),
+                    textcoords="offset points", ha="left", va="top" if below else "bottom",
                     fontsize=8.5, color=th.fg, linespacing=1.3, zorder=6, bbox=backing(th))
     ax.text(1.33, 1.38, "refused: the ask range\nwould not contain 1/2", fontsize=8.5, color=red, ha="left",
             va="bottom", linespacing=1.3, zorder=5)

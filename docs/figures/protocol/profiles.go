@@ -20,7 +20,7 @@ type Profile struct {
 var Profiles = []Profile{
 	{"Balanced", limen.Costs{FalseAllow: 1 / 0.35, FalseBlock: 1 / 0.35, Ask: 1}},
 	{"Careful", limen.DefaultCosts},
-	{"Strict", limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}},
+	{"Strict", limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}},
 }
 
 // Named returns the profile called name.
