@@ -551,6 +551,58 @@ func (s *Store) Subjects(ctx context.Context, org string) ([]string, error) {
 	return out, nil
 }
 
+// Orgs returns, sorted, the organizations that have a subject with a
+// case, read from the meta.json of their subjects, since a directory's name
+// may be a hash. A replay comparison of a whole ledger reads them; a store
+// that more than one server shares needs no such listing.
+func (s *Store) Orgs(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return nil, ErrClosed
+	}
+	root := filepath.Join(s.dir, "subjects")
+	orgs, err := os.ReadDir(root)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return []string{}, nil
+	case err != nil:
+		return nil, fmt.Errorf("file store: list %s: %w", root, err)
+	}
+	out := []string{}
+	for _, o := range orgs {
+		if !o.IsDir() {
+			continue
+		}
+		subjects, err := os.ReadDir(filepath.Join(root, o.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("file store: list %s: %w", o.Name(), err)
+		}
+		for _, sub := range subjects {
+			path := filepath.Join(root, o.Name(), sub.Name(), "meta.json")
+			data, err := os.ReadFile(path)
+			if errors.Is(err, fs.ErrNotExist) || !sub.IsDir() {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("file store: read %s: %w", path, err)
+			}
+			var meta struct{ Org string }
+			if err := json.Unmarshal(data, &meta); err != nil || encode(meta.Org) != o.Name() {
+				return nil, fmt.Errorf("file store: %s does not name an organization of %s", path, o.Name())
+			}
+			out = append(out, meta.Org)
+			break
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 func (s *Store) weekPath(org string, from time.Time) string {
 	return filepath.Join(s.dir, "reports", encode(org), from.UTC().Format("2006-01-02")+".json")
 }

@@ -320,6 +320,7 @@ func TestLock(t *testing.T) {
 		s.Forget(ctx, "o", "s"),
 		s.DeleteProfile(ctx, limen.Scope{Org: "o"}),
 		func() error { _, err := s.Subjects(ctx, "o"); return err }(),
+		func() error { _, err := s.Orgs(ctx); return err }(),
 		func() error { _, _, err := s.WeekReport(ctx, "o", storetest.Monday); return err }(),
 		s.PutWeekReport(ctx, "o", storetest.Week(storetest.Monday)),
 	}
@@ -364,6 +365,10 @@ func TestAwkwardNames(t *testing.T) {
 			t.Errorf("subjects of %q are %q, %v", n, subs, err)
 		}
 	}
+	orgs, err := s.Orgs(ctx)
+	if want := slices.Sorted(slices.Values(names)); err != nil || !slices.Equal(orgs, want) {
+		t.Errorf("organizations %q, %v, want %q", orgs, err, want)
+	}
 	for _, n := range names {
 		if err := s.PutWeekReport(ctx, n, storetest.Week(storetest.Monday)); err != nil {
 			t.Fatalf("week of %q: %v", n, err)
@@ -382,6 +387,9 @@ func TestDamagedReports(t *testing.T) {
 	dir := t.TempDir()
 	s := open(t, dir)
 	defer func() { _ = s.Close() }()
+	if orgs, err := s.Orgs(ctx); err != nil || orgs == nil || len(orgs) != 0 {
+		t.Errorf("the organizations of a new store: %v, %v", orgs, err)
+	}
 	for _, c := range []store.Case{storetest.Case("o", "s", "a", 0), storetest.Case("p", "t", "b", 0)} {
 		if err := s.Put(ctx, c); err != nil {
 			t.Fatal(err)
@@ -396,11 +404,17 @@ func TestDamagedReports(t *testing.T) {
 	if subs, err := s.Subjects(ctx, "o"); err != nil || !slices.Equal(subs, []string{"s"}) {
 		t.Errorf("subjects %v, %v", subs, err)
 	}
+	if orgs, err := s.Orgs(ctx); err != nil || !slices.Equal(orgs, []string{"o", "p"}) {
+		t.Errorf("organizations %v, %v", orgs, err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "subjects", "p", "t", "meta.json"), []byte(`{"org":"o","subject":"t"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Subjects(ctx, "p"); err == nil {
 		t.Error("a meta.json of another organization was listed")
+	}
+	if _, err := s.Orgs(ctx); err == nil {
+		t.Error("a meta.json of another organization named its directory")
 	}
 	if err := os.Remove(filepath.Join(dir, "subjects", "p", "t", "meta.json")); err != nil {
 		t.Fatal(err)
@@ -410,6 +424,9 @@ func TestDamagedReports(t *testing.T) {
 	}
 	if _, err := s.Subjects(ctx, "p"); err == nil {
 		t.Error("a meta.json that is a directory was read")
+	}
+	if _, err := s.Orgs(ctx); err == nil {
+		t.Error("a meta.json that is a directory named an organization")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "subjects", "q"), nil, 0o600); err != nil {
 		t.Fatal(err)
