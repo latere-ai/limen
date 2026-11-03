@@ -5,7 +5,8 @@
 Do not open a public issue for a vulnerability. Use one of these two
 channels:
 
-- A private security advisory on the GitHub page of this repository.
+- A private vulnerability report on GitHub:
+  [report a vulnerability](https://github.com/latere-ai/limen/security/advisories/new).
 - An email to security@latere.ai.
 
 We reply in three business days or less. For a vulnerability of high
