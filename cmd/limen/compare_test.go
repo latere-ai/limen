@@ -34,7 +34,7 @@ func TestCompareFile(t *testing.T) {
 		"allow -> ask (short)",
 		"Allows of learned/1 that learned/2 does not give: 1",
 		"Allows of learned/2 that learned/1 does not give: 3",
-		"Verdicts of learned/2 that are more permissive than the verdicts of learned/1: 3",
+		"Verdicts of learned/2 that permit more than the verdicts of learned/1: 3",
 		"Of these, verdicts that the cover rule does not hold: 0",
 		"The Brier score of each model, from 39 answers",
 		"example/considered  ses-0/10  publish: update  ask (split) 0.821 -> allow 0.904  covered",
@@ -179,7 +179,7 @@ func TestComparisonPieces(t *testing.T) {
 		"Actions whose cover is different between the two models: 1.",
 		"learned/1 suggests the verdict that the ledger recorded for 1 of 2 predictions.",
 		"block 0.000 -> ask (short) 0.000  not held by the cover rule",
-		"o/s     3        0        0                    0                    0                0         -                -",
+		"o/s     3        0        0                    0                    0            0         -                -",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)

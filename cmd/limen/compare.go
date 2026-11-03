@@ -169,7 +169,7 @@ func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[strin
 	w.Println()
 	w.Printf("Allows of %s that %s does not give: %d\n", c.Base, c.Next, o.Withheld)
 	w.Printf("Allows of %s that %s does not give: %d\n", c.Next, c.Base, o.Granted)
-	w.Printf("Verdicts of %s that are more permissive than the verdicts of %s: %d\n", c.Next, c.Base, o.Looser)
+	w.Printf("Verdicts of %s that permit more than the verdicts of %s: %d\n", c.Next, c.Base, o.Looser)
 	w.Printf("  Of these, verdicts that the cover rule does not hold: %d\n", o.Outside)
 	if o.CoverDiffers > 0 {
 		w.Printf("Actions whose cover is different between the two models: %d. A client showed the suggestion before the answer.\n", o.CoverDiffers)
@@ -191,7 +191,7 @@ func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[strin
 		}
 	}
 	if len(loose) > 0 {
-		w.Printf("\nThe verdicts of %s that are more permissive:\n", c.Next)
+		w.Printf("\nThe verdicts of %s that permit more:\n", c.Next)
 		tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for _, x := range loose {
 			note := "covered"
@@ -206,7 +206,7 @@ func writeComparison(w *errwriter.Writer, c engine.Comparison, skipped map[strin
 
 	w.Println("\nFor each person:")
 	tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	twPrintf(tw, "  person\tactions\tanswers\tallows of %s\tallows of %s\tmore permissive\tnot held\tBrier %s\tBrier %s\n",
+	twPrintf(tw, "  person\tactions\tanswers\tallows of %s\tallows of %s\tpermit more\tnot held\tBrier %s\tBrier %s\n",
 		c.Base, c.Next, c.Base, c.Next)
 	for _, p := range c.Persons {
 		bb, bn := "-", "-"
