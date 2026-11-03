@@ -141,6 +141,7 @@ func (e *Engine) Explain(ctx context.Context, k limen.Key) (limen.Explanation, e
 	if c.Prediction != nil && c.PredictedBy != nil {
 		out.PredictedBy = &limen.ModelRef{Source: c.Prediction.Source, Answers: *c.PredictedBy}
 	}
+	out.Calibration = e.calibrationOf(c, cases, recs)
 	if len(ex.Contributions) > 0 {
 		out.Evidence = evidence(ex, cases, j.Verdict)
 	}

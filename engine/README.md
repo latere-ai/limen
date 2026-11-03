@@ -41,3 +41,17 @@ mean and a triangular solve for the variance, well inside the hot path's
 budget. A fit is a Cholesky factorization per Newton step and runs off the
 hot path: predictions read the current posterior while the next one is
 fitted, and the caller swaps a pointer to publish it.
+
+An explanation reads every case of the person, so its time grows with
+the history. Measured with `go test -bench 'Explain|CalibrationOf' -run xxx
+./engine` on the same machine, against a warm model:
+
+| Operation | 512 cases | 4096 cases |
+|---|---|---|
+| `Engine.Explain`, one recorded case | 5.2 ms | 38 ms |
+| its `calibration`, the person's report of the last 90 days | 0.15 ms | 1.2 ms |
+
+The report is one more linear pass over the cases the explanation has
+already read, about 3% of it, so the engine computes it at each
+explanation and keeps no cache of reports. A cache would show a state
+that a new review already changed.
