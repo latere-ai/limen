@@ -247,7 +247,7 @@ func TestReportPieces(t *testing.T) {
 		}
 	}
 	buf.Reset()
-	printError(errwriter.New(&buf), &source{}, fmt.Errorf("plain failure"))
+	printError(errwriter.New(&buf), "limen replay", &source{}, fmt.Errorf("plain failure"))
 	if !strings.Contains(buf.String(), "plain failure") {
 		t.Errorf("plain error: %q", buf.String())
 	}

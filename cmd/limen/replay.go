@@ -29,12 +29,14 @@ type options struct {
 	keep  bool
 	store string
 	json  bool
+	model string
 }
 
 func (o *options) register(fs *flag.FlagSet) {
 	fs.BoolVar(&o.keep, "keep", false, "learn the history into the models kept in --store")
 	fs.StringVar(&o.store, "store", "", "the directory where Limen keeps its ledger and models")
 	fs.BoolVar(&o.json, "json", false, "print the report as JSON")
+	fs.StringVar(&o.model, "model", "", "the model that replays the history: learned/1 or learned/2; default learned/1")
 }
 
 // source is where a replay reads its records, and what it found on the way.
@@ -44,72 +46,91 @@ type source struct {
 	describe string
 }
 
-func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, getenv func(string) string) int {
-	if len(args) == 0 {
-		errOut.Print("limen replay: give the source to replay: topos or file.\n\n" + usage)
-		return exitUsage
-	}
-	var (
-		o   options
-		src *source
-	)
+// readSource parses the flags of a replay or a comparison from a source,
+// topos or file, with the flags that register adds, and opens the source.
+// It reports done with the exit code when the command should stop. close
+// releases the file it opened.
+func readSource(cmd string, args []string, stdin io.Reader, errOut *errwriter.Writer, getenv func(string) string,
+	register func(*flag.FlagSet)) (src *source, close func(), code int, done bool) {
+	close = func() {}
 	switch args[0] {
 	case "topos":
-		fs := flag.NewFlagSet("limen replay topos", flag.ContinueOnError)
+		fs := flag.NewFlagSet(cmd+" topos", flag.ContinueOnError)
 		fs.SetOutput(errOut)
 		data := fs.String("data", "", "the Topos data directory; default TOPOS_DATA_DIR, then $XDG_STATE_HOME/topos, then ~/.local/state/topos")
 		org := fs.String("org", "", "the organization of the replayed actions; default the session's, then local")
 		subject := fs.String("subject", "", "the person whose decisions these are; default each session's initiator")
-		o.register(fs)
+		register(fs)
 		if code, done := parse(fs, args[1:]); done {
-			return code
+			return nil, close, code, true
 		}
 		if fs.NArg() > 0 {
-			errOut.Printf("limen replay topos: unexpected argument %q.\n", fs.Arg(0))
-			return exitUsage
+			errOut.Printf("%s topos: unexpected argument %q.\n", cmd, fs.Arg(0))
+			return nil, close, exitUsage, true
 		}
 		dir := *data
 		if dir == "" {
 			dir = toposDataDir(getenv)
 		}
 		if dir == "" {
-			errOut.Println("limen replay topos: there is no Topos data directory. Use --data, or set TOPOS_DATA_DIR or HOME.")
-			return exitUsage
+			errOut.Printf("%s topos: there is no Topos data directory. Use --data, or set TOPOS_DATA_DIR or HOME.\n", cmd)
+			return nil, close, exitUsage, true
 		}
 		skipped := map[string]int{}
-		src = &source{
+		return &source{
 			records: topos.Records(dir, topos.Options{Org: *org, Subject: *subject, Skipped: func(s topos.Skip) { skipped[s.Reason]++ }}),
 			skipped: skipped, describe: dir,
-		}
+		}, close, 0, false
 	case "file":
-		fs := flag.NewFlagSet("limen replay file", flag.ContinueOnError)
+		fs := flag.NewFlagSet(cmd+" file", flag.ContinueOnError)
 		fs.SetOutput(errOut)
-		o.register(fs)
+		register(fs)
 		if code, done := parse(fs, args[1:]); done {
-			return code
+			return nil, close, code, true
 		}
 		if fs.NArg() != 1 {
-			errOut.Println("limen replay file: give one file of records, or - for standard input.")
-			return exitUsage
+			errOut.Printf("%s file: give one file of records, or - for standard input.\n", cmd)
+			return nil, close, exitUsage, true
 		}
 		path := fs.Arg(0)
 		r := stdin
 		if path != "-" {
 			f, err := os.Open(path)
 			if err != nil {
-				errOut.Printf("limen replay file: cannot open %s: %v\n", path, err)
-				return exitFail
+				errOut.Printf("%s file: cannot open %s: %v\n", cmd, path, err)
+				return nil, close, exitFail, true
 			}
-			defer func() { _ = f.Close() }() // a read-only file: closing it loses nothing
+			// A read-only file: closing it loses nothing.
+			close = func() { _ = f.Close() }
 			r = f
 		}
-		src = &source{records: ndjson(r), skipped: map[string]int{}, describe: path}
-	default:
+		return &source{records: ndjson(r), skipped: map[string]int{}, describe: path}, close, 0, false
+	}
+	return nil, close, exitUsage, true
+}
+
+func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, getenv func(string) string) int {
+	if len(args) == 0 {
+		errOut.Print("limen replay: give the source to replay: topos or file.\n\n" + usage)
+		return exitUsage
+	}
+	if args[0] != "topos" && args[0] != "file" {
 		errOut.Printf("limen replay: %q is not a known source. Use topos or file.\n", args[0])
 		return exitUsage
 	}
+	var o options
+	src, closeSrc, code, done := readSource("limen replay", args, stdin, errOut, getenv, o.register)
+	defer closeSrc()
+	if done {
+		return code
+	}
 	if o.keep && o.store == "" {
 		errOut.Println("limen replay: --keep needs --store, the directory that keeps the ledger.")
+		return exitUsage
+	}
+	model, err := engine.ParseModel(o.model)
+	if err != nil {
+		errOut.Printf("limen replay: --model is not correct: %v.\n", err)
 		return exitUsage
 	}
 
@@ -121,7 +142,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 			return exitFail
 		}
 	}
-	e := engine.New(engine.Options{Store: st})
+	e := engine.New(engine.Options{Store: st, Model: model})
 	defer func() {
 		// The engine stops its fitters; the store flushes what a kept replay
 		// wrote, which the person must hear about if it fails.
@@ -133,7 +154,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 
 	rep, err := e.Replay(context.Background(), src.records, limen.ReplayOptions{Keep: o.keep})
 	if err != nil {
-		printError(errOut, src, err)
+		printError(errOut, "limen replay", src, err)
 		return exitFail
 	}
 	if o.json {
@@ -212,16 +233,17 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 	}
 }
 
-// printError explains a failed replay to the person who ran it.
-func printError(w *errwriter.Writer, src *source, err error) {
-	if errors.Is(err, topos.ErrNoSessions) {
-		w.Printf("limen replay: there are no Topos sessions in %s. Use Topos for some time, or use --data to give a different directory.\n", src.describe)
+// printError explains a failed replay or comparison to the person who ran
+// it.
+func printError(w *errwriter.Writer, cmd string, src *source, err error) {
+	if errors.Is(err, topos.ErrNoSessions) && src != nil {
+		w.Printf("%s: there are no Topos sessions in %s. Use Topos for some time, or use --data to give a different directory.\n", cmd, src.describe)
 		return
 	}
 	var le *limen.Error
 	if errors.As(err, &le) {
-		w.Printf("limen replay: %s\n  %s\n", le.Code.Message(), le.Error())
+		w.Printf("%s: %s\n  %s\n", cmd, le.Code.Message(), le.Error())
 		return
 	}
-	w.Printf("limen replay: %v\n", err)
+	w.Printf("%s: %v\n", cmd, err)
 }

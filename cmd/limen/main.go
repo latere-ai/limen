@@ -4,10 +4,15 @@
 // Command limen is Limen's command line. It replays recorded decisions
 // through Limen, from a Topos data directory or from a file of records,
 // and reports what Limen would have suggested and how often it would have
-// been wrong. The server is limend:
+// been wrong. It also compares the two model versions on a history, or on
+// the ledger of limend, before an operator switches the model. The server
+// is limend:
 //
-//	limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-//	limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+//	limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--model MODEL] [--json]
+//	limen replay file  [--keep --store DIR] [--model MODEL] [--json] RECORDS.ndjson
+//	limen compare topos [--data DIR] [--org ORG] [--subject SUBJECT] [--store DIR] [--json]
+//	limen compare file  [--store DIR] [--json] RECORDS.ndjson
+//	limen compare ledger --store DIR [--org ORG] [--subject SUBJECT] [--json]
 //	limen version
 //
 // It exits 0 on success, 1 when the replay fails, and 2 on a usage error.
@@ -36,8 +41,11 @@ const (
 const usage = `Limen learns which automated actions need a person.
 
 Usage:
-  limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--json]
-  limen replay file  [--keep --store DIR] [--json] RECORDS.ndjson
+  limen replay topos [--data DIR] [--org ORG] [--subject SUBJECT] [--keep --store DIR] [--model MODEL] [--json]
+  limen replay file  [--keep --store DIR] [--model MODEL] [--json] RECORDS.ndjson
+  limen compare topos [--data DIR] [--org ORG] [--subject SUBJECT] [--store DIR] [--json]
+  limen compare file  [--store DIR] [--json] RECORDS.ndjson
+  limen compare ledger --store DIR [--org ORG] [--subject SUBJECT] [--json]
   limen version
 
 To see the options of a command, run "limen replay topos -h".
@@ -63,6 +71,8 @@ func dispatch(args []string, stdin io.Reader, out, errOut *errwriter.Writer, get
 	switch args[0] {
 	case "replay":
 		return replay(args[1:], stdin, out, errOut, getenv)
+	case "compare":
+		return compare(args[1:], stdin, out, errOut, getenv)
 	case "version":
 		out.Println(version.String("limen"))
 		return exitOK
