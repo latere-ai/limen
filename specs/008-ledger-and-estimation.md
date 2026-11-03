@@ -126,6 +126,18 @@ certificate gains one count, `considered`: the audits of its clean run
 whose answer has weight 1. `clean`, `needed` and `holds` do not read
 it. A row carries `Considered`, and only the certificate reads it.
 
+*Amended 2026-11-03:* the calibration report of [[011-consent]] reads
+this estimate in each of its ten bins of the stated `approve`, over the
+rows of `learned`: `estimate.Calibrate`, on the Horvitz-Thompson core
+that `Rate` also calls, with the same weight `1/p`, the same adjustment
+for unanswered reviews, and the same Wilson interval at the Kish size. A
+bin below 1/2 estimates the share of approvals, as the false-block rate
+counts the approvals of blocks. A bin from 1/2 on estimates the share of
+denials, as the false-allow rate does, and observes one minus it. A row
+carries `Stated`, the approval probability of the prediction, and only
+the calibration report reads it. `Rate` gives the same numbers as
+before.
+
 ### Replay
 
 A replay applies the same arithmetic to recorded history. It orders the

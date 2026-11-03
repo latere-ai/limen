@@ -996,8 +996,10 @@ Wave 1 is built (2026-11-03): the scope of each case, `labels/2`, the
 cover rule with its cap on version 1, the answer fields and `weights/1`,
 `considered` on the certificate, the reasons of an `ask` without a lean,
 `cover` on predictions, explanations and learned entries, and `split`
-and `short`. Waves 2 and 3 are not built, so the status stays
-`in-progress`.
+and `short`. Wave 2 is built (2026-11-03): the calibration report,
+`GET /v1/calibration`, and `calibration` on an explanation
+([wave 2](#wave-2-the-calibration-report)). Wave 3 is not built, so the
+status stays `in-progress`.
 
 ### What was built
 
@@ -1053,11 +1055,42 @@ and `short`. Waves 2 and 3 are not built, so the status stays
 | the stub reads the scope | it does, and its asks in the band are `unsure`, because it knows no variance | as before this spec |
 | a `surface` outside the list | it is not an error, and Limen keeps no `surface` for it; an `answer_ms` outside its range and a negative `waited_ms` are `invalid_answer` | a newer client works with an older Limen, and an answer holds no text |
 
+### Wave 2: the calibration report
+
+| Part | Where |
+|---|---|
+| `CalibrationQuery`, `Calibration` with `Bin`, `CalibrationBin`, the states and `CalibrationState`, `CalibrationBinOf`, `CalibrationEdges`, `CalibrationBins`, `CalibrationMinEffective`, `CalibrationWindow`, `Explanation.Calibration`, and `Ledger.Calibration` | `calibration.go`, `explanation.go`, `service.go` |
+| `Calibrate` on the Horvitz-Thompson core that `Rate` also calls, `CalibrationOf`, and `Row.Stated` from `RowOf` of `learned` | `estimate/calibration.go`, `estimate/estimate.go`, `estimate/case.go` |
+| The report over the cases of the person, and `calibration` on each explanation from the cases it reads | `engine/calibration.go`, `engine/explain.go`, `stub/calibration.go`, `stub/explain.go` |
+| `GET /v1/calibration`, asked as `reliability.read` on the subject's `Reliability`, and the client | `server/server.go`, `client/client.go` |
+| The route and the schemas `Calibration`, `CalibrationBin`, `CalibrationState`, and `calibration` on `Explanation` | `api/openapi.yaml`, `api/openapi_test.go` |
+| The conformance cases `Calibration`, `CalibrationWeights` and `ExplanationCalibration`, each with a defect | `conformance/calibration.go`, `conformance/defects_test.go` |
+
+The route needs no new action, resource kind or field in the authorizer
+vocabulary: it asks `reliability.read` about `Reliability` with `org` and
+`subject`, as `GET /v1/reliability` does.
+
+| # | Proof |
+|---|---|
+| 16 | `TestCalibrate` against values calculated by hand, `TestCalibrateNothingEstimable`, `TestCalibrateUnanswered`, `TestCalibrateIsOneMinusTheFalseAllowRate`, `TestCalibrateIgnoresTheWeights`, `TestCalibrationOf`, the seeded Monte Carlo `TestCalibratedModelIsCalibrated`, and `TestApprovalsOfAuditsVary` (`estimate`); `TestCalibrationBinOf`, `TestCalibrationState`, `TestCalibrationJSON` (root); `TestEngineAndStubCalibrateAlike`, `TestExplanationReadsTheLast90Days` (`engine`); conformance `Calibration`, `CalibrationWeights`, `ExplanationCalibration` |
+| 17 | `TestAuthorizerQuestions`, `TestRefusalsActOnNothing`, `TestSubjectBinding`, `TestCalibrationIsThePersons`, `TestQueryErrors`, `TestRoutesMatchOpenAPI` (`server`); `TestSchemasMatchTypes`, `TestEnumsMatchConstants`, `TestOperations` (`api`) |
+
+| What it said | What was built | Why |
+|---|---|---|
+| `observed`, the approval rate of the covered cases, each review with weight `1/p` | a bin below 1/2 estimates the share of approvals; a bin of 1/2 or more estimates the share of denials and observes one minus it, each with weight `1/p` and the adjustment of 008 for unanswered reviews | both are Horvitz-Thompson and unbiased (Proposition 8). In an audited bin near 1, the count of approvals moves with the number of audits drawn: at 1,000 cases of 0.95 and 5% audits, the Wilson interval held the truth in 68% of the runs counting approvals and in 96% counting denials. It also makes `observed` of a bin above the allow threshold exactly one minus the false-allow rate of its allows |
+| `stated`, the mean `approve` of the covered cases | `null` when the bin has no covered case | null is not zero |
+| `error` over the estimable bins | `null` when no bin is estimable; `estimable` is 0 for a report with no case | the same |
+| `interval` | absent when `observed` is `null` | an interval goes with a value, as in 008 |
+| the states | `calibrated` includes the edges of the interval; at an equal distance from 1/2 a bin outside the interval is `underconfident`, "the other case" | the definition read literally |
+| criterion 16: a seeded Monte Carlo test that a calibrated model is `calibrated` in each estimable bin | over 400 seeded ledgers of a calibrated model with asks at 1 and audits at 0.1, each bin is `calibrated` in 88% or more of them (measured 91% or more) and all estimable bins in 93% to 97% (measured 94.5%); a model that states 0.1 less than the truth is `calibrated` in at most half (measured 26%) | a 95% interval misses one bin in twenty, so one ledger of ten bins has a bin outside its interval about two times in five |
+| `calibration`, the state of the bin of the prediction of the explanation | the bin of the recorded prediction's `approve`, not of the `approve` the explanation calculates again; absent for an action with no recorded prediction | a client holds the recorded prediction when it decides what to show; with no prediction there is no number to show |
+| the report for the last 90 days | from 90 days before the time of the explanation, that time included | the case explained at its own receive time counts |
+| cache `calibration` per person if it is costly | no cache: it is one more linear pass over the cases the explanation reads, 0.15 ms of 5.2 ms at 512 cases and 1.2 ms of 38 ms at 4096 (`BenchmarkCalibrationOf`, `BenchmarkExplain`, `engine/README.md`) | a cache would show a state that a new review already changed |
+| the predictions of Limen in the window | the cases first received in `[from, to)` that have a prediction of the model, as `of=learned` reads them; a prediction with no decision is a case and is not covered | the window of the reliability report, so the two reports read the same cases |
+| a report of the ledger | `Ledger.Calibration`, a new method of the interface | the report reads the reviews of the ledger, as `Reliability` does. An implementation of `limen.Service` outside this module adds it |
+
 ### What this leaves open
 
-- The calibration report and `calibration` on an explanation, wave 2,
-  criteria 16 and 17. Until then no explanation has `calibration`, so no
-  client shows a recommendation (decision 10).
 - `features/2`, `learned/2` with `weights/2`, the replay comparison and
   the refit, wave 3, criteria 18, 19 and 21.
 - The ledger a model keeps is not counted in the byte budget of the
@@ -1066,3 +1099,11 @@ and `short`. Waves 2 and 3 are not built, so the status stays
 - Contact from Limen's own reading needs a target `id`. Topos sends an
   id for an app and none for a host, so a fetch has contact only from
   Topos's claim.
+- The rule for clients is the clients' to apply: Topos, the console,
+  `latere oversight` and sdk-go read `calibration` before they show a
+  probability or a recommendation, and for a bin above the allow
+  threshold the certificate of `learned`. Limen gives the state and no
+  client of its own.
+- A bin gives its reviews but not its effective size, which 011 does not
+  name. A reader sees why a bin is `not_estimable` only for reviews of
+  weight 1, where the effective size is the count of reviews.

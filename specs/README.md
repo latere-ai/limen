@@ -45,8 +45,10 @@ sessions. Spec 011 replaced it on 2026-11-03 with wave 1 of consent: the
 scope of each action, `labels/2`, the cover rule with its cap on
 `allow`, the weight of an answer, the kinds `short`, `wider` and `few`,
 and reasons of an `ask` without a lean. Specs 002, 003, 004, 006, 008,
-009 and 010 are amended for it. The calibration report (wave 2) and
-`learned/2` (wave 3) wait.
+009 and 010 are amended for it. Wave 2 of 011, the same day, built the
+calibration report, `GET /v1/calibration`, and `calibration` on an
+explanation, and amended 003, 006, 008 and 009. `learned/2` (wave 3)
+waits.
 
 The owner decided on 2026-11-02 what comes after Limen is open source:
 the hooks for Claude Code and Codex (005, criteria 1 to 5), a published

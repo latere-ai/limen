@@ -310,6 +310,19 @@ is now `short`, and `TestShortOnAnswersThatAgree` holds it. Topos keeps
   so a learned entry is one reach of one action. A case of `labels/1`
   keeps its label, and so its entry.
 
+**2026-11-03, consent, wave 2 of [[011-consent]].** An explanation
+carries `calibration`: the state of the bin of the recorded prediction's
+`approve` in the person's calibration report for the last 90 days, the
+explanation's own time included. It is the recorded prediction's bin,
+not the bin of the `approve` that the explanation calculates again,
+because a client holds the recorded prediction when it decides what to
+show. An action with no recorded prediction has no `calibration`, and a
+client then states no probability. The engine and the stub read it from
+the cases the explanation already reads, about 3% of the time of an
+explanation at 512 and at 4096 cases, so neither keeps a cache.
+`TestExplanationReadsTheLast90Days` (`engine`), `TestCalibrationWindow`
+(`stub`) and the conformance case `ExplanationCalibration` hold it.
+
 ## Outcome
 
 Recorded on 2026-11-01, after v0.3.0. The three views and the evidence on a

@@ -88,7 +88,7 @@ the org with the agent; the org with the kind; the org; the default.
 | Interface | Methods | Served by |
 |---|---|---|
 | `Predictor` | `Predict` | the engine, the HTTP client, the stub |
-| `Ledger` | `Record`, `Answer`, `Cases`, `Reliability` | the engine, the HTTP client, the stub |
+| `Ledger` | `Record`, `Answer`, `Cases`, `Reliability`, `Calibration` (amended 2026-11-03) | the engine, the HTTP client, the stub |
 | `Admin` | `Profile`, `PutProfile`, `Replay`, `Forget` | the engine, the HTTP client, the stub |
 | `Explainer` | `Explain`, `Learned`, `Preview` ([[009-explanations]], added 2026-11-01) | the engine, the HTTP client, the stub |
 | `Service` | all four | the same |
@@ -242,6 +242,18 @@ before.
   because a field name never changes.
 - `invalid_answer` also covers a value that is not permitted, and its
   sentence says so.
+
+**2026-11-03, consent, wave 2 of [[011-consent]].** `Ledger` gains
+`Calibration(ctx, CalibrationQuery) (Calibration, error)`, the
+calibration report, beside `Reliability`, because it reads the same
+reviews. A Go type outside this module that implements `limen.Ledger`
+or `limen.Service` adds the method; a decision point that uses
+`client/`, `engine/` or `stub/` changes nothing. The report types are
+`CalibrationQuery` (validated as a reliability query without `of`),
+`Calibration` and `CalibrationBin`, with the states `calibrated`,
+`overconfident`, `underconfident` and `not_estimable` and the pure
+functions `CalibrationBinOf`, `CalibrationEdges` and `CalibrationState`.
+`Explanation.Calibration` is optional on the wire.
 
 ## Outcome
 

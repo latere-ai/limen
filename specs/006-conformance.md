@@ -113,6 +113,18 @@ considered approvals that cover it, and `Certificate` checks
 conformance action has no target id, because 011 reads contact from it
 and a path is no id.
 
+*Amended 2026-11-03:* wave 2 of [[011-consent]] adds three cases, each
+with a defect. `Calibration` holds the report of any service to its
+definition while the reviews arrive: the ten bins and their edges, the
+cases, `covered` and `stated` of each, null below an effective size of
+20, and the share of approvals with its Wilson interval and its state
+after. `CalibrationWeights`, steered, holds the weight `1/p` of a review
+and the counting of denials from 1/2 on to values calculated by hand.
+`ExplanationCalibration` holds `calibration` on an explanation to the
+state of the bin of its recorded prediction in the report of the last 90
+days, and absent for an action with no prediction. The stub and the
+engine give the same report for the same ledger.
+
 ### The stub
 
 ```go
@@ -156,10 +168,10 @@ test in the tree.
 
 | # | Proof in the tree |
 |---|---|
-| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 50 cases, the 29 of this spec, the 15 of [[010-organizations]] and the 6 of [[011-consent]] (amended above), in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
+| 1 | `TestDefects` (`conformance/defects_test.go`): one defect for each of the 53 cases, the 29 of this spec, the 15 of [[010-organizations]] and the 9 of [[011-consent]] (amended above), in the order of the suite; a child run against the stub with that defect must fail on its own case, and a panic does not count |
 | 2 | `TestConformance` in `stub/`, `TestRunAgainstTheStub` |
 | 3 | the runs above |
-| 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same; `TestEngineAndStubReportOrganizationsAlike` does the same for the report of an organization |
+| 4 | `TestEngineAndStubReportAlike` (`engine/parity_test.go`): one scripted history goes to both, and every report is the same; `TestEngineAndStubReportOrganizationsAlike` does the same for the report of an organization, and `TestEngineAndStubCalibrateAlike` (`engine/calibration_test.go`) for the calibration report and the calibration of each explanation |
 | 5 | the `suite` gate, at 90% or more for each package |
 
 ### What diverges from the design as written

@@ -51,6 +51,7 @@ refuses any other at start (exit 2). The client takes the same prefix as
 | GET | `/v1/learned?org&subject&agent&kind` | none | 200 `Learned` | `case.list` | `Explainer.Learned` |
 | POST | `/v1/previews` | `PreviewRequest` | 200 `Preview` | `reliability.read` | `Explainer.Preview` |
 | GET | `/v1/reports?org&from&to` | none | 200 `Report` | `report.read` | `Reporter.Report` |
+| GET | `/v1/calibration?org&subject&from&to` | none | 200 `Calibration` | `reliability.read` | `Ledger.Calibration` |
 
 The explanations, learned and previews routes are
 [[009-explanations]]'s, added 2026-11-01 with the code `no_case` (404)
@@ -210,6 +211,17 @@ of `invalid_answer` names a value that is not permitted. `api/openapi.yaml`
 describes each one, and its test pairs the new schemas with their Go
 types and the new lists with their constants. `GET /v1/calibration`
 waits for wave 2.
+
+**2026-11-03.** Wave 2 of [[011-consent]] adds one route and one
+optional field, with no new action, resource kind or error code:
+`GET /v1/calibration?org&subject&from&to`, asked as `reliability.read`
+on the subject's `Reliability`, with `org` and `subject`, as
+`GET /v1/reliability` is, because the report reads the same reviews; and
+`calibration` on an explanation. An invalid window is `invalid_query`.
+`api/openapi.yaml` describes the route and the schemas `Calibration`,
+`CalibrationBin` and `CalibrationState`, and its tests hold them to the
+Go types and the states to their constants. `TestAuthorizerQuestions`
+holds the question and `TestCalibrationIsThePersons` the owner policy.
 
 ## Outcome
 
