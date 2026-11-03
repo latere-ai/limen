@@ -19,7 +19,8 @@ identity:
 license:
   spdx: Apache-2.0
   holder: Latere AI
-  extensions: ['.go']
+  # .py for the figure renderer, docs/figures/render.py.
+  extensions: ['.go', '.py']
   names: [Makefile, Dockerfile]
 
 spec:
