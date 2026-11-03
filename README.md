@@ -39,8 +39,8 @@ method is from the paper
 
 ## Quick start
 
-You need Go 1.27 or later, and `jq` to format the output. Install and
-start the server for one person:
+You need bash, Go 1.27 or later, and `jq` to format the output. Install
+and start the server for one person:
 
 ```sh
 go install latere.ai/x/limen/cmd/limend@latest
@@ -138,10 +138,11 @@ Each implementation of Limen obeys these rules:
   class of its target. An approval of a push to a feature branch does not
   cover a push to `main` that cannot be undone. That push gets `ask`, with
   the `ask_kind` `wider`.
-- **A quick approval is not consent.** An approval in less than two
-  seconds, from a rule, from one gesture for many actions, after a shown
-  suggestion, or late in a long session, has the weight 0 if the person
-  did not open the details. It teaches the model, but it does not let an
+- **A quick approval is not consent.** An approval from a rule has the
+  weight 0. An approval in less than two seconds, from one gesture for
+  many actions, after a shown approval probability above 0.5, or late in
+  a long session, has the weight 0 if the person did not open the
+  details. It teaches the model, but it does not let an
   action run without a question.
 - **A number only where the audits support it.** The calibration report
   compares the probabilities that Limen stated with the approval rates

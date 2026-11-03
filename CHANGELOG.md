@@ -24,6 +24,29 @@ the commit log.
 - The documents tell how Limen works and how to use it, and no longer
   give the status of a deployment. The notes for Topos are for Topos
   v0.69.0 or later.
+- The documents correct these statements. The behavior of Limen does
+  not change.
+  - The cover rule does not change a `block`, because it removes only
+    `allow` from the choices. Below the block threshold, the verdict of
+    least expected cost is still `block`.
+  - The review probability of each decision sets which cases get a
+    review, not the thresholds. An action above the allow threshold that
+    the cover rule changed to an `ask` gets a review when a person sees
+    it. With an audit rate of 0, a bin of only automatic verdicts stays
+    `not_estimable`.
+  - The ledger keeps the action without its input. This includes the
+    `kind` and the `id` of the target, which find a first contact. If the
+    ledger must not keep a path or a host, send an opaque `id`.
+  - Limen does not measure `details_opened`, `surface`, or the session.
+    The weights protect against a person who does not pay attention, not
+    against a decision point that reports incorrectly.
+  - Each action that Limen predicts or that the decision point records
+    adds one to the time of the model, also without an answer.
+  - A new type of action shares the tolerance of the person. Denials of
+    other actions can move it below the block threshold.
+  - The ask rate of Proposition 3 is the rate of the policy of least
+    expected cost, not a limit for all policies. The actions of an
+    automatic verdict get answers from audits, not never.
 
 ## v0.8.0 - 2026-11-03
 

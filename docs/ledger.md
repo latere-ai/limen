@@ -26,7 +26,9 @@ A case has up to four parts. Limen writes each part one time only.
 
 1. **The action.** This is the action as the decision point saw it before
    it ran, without its input. Limen reads the input to calculate the
-   features. Limen does not keep the input.
+   features. Limen does not keep the input. Limen keeps the other fields,
+   for example the name and the `kind` and `id` of the target. If the ledger must not keep a path or a host,
+   send an opaque `id`.
 2. **The prediction.** A case has a prediction only if the decision point
    asked Limen for one.
 3. **The decision.** This is the applied verdict, the probability that a
@@ -182,9 +184,11 @@ approval rate that the reviews measured. Each review counts with the
 weight 1 divided by its review probability, as above. A bin with an
 effective size less than 20 is `not_estimable`, and its rate is `null`.
 
-Audits are the only reviews of the bins above the allow threshold and
-below the block threshold. If your audit rate is 0, these bins stay
-`not_estimable`. The [API](api.md#calibration) describes the fields, and
+The review probability of each decision, not the thresholds, sets which
+cases get a review. An action above the allow threshold that the cover
+rule changed to an `ask` gets a review when a person sees it. If your
+audit rate is 0, the actions that ran or were blocked without a person
+have no review. A bin of only these actions stays `not_estimable`. The [API](api.md#calibration) describes the fields, and
 [Theory](theory.md#calibration) gives the reasons.
 
 The figure below shows the calibration reports of 20 simulated persons.

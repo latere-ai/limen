@@ -66,9 +66,10 @@ thresholds are `allow_above = 1 - ask / false_allow` and
 `block_below = ask / false_block`. This is the reject option of Chow.
 
 To adjust the thresholds to data, Limen would need answers for the
-actions that got an automatic verdict. These actions never get answers. A
-cost profile also records how much risk an organization accepts, in a
-form that all people can read.
+actions that got an automatic verdict. These actions get answers only
+from audits, and audits are few: with the default cost profile, one
+action in twenty. A cost profile also records how much risk an
+organization accepts, in a form that all people can read.
 
 **Checked by.** The tests of the contract compare the formula with the
 expected costs on a grid of probabilities. The conformance suite checks
@@ -141,8 +142,10 @@ suggest `ask`. This does not change, however much Limen learns.
 **Why.** If a person approves a kind of action about half of the time, no
 model can predict the answer. With most costs, `ask` is then the choice
 with the lowest cost. Because of this, some actions must go to the
-person, even with a perfect model. The person and the costs set the size
-of this part, not Limen.
+person, even with a perfect model that takes the verdict of least
+expected cost. The person and the costs set the size of this part, not
+Limen. A policy can ask less only if it decides some of these actions at
+a higher expected cost.
 
 In the simulation of the paper, this part was 10.3% of the actions with
 symmetric costs. It was 31.3% with the default costs, which make a false
@@ -165,10 +168,12 @@ model moves each action back to "not sure", and it asks again about
 actions that it knew.
 
 In the simulation of the paper, the model with the static part was
-compared with the model that forgets both. The part of the actions that a
-person had to answer decreased from 28.4% to 13.5%. The cost-weighted
-regret decreased by 59%, at a false allow rate of about 1%. Limen counts time in decisions, for each person, and keeps the
-count itself.
+compared with the model that forgets both. With symmetric costs, the part
+of the actions that a person had to answer decreased from 28.4% to 13.5%. The cost-weighted
+regret decreased by 59%, at a false allow rate of about 1%. Limen counts
+time in decisions, for each person, and keeps the count itself. Each
+action that Limen predicts or that the decision point records adds one,
+also without an answer.
 
 **Checked by.** The tests of the engine. They compare the engine with
 fixtures from the research implementation.
@@ -263,15 +268,28 @@ The agent writes the input of an action. Only feature extractors read the
 input. A feature extractor is a fixed program that calculates features
 from the input. An example is an extractor that finds a recursive delete
 in a shell command. No language model in Limen reads the input. Limen does
-not store the input: it keeps the features and drops the input.
+not store the input: it keeps the features and the action without its
+input.
 
 **Why.** If a model in Limen read the input, the agent could write
 instructions to Limen. Attackers have used this method against judges
 that read the transcript. Limen takes the verdict of a judge as a signal. It
 never takes the text that the judge read.
 
+But the judge reads the input that the agent wrote, so an agent can
+change a signal through the judge. The ledger gives the error rate of
+each judge for each person, as for each source.
+
 Because Limen does not keep the input, an agent harness can remove a
-secret from a command, and no copy in Limen keeps the secret.
+secret from a command, and no copy in Limen keeps the secret. Limen keeps
+the other fields of the action: the kind, the name, the effect, the
+target, the environment, the attributes, and the signals. Do not put a
+secret in these fields.
+
+To find a first contact, Limen compares the `id` of the target with the
+targets of the approved actions of the person. Because of this, Limen
+keeps that `id`. If the ledger must not keep a path or a host, send an
+opaque `id`. Use the same `id` for each action on the same target.
 
 **Checked by.** The `depcheck` gate in `.lateregate.yaml`. The engine has
 the feature extractors, and it gets only the standard library, the

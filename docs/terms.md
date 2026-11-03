@@ -78,7 +78,7 @@ verdicts. The list starts with the verdict that permits the most.
 | cover rule | A rule after the thresholds. Limen suggests `allow` only for an action that is covered. If not, Limen suggests `ask`. | `cover` |
 | wider | An `ask` for an action that the thresholds allow, whose scope is more than the scope of each approval of its family. The person never allowed an action of this reach. | `ask_kind` |
 | few | An `ask` for an action that the thresholds allow, that approvals cover, but not with enough weight or not from enough sessions. | `ask_kind` |
-| weight of an answer | A number from 0 to 1 that tells how much an answer counts. For the cover rule, an approval that is quick, that came from a rule or from one gesture for many actions, that followed a suggestion that the client showed, or that came late in a long session, has weight 0. In the fit of `learned/2`, the same approvals have a weight between 0 and 1, and an approval from a rule has weight 0. | |
+| weight of an answer | A number from 0 to 1 that tells how much an answer counts. For the cover rule, an approval from a rule has weight 0. An approval that is quick, that came from one gesture for many actions, that followed a shown approval probability above 0.5, or that had 50 or more reviews before it in its session, has weight 0 if the person did not open the details. In the fit of `learned/2`, the same approvals have a weight between 0 and 1, and an approval from a rule has weight 0. | |
 | considered answer | An answer with weight 1. | `considered` |
 
 ## Costs and thresholds

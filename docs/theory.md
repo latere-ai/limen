@@ -42,10 +42,21 @@ action. The tolerance is a property of the person, and it changes with
 time.
 
 Time $t$ counts decisions. It is the number of actions that Limen has
-seen for this person in this organization. Limen gives each action its
-number in the order of arrival. Tolerance changes with use, not with the
-clock. Because Limen keeps this count itself, an incorrect clock of a
-caller cannot change it.
+for this person in this organization. Each new action that Limen
+predicts, or that the decision point records, adds one, also if no
+person answers it. Topos records each call that its rules decide, reads
+included. Limen gives each action its number in the order of arrival.
+
+Tolerance changes with use, not with the clock. Because Limen keeps this
+count itself, an incorrect clock of a caller cannot change it.
+
+The number of calls can change it. After 90 decisions without an
+answer, the time parts of the earlier answers, `recent` and
+`interaction`, are $e^{-1}$ of their value, approximately 37%. The
+static part does not decrease, and the cover rule still needs
+considered approvals of the scope. Because of this, many calls move a
+probability in the direction of the static value of the action. They
+cannot cause an `allow` alone.
 
 ## Why approve and deny, not preferences
 
@@ -105,9 +116,19 @@ $$
 $$
 
 If a person has no answers, $\mu = 0$ and $\hat p = 1/2$. In general, a
-large uncertainty moves $\hat p$ in the direction of one half. Because of
-this, an action that is not similar to any action seen before also gets a
-$\hat p$ near one half.
+large uncertainty moves $\hat p$ in the direction of one half.
+
+An action that is not similar to an answered action keeps a large
+variance in its static part. But it shares the tolerance of the person,
+and each answer changes the tolerance. Because of this, a new type of
+action does not start at one half if the person has other answers.
+
+For example, with the
+safety-weighted profile, a person gives 10, 30 and 60 considered denials
+to three other types of action: `git_push`, `bash` and `write_file`. A
+`deploy` action that never got an answer then gets 0.288, 0.255 and
+0.247. At 60 denials, it is below 0.25, and Limen suggests `block`
+without an `ask`. The cover rule applies only to `allow`.
 
 ## The decision rule
 
@@ -183,16 +204,19 @@ thresholds an operator can calculate directly from the costs.
 
 ## Some asks are always necessary
 
-**Proposition 3.** A policy that knows the true approval probability
-$q(x)$ of each action must still ask about each action with
+**Proposition 3.** Let a policy know the true approval probability
+$q(x)$ of each action, and take the verdict of least expected cost. This
+policy must still ask about each action with
 $\tau_{\text{low}} < q(x) < \tau_{\text{high}}$. As a result, the fraction
-of actions that must get an `ask` is at least the fraction of actions with
-$q(x)$ in this range. This fraction comes from the ambiguity of the person
-at your costs. No learner can remove it. (Lean: `optimal_asks_on_band`,
-`escalation_floor`.)
+of actions that this policy asks about is at least the fraction of actions
+with $q(x)$ in this range. This fraction comes from the ambiguity of the person
+at your costs. (Lean: `optimal_asks_on_band`, `escalation_floor`.)
 
-In the simulation of the paper, this lower limit was 10.3% of actions with
-the symmetric profile and 31.3% with the safety-weighted profile.
+This fraction is the ask rate of the policy with the least expected cost.
+It is not a limit for all policies. A policy can ask less only if it
+decides some of these actions at a higher expected cost. In the
+simulation of the paper, this fraction was 10.3% of actions with the
+symmetric profile and 31.3% with the safety-weighted profile.
 
 ## Kinds of ask
 
@@ -753,9 +777,18 @@ probability 1 and audits at 10%. Of the estimable bins, 94.5% were
 ledgers. A model that stated 0.1 less than the truth was `calibrated` in
 26% of the bins.
 
-The bins in the ask range get reviews from each `ask`. The bins above
-the allow threshold and below the block threshold get reviews only from
-audits. Without audits, these bins stay `not_estimable`.
+The review probability of each decision, not the thresholds, sets which
+cases get a review. The cover rule can change an `allow` above the allow
+threshold to an `ask` of kind `few` or `wider`. This action gets a review
+when a person sees it. A decision point can send a `few`, `short` or
+`unsure` ask back to its rules. If the rules then allow the action, the
+decision point records the audit rate as the review probability and
+draws an audit.
+
+Each review counts with the weight $1/\pi$, so the estimate stays
+unbiased. Without audits, the actions that ran or were blocked without a
+person have no review. A bin of only these actions stays
+`not_estimable`.
 
 `error` is the mean distance between `stated` and `observed` over the
 estimable bins, each bin weighted by its number of cases. `estimable` is
@@ -829,10 +862,10 @@ behave like the model.
 
 | Result | Separable product kernel | Additive kernel |
 |---|---|---|
-| Answers needed per action | 28.4% | 13.5% |
+| Answers needed per action, symmetric costs | 28.4% | 13.5% (the policy of least cost: 10.3%) |
 | Cost-weighted regret | 0.137 | 0.056 (59% lower) |
 | False allow rate | 1.2% | 1.0% |
-| Actions with an `ask`, safety-weighted costs | 99.1% | 45.9% (lower limit 31.3%) |
+| Actions with an `ask`, safety-weighted costs | 99.1% | 45.9% (the policy of least cost: 31.3%) |
 
 The simulation also compared two ways to select the actions that a
 person answers: by the ask range, and at random. With the product kernel,

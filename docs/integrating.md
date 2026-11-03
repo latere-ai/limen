@@ -67,7 +67,7 @@ runs. The [API](api.md) page and the
 | `effect` | `none`, `read`, `write`, or `external`. Use `write` for a change inside the system that runs the action. Use `external` for an effect outside that system: the network, a sent message, a transfer of money. If you are not sure, use `external`. |
 | `reversible` | Whether somebody can undo the action. Set it only if you know. |
 | `input` | The input of the action as JSON, for example the arguments of a tool call. Only the feature extractors of Limen read it. These are fixed programs, not language models. Limen never stores the input. |
-| `target` | The object of the action: `kind` (`path`, `ref`, `host`, `account`) and `id`. Optionally, `sensitivity`, from 0 (scratch data) to 1 (production), and `class` ([The reach of an action](#send-the-reach-of-an-action)). |
+| `target` | The object of the action: `kind` (`path`, `ref`, `host`, `account`) and `id`. Optionally, `sensitivity`, from 0 (scratch data) to 1 (production), and `class` ([The reach of an action](#send-the-reach-of-an-action)). The ledger keeps `kind` and `id`, because Limen compares them with the targets of the approved actions to find a first contact. If the ledger must not keep a path or a host, send an opaque `id`. Use the same `id` for each action on the same target. |
 | `environment` | The place where the action runs: `kind` (`host`, `sandbox`, `service`) and `credentialed`. Set `credentialed` if a credential in that place gives access outside it. Optionally, `holds` and `repositories` ([The reach of an action](#send-the-reach-of-an-action)). |
 | `scope` | What you know about the reach of the action: `undo`, `crosses`, and `contact` ([The reach of an action](#send-the-reach-of-an-action)). |
 | `attributes` | Other facts from your domain, as strings, numbers, or booleans. Examples: an amount, whether a branch is protected, a count of files. The maximum is 64 attributes. |
@@ -373,6 +373,14 @@ an answer slower than your decision point and Limen measured it. An
 `answer_ms` outside its range, or a negative `waited_ms`, is refused with
 `invalid_answer`. A `surface` outside the list is ignored.
 
+Limen does not measure `details_opened`, `surface`, or the session. Your
+decision point sends them, and the session sets the position of an
+answer. If `details_opened` is true, an approval has weight 1, except an
+approval that a standing rule gave. The weights protect against a person who does not pay
+attention. They do not protect against a decision point or a client that
+sends incorrect fields. Limen trusts your decision point to report how
+the person answered, as it trusts it to send the answer.
+
 Send a decision of a standing rule as a decision, not as an answer.
 
 > **Warning:** Do not show the approval probability, the suggested
@@ -532,9 +540,16 @@ It does not build the cover.
 > A person who reads the number trusts Limen more than the reviews
 > support. Show the action, its label, and its scope.
 
-A bin above the allow threshold, or below the block threshold, gets
-reviews only from audits. If your audit rate is 0, these bins stay
-`not_estimable`, and no client shows their probability.
+The review probability of each decision, not the thresholds, sets which
+cases get a review. An action above the allow threshold that the cover
+rule changed to an `ask` gets a review when the person sees it. You can
+send a `few`, `short`, or `unsure` ask back to your rules. If the rules
+allow the action, record the audit rate as its review probability. Then
+draw an audit.
+
+If your audit rate is 0, the actions that ran or were
+blocked without a person have no review. A bin of only these actions
+stays `not_estimable`, and no client shows its probability.
 
 ## The report of an organization
 
