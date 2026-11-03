@@ -292,7 +292,7 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		Profile:       prof.Scope,
 		AuditRate:     prof.AuditRate,
 		Source:        string(e.ver.model),
-		Reason:        reason(pr.Approve, prof.Thresholds, post.Len(), j, label(c)),
+		Reason:        reason(pr.Approve, prof.Thresholds, answered(recs), j, label(c)),
 		Scope:         s,
 		Cover:         j.Cover,
 	}
@@ -309,7 +309,9 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 // reason is the sentence of a verdict for the person who reads the
 // record. An allow and a block state their probability, because nobody is
 // asked about them. An ask states none and no direction, because the
-// person reads it when Limen asks (spec 011).
+// person reads it when Limen asks (spec 011). answers counts the person's
+// answered cases, which a model that has not fitted them yet, after a
+// switch of the version, does not.
 func reason(approve float64, t limen.Thresholds, answers int, j estimate.Judged, label string) string {
 	d := digits(approve, t.AllowAbove, t.BlockBelow)
 	switch {

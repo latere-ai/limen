@@ -207,7 +207,8 @@ func TestSwitchStartsFromThePrior(t *testing.T) {
 	two := engine.New(engine.Options{Store: st, Model: engine.Learned2, Debounce: time.Hour})
 	defer two.Close()
 	p := predictOne(t, two, "s", "probe")
-	if p.Approve != 0.5 || p.Verdict != limen.Ask || p.Source != "learned/2" {
+	if p.Approve != 0.5 || p.Verdict != limen.Ask || p.AskKind != limen.AskUnsure || p.Source != "learned/2" ||
+		p.Reason != "Limen has few answers from this person about actions like this. Limen suggests ask." {
 		t.Errorf("the first prediction after a switch: %+v", p)
 	}
 	if err := two.Flush(ctx); err != nil {

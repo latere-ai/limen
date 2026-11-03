@@ -113,6 +113,17 @@ func (l *ledger) approved() []*limen.Target {
 	return out
 }
 
+// answered counts the records with an answer.
+func answered(recs []estimate.Record) int {
+	n := 0
+	for _, r := range recs {
+		if len(r.Answers) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // settings are the settings of the cover rule under the profile: the
 // greater of the engine's and the profile's, in the window of the model.
 func (e *Engine) settings(p limen.Profile) estimate.Settings {
