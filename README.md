@@ -75,8 +75,8 @@ predict 8 tuesday
 kill %1
 ```
 
-The output is the same on each computer, because the model has no random
-part:
+Limen v0.8.0 gives this output on each computer, because the model has no
+random part. A later version can change the numbers:
 
 ```
 {"action_id":"publish-1","approve":0.5,"evidence":0,"verdict":"ask","ask_kind":"unsure","weight":0,"sessions":0}
