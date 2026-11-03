@@ -372,10 +372,10 @@ Send a decision of a standing rule as a decision, not as an answer.
 > its label, and its scope. For a `wider` ask, you can also show the
 > label of the nearest approval in `cover.nearest` of the explanation.
 > After the answer, show both sides of the explanation. A client can
-> show a recommendation before the answer only where the explanation
-> gives `calibration` as `calibrated` for the bin of the prediction.
-> Limen does not send `calibration` yet, so do not show one. If you show
-> any part of the suggestion, send `suggestion_shown` true.
+> show a recommendation before the answer only if the explanation gives
+> `calibration` as `calibrated`
+> ([The calibration report](#the-calibration-report)). If you show any
+> part of the suggestion, send `suggestion_shown` true.
 
 Limen records the caller as the person who answered. An agent harness can
 relay the answer of a person, for example a confirmation in its user
@@ -487,6 +487,45 @@ value of `of` is one of these sources:
 - Read the `interval` before the `value`.
 - Read `covered` to know which part of the actions the `value` applies to.
 - Keep `unanswered` small.
+
+## The calibration report
+
+`GET /v1/calibration?org=...&subject=...&from=...&to=...` compares the
+approval probabilities that Limen stated for one person with the
+approval rates that the reviews of that person measured. It has ten bins
+of the approval probability. Each bin has a `state`: `calibrated`,
+`overconfident`, `underconfident`, or `not_estimable`. The
+[API](api.md#calibration) describes the fields.
+
+An explanation gives the `state` of the bin of its prediction in the
+report of the last 90 days, as `calibration`. Read `calibration` from
+the explanation. You do not need the report each time.
+
+**The rule for clients.** Show `approve` as a number, or with words that
+state a probability such as "likely", only if these conditions are true:
+
+1. The `calibration` of the explanation is `calibrated`.
+2. If `approve` is above the allow threshold, the `certificate` of
+   `learned` holds for the same 90 days.
+
+The `certificate` is in the reliability report with `of=learned`. In all
+other cases, show no probability. If `calibration` is absent,
+show no probability.
+
+Show a recommendation before the person answers, for example a mark on
+one button, only if `calibration` is `calibrated`. If you show one, send
+`suggestion_shown` true with the answer. An approval that follows a
+shown suggestion above 0.5, with the details not opened, has weight 0.
+It does not build the cover.
+
+> **Warning:** Do not show a probability from a bin that is
+> `overconfident`. Limen was surer than the reviews of the person show.
+> A person who reads the number trusts Limen more than the reviews
+> support. Show the action, its label, and its scope.
+
+A bin above the allow threshold, or below the block threshold, gets
+reviews only from audits. If your audit rate is 0, these bins stay
+`not_estimable`, and no client shows their probability.
 
 ## The report of an organization
 

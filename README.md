@@ -153,6 +153,12 @@ These rules apply to each implementation of Limen:
   suggestion that the client showed, or late in a long session, has
   weight 0 if the person did not open the details. It teaches the model,
   but it does not build the cover. No error rate reads the weight.
+- **A number only where the reviews support it.** For each range of the
+  approval probability, Limen compares the probabilities that it stated
+  with the approval rates that the reviews of the person measured. A
+  client shows the approval probability, or a recommendation before the
+  answer, only if its range is `calibrated` for the last 90 days. Above
+  the upper threshold, the certificate must also hold.
 - **Your rules have priority.** The ceiling from your rules is a limit for
   the suggested verdict. If Limen fails or does not answer in time, the
   suggested verdict is `ask`. Nothing allows the action because Limen
@@ -362,7 +368,7 @@ the configuration of the server.
 | [Running limend](docs/running.md) | The configuration of the server for one person or hosted, a public route, its ledger directory, and how to run it in a container |
 | [OpenAPI](api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document |
 | [Principles](docs/principles.md) | The rules that each implementation obeys, and the reasons for them |
-| [Theory](docs/theory.md) | The model, the decision rule, forgetting, the estimates, and what you can know about a judge |
+| [Theory](docs/theory.md) | The model, the decision rule, forgetting, the estimates, the calibration report, and what you can know about a judge |
 | [Terms](docs/terms.md) | The meaning of each term in these documents |
 | [Specs](specs/README.md) | The design records for contributors |
 

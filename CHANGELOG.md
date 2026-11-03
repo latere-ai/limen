@@ -11,6 +11,46 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- The calibration report, `GET /v1/calibration?org&subject&from&to`. It
+  compares the approval probabilities that Limen stated for one person
+  with the approval rates that the reviews measured. It has ten bins of
+  `approve`: 0 to 0.1, 0.1 to 0.2, and so on to 0.9 to 1. It asks
+  `reliability.read` about the `Reliability` of the person, as
+  `GET /v1/reliability` does. The authorization vocabulary does not
+  change.
+  - Each bin has `from`, `to`, `cases`, `covered`, `stated`, `observed`,
+    `interval`, `reviews`, `considered`, and `state`. `observed` counts
+    each review with the weight 1 divided by its review probability, as
+    a reliability report does. The weight of an answer does not apply.
+  - `state` is `calibrated`, `overconfident`, `underconfident`, or
+    `not_estimable`. A bin is `not_estimable` if the effective size of
+    its reviews is less than 20. Then `observed` is `null`, which does
+    not mean zero.
+  - The report also has `error` and `estimable`. `error` is the mean
+    distance between `stated` and `observed` over the estimable bins.
+    `estimable` is the part of the cases in those bins.
+- An explanation has `calibration`: the `state` of the bin of its
+  recorded prediction in the report of the last 90 days. A client shows
+  an approval probability, or a recommendation before the answer, only
+  if it is `calibrated`. For a prediction above the allow threshold, the
+  certificate of `learned` must also hold. Limen calculates it with each
+  explanation, which takes about 3% of the time of the explanation.
+- The conformance cases `Calibration`, `CalibrationWeights`, and
+  `ExplanationCalibration`.
+- In Go: `Ledger.Calibration`, `CalibrationQuery`, `Calibration`,
+  `CalibrationBin`, `CalibrationState`, `CalibrationStates`,
+  `CalibrationBinOf`, `CalibrationEdges`, the constants of the states,
+  `CalibrationBins`, `CalibrationMinEffective`, `CalibrationWindow`, and
+  `estimate.Calibrate` and `estimate.CalibrationOf`. A `Row` has
+  `Stated`, the approval probability of the prediction.
+
+### Changed
+
+- `limen.Ledger` has the method `Calibration`. An implementation of
+  `limen.Service` outside this module must add it.
+
 ## v0.7.0 - 2026-11-03
 
 ### Added

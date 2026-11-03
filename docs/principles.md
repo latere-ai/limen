@@ -1,6 +1,6 @@
 # Principles
 
-This page gives seventeen rules that each implementation of Limen obeys.
+This page gives eighteen rules that each implementation of Limen obeys.
 For each rule, the page gives what is true, the reason, and the check.
 The conformance suite in `conformance/` checks most rules. This suite runs
 against each implementation of the contract. The tests of the shared
@@ -351,7 +351,8 @@ and that no rate and no certificate changes when the weights change.
 
 The reason of an `ask` states no probability and no direction. A client
 does not show the approval probability, the suggested verdict, the
-reason, or an explanation before the person answers.
+reason, or an explanation before the person answers. The one exception
+is a recommendation where rule 18 permits it.
 
 **Why.** People follow an opinion that they see first, and they repeat
 its reasons. A person who sees the lean of Limen first can follow Limen.
@@ -359,3 +360,27 @@ Then the answer teaches Limen its own opinion.
 
 **Checked by.** The conformance suite checks that no reason of an `ask`
 has a probability, in a prediction and in an explanation.
+
+## 18. A number only where the reviews support it
+
+For each person, Limen compares its approval probabilities with the
+approval rates that the reviews measured. It uses ten bins of the
+approval probability. Each review counts with the weight 1 divided by
+its review probability. A bin with an effective size less than 20 is
+`not_estimable`, and its rate is `null`.
+
+Each explanation gives the state of the bin of its prediction in the
+last 90 days. A client shows the approval probability, or a
+recommendation before the answer, only if that state is `calibrated`.
+Above the allow threshold, the certificate of the suggestions of Limen
+must also hold.
+
+**Why.** A person trusts a number that a client shows. A model can be
+wrong for one person, for example a person who approves from habit. Only
+the reviews of that person show if the numbers are true for that person.
+
+**Checked by.** The conformance suite checks each bin against its
+definition while the reviews arrive. It also checks the weight of each
+review and the state on each explanation. The tests of `estimate` check
+the report against values calculated by hand. A simulation checks that a
+calibrated model is `calibrated` in about 95% of its bins.

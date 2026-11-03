@@ -159,6 +159,21 @@ decreased (a trust reset). The judge did not change. Its false allow rate
 for this person went from 2.9% to 10.0% after the reset. Then it went
 back to 3.4%.
 
+## The calibration report
+
+The calibration report uses the same estimate for a different question.
+It asks if the approval probabilities of Limen are true for the person.
+It puts the predictions of Limen in ten bins of the approval probability.
+For each bin, it compares the mean approval probability with the
+approval rate that the reviews measured. Each review counts with the
+weight 1 divided by its review probability, as above. A bin with an
+effective size less than 20 is `not_estimable`, and its rate is `null`.
+
+Audits are the only reviews of the bins above the allow threshold and
+below the block threshold. If your audit rate is 0, these bins stay
+`not_estimable`. The [API](api.md#calibration) describes the fields, and
+[Theory](theory.md#calibration) gives the reasons.
+
 ## Mistakes that bias the record
 
 - **Record each decision, not only the actions that a person sees.** If

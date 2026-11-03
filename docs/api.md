@@ -309,6 +309,75 @@ be before the `to` time.
 The numbers above are examples. Errors: `invalid_query` and the common
 errors.
 
+## Calibration
+
+`GET /v1/calibration?org=...&subject=...&from=...&to=...`. Permission:
+`reliability.read`.
+
+The response is the calibration report of one person, in one period of
+time. The report compares the approval probabilities that Limen stated
+with the approval rates that the reviews measured. It has ten bins of the
+approval probability: 0 to 0.1, 0.1 to 0.2, and so on to 0.9 to 1. A bin
+holds the predictions whose `approve` is equal to or more than `from` and
+less than `to`. The last bin also holds 1.
+
+The report uses the cases that Limen first received in the period. The
+`FailClosed` fallback is not a statement of Limen, and it is in no bin.
+
+```json
+{
+  "org": "org_7",
+  "subject": "https://issuer.example|usr_42",
+  "from": "2026-08-05T00:00:00Z",
+  "to": "2026-11-03T00:00:00Z",
+  "bins": [
+    {"from": 0, "to": 0.1, "cases": 6, "covered": 1, "stated": 0.04, "observed": null, "reviews": 3, "considered": 3, "state": "not_estimable"},
+    {"from": 0.4, "to": 0.5, "cases": 52, "covered": 1, "stated": 0.46, "observed": 0.71, "interval": [0.57, 0.82], "reviews": 41, "considered": 30, "state": "underconfident"},
+    {"from": 0.9, "to": 1, "cases": 640, "covered": 1, "stated": 0.97, "observed": 0.96, "interval": [0.91, 0.98], "reviews": 44, "considered": 25, "state": "calibrated"}
+  ],
+  "error": 0.03,
+  "estimable": 0.86
+}
+```
+
+The example shows three of the ten bins. A response always has the ten
+bins, the lowest first.
+
+| Field | Meaning |
+|---|---|
+| `from`, `to` | The edges of the bin. |
+| `cases` | The number of predictions in the bin. |
+| `covered` | The part of these cases whose decision had a review probability more than 0. It is 0 if the bin has no case. |
+| `stated` | The mean `approve` of the covered cases. It is `null` if the bin has no covered case. |
+| `observed` | The approval rate of the covered cases, from their reviews. Each review counts with the weight 1 divided by its review probability, as in a reliability report. It is `null` if the bin is `not_estimable`. `null` does not mean zero. |
+| `interval` | The Wilson 95% interval of `observed`, at the effective size of the reviews. It is present if `observed` is present. |
+| `reviews` | The number of reviews of the covered cases. |
+| `considered` | The number of these reviews whose answer has weight 1. No number of the bin uses the weight. |
+| `state` | `calibrated`, `overconfident`, `underconfident`, or `not_estimable`. |
+| `error` | The mean distance between `stated` and `observed`, in the bins that are not `not_estimable`. Each bin counts with its `cases`. It is `null` if all bins are `not_estimable`. |
+| `estimable` | The part of all cases that are in the bins that are not `not_estimable`. |
+
+| `state` | Meaning |
+|---|---|
+| `not_estimable` | The effective size of the reviews of the bin is less than 20. |
+| `calibrated` | `stated` is in `interval`, or on one of its ends. |
+| `overconfident` | `stated` is outside `interval`, and further from 0.5 than `observed`. Limen was surer than the reviews show. |
+| `underconfident` | `stated` is outside `interval`, and not further from 0.5 than `observed`. |
+
+A bin below 0.5 calculates the part of the reviews that approve. A bin of
+0.5 or more calculates the part that deny, and `observed` is 1 minus that
+part. Because of this, `observed` of a bin above the allow threshold is 1
+minus the false allow rate of its allows. [Theory](theory.md#calibration)
+gives the reason.
+
+An explanation gives the `state` of the bin of its prediction in the
+report of the last 90 days, as `calibration`. A client does not need the
+report each time. [Integration](integrating.md#the-calibration-report)
+tells when a client can show an approval probability.
+
+The numbers above are examples. Errors: `invalid_query` and the common
+errors.
+
 ## Cost profiles
 
 `GET /v1/profiles?org=...&kind=...&agent=...&subject=...`. Permission:
@@ -495,6 +564,7 @@ model.
     "covered": false, "weight": 0, "sessions": 0, "min_weight": 3, "min_sessions": 2,
     "nearest": [{"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z"}]
   },
+  "calibration": "not_estimable",
   "evidence": [
     {"action_id": "ses_8a/toolu_14", "label": "bash: git push", "at": "2026-10-01T09:12:03Z", "approve": true, "share": 0.21},
     {"action_id": "ses_8c/toolu_02", "label": "bash: git push --force", "at": "2026-10-01T15:40:10Z", "approve": false, "share": 0.17}
@@ -508,6 +578,7 @@ model.
 | `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
 | `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. The cover rule applies to `verdict`, with the approvals of the person now. |
 | `cover` | The cover of the action now, as in a prediction. `nearest` has not more than three approved cases of the family of the action whose scope the action is more than: the closest first. A client can say "You allowed `publish: update`. This is `publish: make public`." |
+| `calibration` | The `state` of the bin of the recorded prediction, in the calibration report of the last 90 days: `calibrated`, `overconfident`, `underconfident`, or `not_estimable`. It is absent if the action has no recorded prediction. An older server does not send it. If it is absent, show no probability. |
 | `reason` | One sentence for the person that tells why `verdict` is what it is, as in a prediction. An older server does not send it. |
 | `thresholds` | The thresholds of the recorded prediction. If there is no recorded prediction, the thresholds of the cost profile that applies now. |
 | `mean` | The value that the model calculates before it changes it into a probability. A positive value is on the side of approval. |
@@ -772,6 +843,7 @@ and no others:
 | `POST /v1/answers` | `case.answer` | `Case` | `org`, `subject` |
 | `GET /v1/cases` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/reliability` | `reliability.read` | `Reliability` | `org`, `subject` |
+| `GET /v1/calibration` | `reliability.read` | `Reliability` | `org`, `subject` |
 | `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
 | `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
 | `DELETE /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |

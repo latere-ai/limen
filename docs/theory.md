@@ -523,6 +523,87 @@ their cost if one audit costs at most 0.22 of an `ask`. Audits make it
 possible to estimate the error rate. They do not make the error rate
 small.
 
+## Calibration
+
+An approval probability is calibrated if it is true on average. Of the
+actions to which Limen gave 0.9, the person approves about 90%. The
+model is calibrated only if its assumptions are true for the person. A
+person who approves from habit, or who follows a lean that a client
+showed, can make a calibrated model wrong. A client must not show a
+number that the reviews do not support.
+
+The calibration report measures this for one person and one period of
+time. It puts the predictions of the period in ten bins of the approval
+probability: 0 to 0.1, and so on up to 0.9 to 1. For each bin
+$b$, the covered cases $C_b$ are the cases whose review probability
+$\pi_i$ is more than 0. The report compares two numbers:
+
+- `stated`, the mean approval probability of the cases in $C_b$.
+- `observed`, the approval rate of the cases in $C_b$, from their
+  reviews.
+
+`observed` is a Horvitz-Thompson estimate, as in the reliability report.
+Each review has the weight $1/\pi_i$, and the weight of an answer does
+not apply. By Proposition 8, the estimate is unbiased, and it includes
+both the asks and the audits. A bin below 0.5 estimates the part of
+$C_b$ that the person approves:
+
+$$
+\widehat{O}_b = \frac{1}{|C_b|} \sum_{i \in C_b} \frac{L_i\, y_i}{\pi_i},
+$$
+
+Here $y_i$ is 1 if the review approved. A bin of 0.5 or more estimates
+the part that the person denies, and `observed` is 1 minus that part.
+With this choice, `observed` of a bin above the allow threshold is 1
+minus the false allow rate of its allows.
+
+Both estimates are unbiased, but their variance is different. The
+reviews of a high bin are mostly audits, and almost all of them approve.
+Then the count of approvals changes with the number of audits that the
+random selection drew. The count of denials does not change much. In a
+test, 1,000 cases had the approval probability 0.95 and an audit rate of
+5%. The 95% interval of the approvals held the true rate in 68% of the
+runs, and the interval of the denials in 96%.
+
+The interval is the Wilson 95% interval at the Kish effective size of the
+review weights, as in the reliability report. If the effective size is
+less than 20, the bin is `not_estimable` and `observed` is `null`. Then
+the interval is too wide to tell a calibrated bin from a bin that is not
+calibrated. With 20 reviews of weight 1 that all approve, the interval
+is about 0.84 to 1.
+
+| `state` | Condition |
+|---|---|
+| `not_estimable` | The effective size is less than 20. |
+| `calibrated` | `stated` is in the interval. |
+| `overconfident` | `stated` is outside the interval and further from 0.5 than `observed`. |
+| `underconfident` | `stated` is outside the interval and not further from 0.5 than `observed`. |
+
+A bin is `calibrated` in about 95% of the periods if the model is
+calibrated, because the interval is a 95% interval. A test of Limen
+simulates 400 ledgers of a calibrated model, with asks at review
+probability 1 and audits at 10%. Of the estimable bins, 94.5% were
+`calibrated`, and each bin was `calibrated` in 91% or more of the
+ledgers. A model that stated 0.1 less than the truth was `calibrated` in
+26% of the bins.
+
+The bins in the ask range get reviews from each `ask`. The bins above
+the allow threshold and below the block threshold get reviews only from
+audits. Without audits, these bins stay `not_estimable`.
+
+`error` is the mean distance between `stated` and `observed` over the
+estimable bins, each bin weighted by its number of cases. `estimable` is
+the part of the cases that are in an estimable bin. A small `estimable`
+tells you that most predictions have no measurement.
+
+The rule for clients follows from the study of analysts in the
+[consent spec](../specs/011-consent.md): people follow an opinion that
+they see first. A client shows the approval probability only for a bin
+that is `calibrated` in the report of the last 90 days. For a bin above
+the allow threshold, the certificate of the suggestions of Limen must
+also hold. The certificate tests the actions that ran without a person.
+[Integration](integrating.md#the-calibration-report) gives the rule.
+
 ## What you can know about a judge
 
 Let $J$ be a judge that returns `allow` or `block`. Let a person have the

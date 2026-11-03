@@ -108,6 +108,13 @@ verdicts. The list starts with the verdict that permits the most.
 | audit | A review of an automatic verdict that the random selection showed to a person. Its review probability is less than 1. | `audits` |
 | error rate | The false allow rate of a source is the part of its allows that the person would deny. The false block rate is the part of its blocks that the person would approve. | `value` |
 | reliability report | The error rates of one source, for one person, in one period of time. | `Reliability` |
+| calibration report | A comparison of the approval probabilities that Limen stated for one person with the approval rates that the reviews measured, in one period of time. | `Calibration` |
+| bin | One of the ten ranges of the approval probability in a calibration report. The ranges are 0 to 0.1, 0.1 to 0.2, and so on to 0.9 to 1. | `bins` |
+| effective size | The number of reviews of weight 1 that give the same precision as the weighted reviews of an estimate (the Kish effective size). | |
+| calibrated | A bin whose stated approval probability is in the 95% interval of the approval rate that the reviews measured. | `state`, `calibration` |
+| overconfident | A bin whose stated approval probability is outside the interval and further from 0.5 than the measured approval rate. Limen was surer than the reviews show. | `state`, `calibration` |
+| underconfident | A bin whose stated approval probability is outside the interval and not further from 0.5 than the measured approval rate. | `state`, `calibration` |
+| not estimable | A bin whose reviews have an effective size less than 20. Its measured approval rate is `null`. | `not_estimable` |
 | certificate | A test that the false allow rate of a source is below a limit, with a stated confidence. | `certificate` |
 | replay | A run of recorded decisions through Limen in time order. A replay shows what Limen would suggest. | `Replay` |
 | ledger directory | The directory where `limend` keeps the ledger on disk. Only one process can use a ledger directory at a time. | `LIMEN_DATA_DIR` |
