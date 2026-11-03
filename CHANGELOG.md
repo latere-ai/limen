@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.8.0 - 2026-11-03
+
 ### Added
 
 - The calibration report, `GET /v1/calibration?org&subject&from&to`. It
