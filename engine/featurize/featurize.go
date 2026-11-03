@@ -61,6 +61,15 @@
 // because each of them reaches another system. [Migrated] reads the scope
 // of a case from before labels/2 from its stored vectors and label, with
 // unknown in place of a middle value the input would decide.
+//
+// [Of2] is features/2 (spec 011), the vectors of the model learned/2:
+// features/1 with the scope in place of the irreversibility, destructive
+// and outside-workspace groups. It reads the features/1 vectors, the scope
+// and the holds of the environment, and no input, so the vectors of a
+// stored case are the ones it got when it was new. Where the spec leaves a
+// choice open: each hold is sqrt(2/3), not 1, so that two environments
+// that differ in the three holds are at squared distance 2, as the
+// scaling rule needs.
 package featurize
 
 import (
