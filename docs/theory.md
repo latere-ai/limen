@@ -341,8 +341,9 @@ has weight 0 if one of these is true:
 Each rule but the first applies only if the person did not open the
 details. The time of an answer is the smallest of `answer_ms`,
 `waited_ms`, and the time from the recorded decision to the answer. In
-model version 1, the weight applies to the cover rule only. Each answer
-still trains the model.
+the model version `learned/1`, the weight applies to the cover rule
+only. Each answer still trains the model. In `learned/2`, the weight
+also applies to the fit ([model versions](#model-versions)).
 
 No estimate reads the weight. A review counts with the weight
 $1/\pi$ of its review probability, as Proposition 8 needs. A weight that
@@ -358,6 +359,130 @@ the cover rule. A preview applies the cover that each prediction
 recorded, and does not calculate it again. A reliability report reads the
 recorded predictions.
 
+## Model versions
+
+A model version sets the features, the kernel, the likelihood, and the
+window of the model. Each prediction gives its version in `source`.
+Limen keeps the fitted model of each version apart, and a version never
+reads the fitted model of a different version.
+
+| Version | Features | Likelihood | Weight of an answer in the fit |
+|---|---|---|---|
+| `learned/1` | `features/1` | probit | none: each answer counts in full |
+| `learned/2` | `features/2`: `features/1` with the scope | probit with weights | `weights/2` |
+
+The two versions use the same kernel, the same hyperparameters, and the
+512 most recent answered cases. In both versions, the cover rule reads
+`weights/1`. `limend` uses `learned/1` if the operator does not set
+`LIMEN_MODEL` ([Running](running.md#switch-the-model)).
+
+### The scope in the features
+
+`features/2` puts the scope of an action into the kernel. It replaces
+three groups of `features/1`: the irreversibility of the action, the
+destructive pattern, and the outside-workspace rule. In their place, it
+has `undo`, each boundary of `crosses`, `target_class`, `contact`, and
+the holds of the environment.
+
+| Group | Encoding |
+|---|---|
+| `undo` | three steps of $\sqrt{2/3}$ over `reversible`, `recoverable`, `irreversible`. `none` is 0. `unknown` is one half of each step. |
+| each boundary of `crosses` | `no` is 0, `unknown` is $\sqrt 2/2$, `yes` is $\sqrt 2$ |
+| `target_class` | three steps of $\sqrt{2/3}$ over `own`, `shared`, `primary`. `scratch` is 0. `unknown` is one half of each step. |
+| `contact` | `repeat` is 0, `unknown` is $\sqrt 2/2$, `first` is $\sqrt 2$ |
+| holds | $\sqrt{2/3}$ for each hold of the environment |
+
+Two actions that differ only in one group are at a squared distance of 2
+or less, as in `features/1`. One boundary that one action crosses and the
+other does not multiplies the kernel of the action block by
+$e^{-2/(2 \cdot 1.1^2)} \approx 0.44$. `publish: update` and
+`publish: make public` differ in `undo` and in `crosses.public`, so the
+kernel of the action block falls to approximately 0.33.
+
+With `features/1`, these two actions have the same features. The model
+then reads an approval of an update as an approval to make the app
+public. Only the cover rule tells them apart. With `features/2`, an
+approval of one tells less about the other.
+
+A case keeps its `features/1` vectors and its scope. `features/2` uses
+no part of the input that these do not keep. Because of this, Limen
+calculates the `features/2` vectors of a stored case from its records,
+and they are the vectors that the case had when it was new.
+
+### The weighted likelihood
+
+`learned/2` multiplies the log likelihood of each answer by the weight
+$w_i$ of the answer:
+
+$$
+\log p(\mathbf y \mid \mathbf f) = \sum_i w_i \log \Phi(s_i f_i),
+$$
+
+where $s_i = 1$ for an approval and $s_i = -1$ for a denial. Let
+$z_i = s_i f_i$ and $r_i = \phi(z_i)/\Phi(z_i)$. The gradient and the
+negative second derivative for answer $i$ are
+
+$$
+g_i = w_i\, s_i\, r_i,
+\qquad
+W_i = w_i \bigl(r_i^2 + z_i r_i\bigr) \ge 0.
+$$
+
+These are $w_i$ times the values of the probit without weights. Because
+each $W_i$ is 0 or more, the log likelihood stays concave. The Newton
+steps of the Laplace method then converge as they do without weights.
+The posterior mean, the variance, and $\hat p$ have the same formulas as
+before.
+
+- With each weight 1, the fit gives the same numbers as `learned/1`, bit
+  for bit. The tests compare it with the golden fixtures of the research.
+- An answer with weight 0 adds nothing to the likelihood. The fit leaves
+  it out. The window of 512 cases comes first, so the window is the same
+  as in the cover rule.
+- An explanation still adds up exactly:
+  $\mu(x) = \sum_i k(x_i, x)\, g_i$, with the weighted $g_i$.
+
+A likelihood with weights is a tempered likelihood. It is not in the
+paper, and no proposition of the paper is about it. The paper names a
+remedy for answers from habit: a model in which the noise of an answer
+increases with the number of asks (section Limitations). A tempered
+likelihood is a version of that remedy, and the Laplace method applies to
+it with no change. Because the paper does not test it, an operator
+compares the two versions on the recorded history before the change
+([Running](running.md#switch-the-model)).
+
+### The weights of `weights/2`
+
+`weights/2` gives a weight between 0 and 1 where `weights/1` gives 0.
+The rules and the settings are the rules and the settings of
+`weights/1`.
+
+| Answer | Weight |
+|---|---|
+| a denial | 1, or 0 from a standing rule |
+| an approval from a standing rule | 0 |
+| an approval with the details opened, and no standing rule | 1 |
+| an approval with one gesture for many actions, or in less than 2000 ms | 0.2 |
+| an approval that followed a suggestion that the client showed | the weight times 0.5 |
+| an approval with 50 reviews or more before it in its session | the weight times 0.5 |
+| an approval that no rule applies to | 1 |
+
+For example, a quick approval that followed a suggestion has the weight
+0.1. The cover rule keeps `weights/1`, so an approval with a weight below
+1 in `weights/2` does not build the cover. No estimate reads either
+weight.
+
+The table gives the approval probability of a `publish: update` after
+each approval. The engine tests and the replay comparison measure these
+numbers. With the safety-weighted profile, Limen suggests `allow` only
+above 0.90.
+
+| Approvals | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| `learned/1`, each approval | 0.729 | 0.805 | 0.845 | 0.870 | 0.887 | 0.899 | 0.908 |
+| `learned/2`, approvals with weight 1 | 0.729 | 0.805 | 0.845 | 0.870 | 0.887 | 0.899 | 0.908 |
+| `learned/2`, approvals in 1 second | 0.579 | 0.633 | 0.673 | 0.703 | 0.727 | 0.747 | 0.763 |
+
 ## Explanations
 
 The Laplace posterior mean is a sum over the answers of the person:
@@ -369,6 +494,7 @@ $$
 Here $g_i$ is the gradient of the log likelihood at the mode of the
 posterior, for answer $i$. It is positive for an approval and negative
 for a denial. It is larger if the answer disagrees more with the mode.
+In `learned/2`, it includes the weight of the answer.
 
 An explanation gives the part of each answer, $c_i = k(x_i, x)\, g_i$.
 The parts add up to $\mu(x)$ exactly. The `share` of an answer is

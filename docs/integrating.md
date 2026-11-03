@@ -45,6 +45,12 @@ has no record of this action. Put the action in your decision
 (`Decision.Action`). Then the answer of the person still teaches the
 model.
 
+The `source` of a prediction names the model version that made it:
+`learned/1`, or `learned/2` if the operator changed the model
+([Running](running.md#switch-the-model)). The fields of a prediction and
+their meaning are the same in each version. Do not make your decision
+depend on the version.
+
 ## The action
 
 An `Action` describes the action as your decision point sees it before it
@@ -355,7 +361,9 @@ it came in less than 2000 ms, if it followed a suggestion that the client
 showed, or if 50 reviews or more came before it in its session. Except
 for a rule, the weight is 1 if the person opened the details. Only an
 approval with weight 1 builds the cover. Each answer still teaches the
-model, and no error rate reads the weight. `LIMEN_ANSWER_FLOOR_MS` and
+model `learned/1`. The model `learned/2` gives these approvals a weight
+between 0 and 1 in its fit ([Theory](theory.md#model-versions)). No
+error rate reads the weight. `LIMEN_ANSWER_FLOOR_MS` and
 `LIMEN_ANSWER_FATIGUE` set the two numbers ([Running](running.md)).
 
 The time of an answer is the smallest of `answer_ms`, `waited_ms`, and

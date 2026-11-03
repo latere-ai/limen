@@ -133,7 +133,7 @@ The response is the prediction:
 | `thresholds` | The thresholds of the cost profile. Above `allow_above`, the suggested verdict is `allow` if the action is covered. Below `block_below`, it is `block`. Between the two values, it is `ask`. |
 | `profile` | The scope of the cost profile that applies. |
 | `audit_rate` | The audit rate of the cost profile. |
-| `source` | The model that made the prediction: `learned/<version>`. |
+| `source` | The model that made the prediction: `learned/1` or `learned/2`, the [model version](theory.md#model-versions) that the server uses. |
 | `reason` | One sentence for the record of the person. Do not show it to an agent. For an `ask`, it has no probability and no direction. |
 | `scope` | The reach of the action that Limen used: its reading of the input, the holds, and the claims. `undo`, `target_class` and `contact` are words, `unknown` included. `crosses` has a key only for each boundary that is known. `target_kind` names the type of the target without its name. Not in the `FailClosed` fallback. |
 | `cover` | The [cover rule](theory.md#the-cover-rule) for the action. `covered` is `true` if considered approvals of the person in the family of the action, whose scope the action is within, have the weight `min_weight` or more from `min_sessions` sessions or more. `weight` and `sessions` are the numbers for the family with the least weight. Not in the `FailClosed` fallback. |
@@ -575,7 +575,7 @@ model.
 | Field | Meaning |
 |---|---|
 | `model` | The model that gives the explanation. This is the current model of the person. `answers` is the number of answers of the person that the model learned from. |
-| `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
+| `predicted_by` | The model that made the recorded prediction. If it is not equal to `model`, the model learned from more answers after the prediction, or the operator changed the model version. Then the explanation shows what the model suggests now. It is absent if the action has no recorded prediction. |
 | `approve`, `uncertainty`, `verdict` | The prediction of `model` for the action, at the time of the action. The cover rule applies to `verdict`, with the approvals of the person now. |
 | `cover` | The cover of the action now, as in a prediction. `nearest` has not more than three approved cases of the family of the action whose scope the action is more than: the closest first. A client can say "You allowed `publish: update`. This is `publish: make public`." |
 | `calibration` | The `state` of the bin of the recorded prediction, in the calibration report of the last 90 days: `calibrated`, `overconfident`, `underconfident`, or `not_estimable`. It is absent if the action has no recorded prediction. An older server does not send it. If it is absent, show no probability. |

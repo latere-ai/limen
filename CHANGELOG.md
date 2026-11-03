@@ -45,11 +45,47 @@ the commit log.
   `CalibrationBins`, `CalibrationMinEffective`, `CalibrationWindow`, and
   `estimate.Calibrate` and `estimate.CalibrationOf`. A `Row` has
   `Stated`, the approval probability of the prediction.
+- `learned/2`, a second model version. It does not serve until an
+  operator sets `LIMEN_MODEL=learned/2`. `learned/1` stays the default.
+  - Its features, `features/2`, hold the scope of an action: `undo`,
+    each boundary of `crosses`, `target_class`, `contact`, and the
+    holds. An approval of `publish: update` then tells the model less
+    about `publish: make public`.
+  - Its fit gives each answer its weight under `weights/2`. An approval
+    from one gesture for many actions, or in less than 2000 ms, has the
+    weight 0.2. An approval that followed a suggestion that the client
+    showed, or that came after 50 reviews in its session, has half of
+    its weight. An answer from a standing rule has the weight 0. Each
+    other answer has the weight 1. With each weight 1, the fit is the
+    fit of `learned/1`.
+  - The cover rule keeps `weights/1`, and no error rate reads a weight.
+- `LIMEN_MODEL` sets the model version of `limend`: `learned/1` (the
+  default) or `learned/2`. `limend` writes the version when it starts.
+  Each version keeps its own fitted models, and each case keeps the
+  features of `learned/1`. To go back, set `learned/1` again. After a
+  change, the predictions for a person come from the prior until the
+  first fit of the new version, approximately one second.
+- `limen compare topos`, `limen compare file`, and
+  `limen compare ledger --store DIR`. They replay recorded decisions, or
+  the cases of a ledger, through `learned/1` and `learned/2`. For all
+  persons and for each person, they give the verdicts of each version,
+  the changes, the allows that `learned/2` does not give or gives, the
+  verdicts of `learned/2` that permit more, and the Brier score of each
+  version. A comparison of a ledger reads the features and the scope that
+  each case kept.
+- `limen replay --model` replays with `learned/1` or `learned/2`.
+- In Go: `engine.Model`, `engine.Learned1`, `engine.Learned2`,
+  `engine.ParseModel`, `engine.Options.Model`, `Engine.Compare`,
+  `Engine.CompareLedger`, `gp.FitWeighted`, `featurize.Of2`,
+  `estimate.Policy.Graded`, and `file.Store.Orgs`.
 
 ### Changed
 
 - `limen.Ledger` has the method `Calibration`. An implementation of
   `limen.Service` outside this module must add it.
+- A person with answers never gets the reason "Limen has no answers from
+  this person yet." Before, a model that had not learned the answers of
+  the person yet gave it.
 
 ## v0.7.0 - 2026-11-03
 

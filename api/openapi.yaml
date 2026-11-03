@@ -968,8 +968,10 @@ components:
           description: The share of automatic verdicts the profile asks a person to review at random; the rate the decision point passes to its review draw.
         source:
           type: string
+          description: The model version that made the prediction, learned/1 or learned/2, or learned/unavailable from FailClosed.
           examples:
           - learned/1
+          - learned/2
         reason:
           type: string
           description: One sentence for the person who reads the record. Never shown to an agent. For an allow or a block it gives the approval probability; for an ask it states no probability and no direction, so it does not lead the person who reads it when Limen asks.

@@ -16,7 +16,7 @@ if there is one.
 | decision point | The software that decides if an action runs. The decision point calls Limen, applies a verdict, and records the decision. Limen does not decide. | |
 | Limen | The service that predicts which actions a person approves, keeps the ledger, and calculates error rates. | |
 | `limend` | The program that supplies the Limen API over HTTP. | |
-| `limen` | The command that replays recorded decisions through Limen. | |
+| `limen` | The command that replays recorded decisions through Limen, and compares two model versions. | |
 | person | The person for whom an action runs. Limen learns the answers of this person. | `subject` |
 | organization | The organization that the records belong to. The records of one organization are separate from the records of all other organizations. | `org` |
 | context of a person | The records of a person that have no organization. Their `org` is the subject of the person. | `org` |
@@ -51,6 +51,7 @@ verdicts. The list starts with the verdict that permits the most.
 | uncertainty | A measure of how little the model knows about an action. Two actions can have the same approval probability and a different uncertainty: one action is familiar and one action is new. | `uncertainty` |
 | suggested verdict | The verdict that Limen suggests for an action. It is `allow`, `ask`, or `block`. Limen never suggests `flag`. | `verdict` in a prediction |
 | model | The statistical model that Limen keeps for each person in each organization. Limen calculates it again from the answers of the person. | |
+| model version | The features, the likelihood, and the weights of the answers that a model uses. `learned/1` is the default. `learned/2` also reads the scope of an action, and it gives each answer its weight in the fit. | `source`, `LIMEN_MODEL` |
 | tolerance | The amount of risk that a person accepts. The model gives each person a tolerance that changes with time. | |
 | risk | A property of an action. The model lets tolerance change with time. It does not let risk change with time. | |
 | features | Numbers that Limen calculates from an action. The model uses the features. Limen keeps the features. | |
@@ -77,7 +78,7 @@ verdicts. The list starts with the verdict that permits the most.
 | cover rule | A rule after the thresholds. Limen suggests `allow` only for an action that is covered. If not, Limen suggests `ask`. | `cover` |
 | wider | An `ask` for an action that the thresholds allow, whose scope is more than the scope of each approval of its family. The person never allowed an action of this reach. | `ask_kind` |
 | few | An `ask` for an action that the thresholds allow, that approvals cover, but not with enough weight or not from enough sessions. | `ask_kind` |
-| weight of an answer | A number from 0 to 1 that tells how much an answer counts for the cover rule. An approval that is quick, that came from a rule or from one gesture for many actions, that followed a suggestion that the client showed, or that came late in a long session, has weight 0. | |
+| weight of an answer | A number from 0 to 1 that tells how much an answer counts. For the cover rule, an approval that is quick, that came from a rule or from one gesture for many actions, that followed a suggestion that the client showed, or that came late in a long session, has weight 0. In the fit of `learned/2`, the same approvals have a weight between 0 and 1, and an approval from a rule has weight 0. | |
 | considered answer | An answer with weight 1. | `considered` |
 
 ## Costs and thresholds
@@ -117,6 +118,8 @@ verdicts. The list starts with the verdict that permits the most.
 | not estimable | A bin whose reviews have an effective size less than 20. Its measured approval rate is `null`. | `not_estimable` |
 | certificate | A test that the false allow rate of a source is below a limit, with a stated confidence. | `certificate` |
 | replay | A run of recorded decisions through Limen in time order. A replay shows what Limen would suggest. | `Replay` |
+| comparison | A replay of recorded decisions, or of the cases of a ledger, through two model versions. A comparison shows where the suggested verdicts are different. | `limen compare` |
+| Brier score | The mean of the squared difference between the approval probability and the answer, with 1 for an approval and 0 for a denial. A lower score is better. | `brier_base`, `brier_next` |
 | ledger directory | The directory where `limend` keeps the ledger on disk. Only one process can use a ledger directory at a time. | `LIMEN_DATA_DIR` |
 | report of an organization | The counts and the error rates of the actions of an organization, for all its persons together, by week. It never shows the records of one person. | `Report` |
 | week | A period of seven days that starts on a Monday at 00:00 UTC. A report of an organization has one entry for each week. | `weeks` |

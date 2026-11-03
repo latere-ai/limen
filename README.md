@@ -54,8 +54,13 @@ rules, a language model that examines actions, and Limen itself.
 >   agents by week, for all its persons together. A number shows only if
 >   it comes from 5 or more persons, and a week that a report showed does
 >   not change.
+> - Two model versions. `learned/1` is the default. `learned/2` also
+>   reads the scope of an action, and it gives a quick approval less weight
+>   in the fit. An operator chooses the version with `LIMEN_MODEL`.
 > - The `limen` command. It replays recorded decisions, for example from a
->   Topos data directory.
+>   Topos data directory. It also compares the two model versions on
+>   recorded decisions or on a ledger, before an operator changes the
+>   model.
 > - A stub service for tests, and the conformance tests that each
 >   implementation must pass.
 >
@@ -64,8 +69,6 @@ rules, a language model that examines actions, and Limen itself.
 > - Hooks for Claude Code and Codex.
 > - A store that more than one server can share, on
 >   [Arca](https://github.com/latere-ai/arca).
-> - Two model versions side by side. Then you can compare a new model with
->   the current model before you change to the new model.
 > - A table of cases for `verdict.Decide`, for a decision point in a
 >   different language.
 >

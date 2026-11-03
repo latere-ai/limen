@@ -69,6 +69,7 @@ These variables apply in both modes:
 | `LIMEN_MIN_SESSIONS` | The number of different sessions that these approvals must come from. `0` turns this setting off. | `2` |
 | `LIMEN_ANSWER_FLOOR_MS` | An approval faster than this number of milliseconds has the weight 0, if the person did not open the details. `0` turns this rule off. | `2000` |
 | `LIMEN_ANSWER_FATIGUE` | An approval with this number of reviews or more before it in its session has the weight 0, if the person did not open the details. `0` turns this rule off. | `50` |
+| `LIMEN_MODEL` | The model version that the server uses: `learned/1` or `learned/2`. Read [Switch the model](#switch-the-model) before you change it. | `learned/1` |
 
 The server always supplies each route under `/v1`. If you set
 `LIMEN_BASE_PATH`, the server also supplies each route under that prefix.
@@ -82,7 +83,8 @@ end with `/`, and must not be `/v1`. If the value is not correct,
 [cover rule](theory.md#the-cover-rule). `LIMEN_ANSWER_FLOOR_MS` and
 `LIMEN_ANSWER_FATIGUE` set the weight of an answer. Each value must be a
 whole number, 0 or more. If a value is not correct, `limend` stops with
-exit code 2. A cost profile can make `min_weight` and `min_sessions`
+exit code 2. If `LIMEN_MODEL` is not a model version, `limend` also stops
+with exit code 2. A cost profile can make `min_weight` and `min_sessions`
 greater for its scope, but not smaller. A prediction gives the settings
 that applied in `cover.min_weight` and `cover.min_sessions`.
 
@@ -154,8 +156,9 @@ plan to add it after Limen is open source.
 
 One process owns a ledger directory. While one process holds the
 directory, Limen refuses a second process on it. This applies to a second
-`limend`, and to `limen replay` with `--keep --store` set to the same
-directory. On Linux and macOS, the lock stops when the process stops.
+`limend`, and to `limen replay` and `limen compare` with `--store` set to
+the same directory. On Linux and macOS, the lock stops when the process
+stops.
 After a crash, you do not have to remove the lock.
 
 Limen keeps the records of each person in a log. Limen only adds lines to
@@ -179,6 +182,82 @@ To make a backup of the ledger, do these steps:
 1. Stop `limend`.
 2. Copy the ledger directory.
 3. Start `limend` again.
+
+## Switch the model
+
+`limend` uses one model version for all predictions: `learned/1` or
+`learned/2` ([Theory](theory.md#model-versions)). `learned/1` is the
+default. `learned/2` also reads the scope of an action, and it gives
+less weight to a quick approval. Before you change the model, compare
+the two versions on your ledger.
+
+To compare the two versions, do these steps:
+
+1. Make a copy of the ledger directory, as the backup steps in
+   [The ledger directory](#the-ledger-directory) tell.
+2. Run the comparison on the copy:
+
+   ```sh
+   limen compare ledger --store /path/to/the/copy
+   ```
+
+`limen compare` replays the cases of the ledger through each version, in
+the order of time. Each version learns an answer before the next
+prediction. The comparison keeps nothing. It reads the features and the
+scope that each case kept, because the ledger does not keep the input.
+
+The comparison gives these numbers for all persons, and for each person:
+
+- The verdicts that each version suggests, with the kind of each `ask`.
+- The actions where the verdict is different, from the verdict of
+  `learned/1` to the verdict of `learned/2`.
+- The allows of `learned/1` that `learned/2` does not give, and the
+  allows of `learned/2` that `learned/1` does not give.
+- The verdicts of `learned/2` that permit more than the verdicts of
+  `learned/1`. The comparison lists each one, and tells if the cover rule
+  holds it.
+- The Brier score of each version: the mean of the squared difference
+  between the approval probability and the answer. A lower score is
+  better. The answers are only the answers to the actions that a person
+  saw.
+- The number of recorded predictions whose verdict `learned/1` suggests
+  again.
+
+To compare the two versions on the sessions of Topos, use
+`limen compare topos`. To compare them on a file of records, use
+`limen compare file`. The two commands read the same sources as
+`limen replay`. Add `--json` to get the numbers as JSON.
+
+> **Warning:** Before you change the model, read each verdict of
+> `learned/2` that permits more. If the cover rule does not hold a
+> verdict, examine its case. Do not change the model if you cannot
+> explain the verdict.
+
+To change the model to `learned/2`, do these steps:
+
+1. Set `LIMEN_MODEL` to `learned/2`:
+
+   ```sh
+   export LIMEN_MODEL=learned/2
+   ```
+
+2. Restart `limend`.
+3. Find the line `The model is learned/2.` in the output of `limend`.
+
+After the change, the first prediction for each person starts the fit of
+`learned/2` from the cases in the ledger. Until the fit is complete,
+Limen predicts from the prior for that person: the approval probability
+is 0.5, and the suggestion is `ask`. The fit takes approximately one
+second. A prediction never waits for a fit.
+
+To go back to `learned/1`, do these steps:
+
+1. Remove `LIMEN_MODEL`, or set it to `learned/1`.
+2. Restart `limend`.
+
+The fitted models of `learned/1` stay in the ledger directory. Each case
+keeps the features of `learned/1`. `learned/1` then learns the answers
+that came after the change, in the background.
 
 ## Logs and telemetry
 
