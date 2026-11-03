@@ -202,6 +202,31 @@ The packages are `latere.ai/x/limen`, `latere.ai/x/limen/client`, and
 fields to send, how to send the way that a person answered, and how to
 start safely. [API](docs/api.md) gives each HTTP route.
 
+## Use Limen with Topos
+
+[Topos](https://github.com/latere-ai/topos) v0.69.0 or later sends each
+tool call of a session to Limen, with the scope of the call and the way
+that the person answered. Start `limend` with a secret token, and give
+Topos the address and the token:
+
+```sh
+export LIMEN_TOKEN=$(openssl rand -hex 16)
+limend &
+export TOPOS_DECISIONS_URL=http://127.0.0.1:7720 TOPOS_DECISIONS_TOKEN=$LIMEN_TOKEN
+```
+
+In `manual` mode, the rules of Topos decide, and Limen learns from each
+answer. In `auto` mode, the suggested verdict of Limen decides the calls
+that the rules do not decide, and never above the ceiling from the rules.
+
+```sh
+topos run --mode manual "..."
+topos run --mode auto "..."
+```
+
+[Integration](docs/integrating.md#topos-on-your-computer) gives the
+details.
+
 ## Replay recorded decisions
 
 A replay shows what Limen would suggest for decisions that you already
