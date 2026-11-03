@@ -199,13 +199,24 @@ func TestCoverSettings(t *testing.T) {
 		if err := c2.Answer(ctx, limen.Answer{Key: a.Key, Approve: true, HowAnswered: how}); err != nil {
 			t.Fatal(err)
 		}
-		var p limen.Prediction
-		// The model fits in the background after the answer.
-		for i := 0; i < 500 && (i == 0 || p.Approve == 0.5); i++ {
-			if p, err = c2.Predict(ctx, publish(fmt.Sprintf("probe-%d", i))); err != nil {
+		// The model fits in the background after the answer. Wait for the fit
+		// through the explanation of the answered action, which adds no
+		// action: each new action advances the person's time, and a probe
+		// many decisions after the answer reads a tolerance that has drifted
+		// back toward the prior.
+		for i := 0; i < 500; i++ {
+			x, err := c2.Explain(ctx, a.Key)
+			if err != nil {
 				t.Fatal(err)
 			}
+			if x.Mean != 0 {
+				break
+			}
 			time.Sleep(10 * time.Millisecond)
+		}
+		p, err := c2.Predict(ctx, publish("probe"))
+		if err != nil {
+			t.Fatal(err)
 		}
 		code, log := stop()
 		if code != exitOK || p.Cover != c.want || (p.Verdict == limen.Allow) != c.want.Covered {
