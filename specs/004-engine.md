@@ -259,6 +259,7 @@ the kernel, its hyperparameters and the label cap; models are keyed by
 | N | Featurizer | Kernel | Hyperparameters | Label cap |
 |---|---|---|---|---|
 | 1 | `features/1` | additive | 1.6, 1.0, 0.6; 1.1, 1.2; lambda 90 | 512 |
+| 2 | `features/2` ([[011-consent]]) | additive, with the probit of weighted answers | 1.6, 1.0, 0.6; 1.1, 1.2; lambda 90 | 512 |
 
 A new version re-featurizes stored cases from their stored actions. An
 action's input is not stored, so for cases that predate the new version
@@ -267,6 +268,19 @@ workspace, and the program tokens) take their absent encodings. During a
 change the old version keeps serving while the new one fits beside it,
 and the operator switches after a replay comparison
 ([[007-evidence-gates]]).
+
+*Amended 2026-11-03:* [[011-consent]] wave 3 builds version 2. An
+operator chooses the version an installation serves (`engine.Options`
+`Model`, `LIMEN_MODEL`, default `learned/1`), after the replay
+comparison of `limen compare`. One version serves at a time, by decision
+1 of [[011-consent]], so the old version does not serve while the new
+one fits: the first prediction of a person under a new version is from
+the prior and starts its fit off the hot path. Each version reads and
+writes the snapshots of its own name only, and a snapshot whose vectors
+have the widths of another featurizer fails to load. A case keeps its
+`features/1` vectors and its scope; `features/2` is made from them, so
+version 2 needs no new stored field and version 1 reads the ledger as
+before.
 
 ### The store
 
@@ -356,7 +370,10 @@ tree. Two parts of the design are not built: a second model version
 beside the first, and a store that more than one process shares. The
 owner decided on 2026-11-02 that both, and an asserted bound for
 criterion 6, come after Limen is open source. The spec stays `testing`
-until they are built or moved to their own spec.
+until they are built or moved to their own spec. *Amended 2026-11-03:*
+[[011-consent]] wave 3 builds version 2 and the operator's choice of the
+version (criterion 10); a store that more than one process shares and
+the asserted bound of criterion 6 are still open.
 
 ### What was built
 
@@ -380,8 +397,8 @@ until they are built or moved to their own spec.
 | 7 | `TestBackgroundFitWithinFiveSeconds`, on the fake clock; also `TestBackgroundFitAndReload`. A fit takes no fake time, so the five seconds of wall time rest on the one second debounce and `BenchmarkFit512`, about 160 ms |
 | 8 | `TestCacheStaysWithinTheBudget`, `TestEvictionReloads`; one model larger than the whole budget stays alone, because a prediction needs the model it reads |
 | 9 | `TestNoFileHoldsTheInput` (`engine/store/file`), which searches every file of a ledger for a marker; also the store rule `InputNeverKept`, the conformance case `CasesNeverReturnInput`, `TestLabelKeepsNoInput` |
-| 10 | partly: `TestVersionsKeepTheirSnapshots`, as far as one version is built: an engine never reads or changes the snapshot of another version. Two versions side by side are not built, and are planned after Limen is open source |
-| 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store) |
+| 10 | `TestVersionsKeepTheirSnapshots`, `TestVersionsSideBySide`, `TestCrossedSnapshotFails`, `TestSwitchStartsFromThePrior` (`engine`), `TestModelSwitch` (`cmd/limend`): versions 1 and 2 share no snapshot, an operator chooses the version, and a change leaves the snapshots of the old version for a rollback. The old version does not serve while the new one fits, by decision 1 of [[011-consent]] (amended above) |
+| 11 | `TestConformance`, `TestConformanceInline`, `TestEngineConformance` (directory store), and `TestConformanceLearned2` for version 2 |
 
 ### What diverges from the design as written
 
@@ -401,6 +418,5 @@ until they are built or moved to their own spec.
 
 | Open | Why |
 |---|---|
-| a second model version that fits beside the first, and the operator's switch after a replay comparison (criterion 10) | planned after Limen is open source; only `features/1` and version 1 exist, and the cache in memory is keyed by organization and subject |
 | a store that more than one `limend` shares | planned on Storage (Arca) after Limen is open source |
 | an asserted 99th percentile of a prediction (criterion 6) | planned after Limen is open source; the gate runs the suite under the race detector, where a prediction takes about 63 ms |

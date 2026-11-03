@@ -205,6 +205,7 @@ To compare the two versions, do these steps:
 the order of time. Each version learns an answer before the next
 prediction. The comparison keeps nothing. It reads the features and the
 scope that each case kept, because the ledger does not keep the input.
+A ledger with thousands of answers can take some minutes.
 
 The comparison gives these numbers for all persons, and for each person:
 

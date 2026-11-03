@@ -34,8 +34,7 @@ on its main branch. A spec that cites a proposition cites that paper.
 Limen is in production since 2026-11-01, at v0.7.0 since 2026-11-03.
 Each spec's Outcome records what is built, the tests that prove it, and
 what is not built. Specs 001, 002, 003, 006, 008, 009 and 010 are
-complete. Spec 004 is at `testing`: a second model version beside the
-first and a shared store are not built. Spec 005's hooks are not built,
+complete. Spec 004 is at `testing`: a shared store is not built. Spec 005's hooks are not built,
 and spec 007 is a rule for deployments.
 
 Spec 004 was amended on 2026-11-02 with the answer minimum, an interim
@@ -47,8 +46,12 @@ scope of each action, `labels/2`, the cover rule with its cap on
 and reasons of an `ask` without a lean. Specs 002, 003, 004, 006, 008,
 009 and 010 are amended for it. Wave 2 of 011, the same day, built the
 calibration report, `GET /v1/calibration`, and `calibration` on an
-explanation, and amended 003, 006, 008 and 009. `learned/2` (wave 3)
-waits.
+explanation, and amended 003, 006, 008 and 009. Wave 3, the same day,
+built `learned/2`, with the scope in its features and the weight of each
+answer in its fit, the choice of the model version (`LIMEN_MODEL`,
+default `learned/1`), and the replay comparison `limen compare`. Spec 011
+is at `testing`: the switch of the hosted installation to `learned/2`
+waits for the owner.
 
 The owner decided on 2026-11-02 what comes after Limen is open source:
 the hooks for Claude Code and Codex (005, criteria 1 to 5), a published
@@ -58,7 +61,9 @@ versions side by side (004, with criterion 10), an asserted 99th
 percentile of a prediction (004, criterion 6), the reports of the
 evidence gates (007, criteria 1 to 5), and the signals of a model judge
 (007, gate 4). The public reference of the API under `/v1/oversight` and
-the public container image come with the open.
+the public container image come with the open. Wave 3 of 011 built the
+second model version and the operator's choice of it (004, criterion 10)
+before the open, by the owner's build order of 2026-11-03.
 
 ## Layout
 
@@ -109,7 +114,7 @@ spec once every spec in its `depends_on` is at `testing` or later, not
 | [008](008-ledger-and-estimation.md) | Ledger and estimation: the records, the derived roles of answers, and the error rate of any decision source | complete |
 | [009](009-explanations.md) | Explanations: why a prediction is what it is, what the model has learned about a person, and what another profile would have done, each exact for the model | complete |
 | [010](010-organizations.md) | Organizations: remove a saved cost profile, a stricter cost profile for one person, and a weekly report that never shows one person | complete |
-| [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | in-progress |
+| [011](011-consent.md) | Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report | testing |
 
 The order of building is the order of the numbers except where a spec's
 `depends_on` says otherwise. 007 is not code; it is the rule a

@@ -1,6 +1,6 @@
 ---
 title: "Consent: the reach of an action, no allow beyond what the person allowed, the weight of an answer, and a calibration report"
-status: in-progress
+status: testing
 track: core
 depends_on: [002-contract.md, 004-engine.md, 006-conformance.md, 008-ledger-and-estimation.md, 009-explanations.md, 010-organizations.md]
 affects: [action.go, answer.go, prediction.go, profile.go, explanation.go, reliability.go, replay.go, reach.go, estimate/, engine/, engine/featurize/, engine/gp/, engine/store/, stub/, conformance/, server/, client/, api/openapi.yaml, importer/topos/, cmd/limend/, docs/]
@@ -998,8 +998,13 @@ cover rule with its cap on version 1, the answer fields and `weights/1`,
 `cover` on predictions, explanations and learned entries, and `split`
 and `short`. Wave 2 is built (2026-11-03): the calibration report,
 `GET /v1/calibration`, and `calibration` on an explanation
-([wave 2](#wave-2-the-calibration-report)). Wave 3 is not built, so the
-status stays `in-progress`.
+([wave 2](#wave-2-the-calibration-report)). Wave 3 is built (2026-11-03)
+and is off by default: `features/2`, `learned/2` with `weights/2` in the
+fit, the switch of an installation between the two versions
+(`LIMEN_MODEL`, default `learned/1`), and the replay comparison
+(`limen compare`) ([wave 3](#wave-3-learned2-and-the-replay-comparison)).
+Each wave is built, so the status is `testing`. The switch of the hosted
+installation, with the record of its deployment, waits for the owner.
 
 ### What was built
 
@@ -1089,10 +1094,114 @@ vocabulary: it asks `reliability.read` about `Reliability` with `org` and
 | the predictions of Limen in the window | the cases first received in `[from, to)` that have a prediction of the model, as `of=learned` reads them; a prediction with no decision is a case and is not covered | the window of the reliability report, so the two reports read the same cases |
 | a report of the ledger | `Ledger.Calibration`, a new method of the interface | the report reads the reviews of the ledger, as `Reliability` does. An implementation of `limen.Service` outside this module adds it |
 
+### Wave 3: learned/2 and the replay comparison
+
+`learned/2` is built beside `learned/1` and serves only where an
+operator sets `LIMEN_MODEL=learned/2`. The default stays `learned/1`, so
+a release with wave 3 predicts as the release before.
+
+| Part | Where |
+|---|---|
+| `features/2`: the groups of `features/1` it keeps, the thermometers of `undo` and `target_class`, a group for each boundary, the holds and contact, read from the `features/1` vectors, the action without its input, and the scope (`featurize.Of2`) | `engine/featurize/features2.go` |
+| the tempered probit: each answer's log likelihood, gradient and curvature times its weight, the window before the answers of weight 0 leave the fit (`gp.FitWeighted`); `gp.Fit` is it with each weight 1 | `engine/gp/gp.go`, `probit.go` |
+| `weights/2`, the rules of `weights/1` graded (`Policy.Graded`); `weights/1` reads the same rules | `estimate/weights2.go`, `consent.go` |
+| the model versions: `engine.Model`, `Learned1`, `Learned2`, `ParseModel`, `Options.Model`; the vectors of each version from a case, the snapshots of each version under its own name, a snapshot of other widths refused | `engine/version.go`, `fit.go`, `engine.go`, `explain.go` |
+| the replay comparison of records or of a ledger, per person and over all (`Engine.Compare`, `Engine.CompareLedger`), and the organizations of a file store (`file.Store.Orgs`) | `engine/compare.go`, `engine/store/file/file.go` |
+| `limen compare topos`, `file` and `ledger`; `limen replay --model` | `cmd/limen/compare.go`, `replay.go` |
+| `LIMEN_MODEL`, and the line that names the model when `limend` starts | `cmd/limend/main.go` |
+| the synthetic history of the comparison | `engine/testdata/compare/publish.ndjson` |
+
+| # | Proof |
+|---|---|
+| 18 | `TestGroupLayout2`, `TestEncodings2`, `TestGroupDistanceBound2` (each group over random actions and each pair of values of each scope group), `FuzzOf2`, `TestOf2ReadsNoInput`, `TestScopeFactors` (0.44 for one boundary, 0.33 for `publish: update` and `publish: make public`) (`engine/featurize`) |
+| 19 | `TestWeightsOfOneAreTheGolden` (each weight 1 gives the golden fixtures within 1e-9, and the fit of `learned/1` bit for bit), `TestWeightedModeAndExplanation` (the mode is `K g` with the weighted `g`, and the contributions and parts sum to the mean within 1e-9), `TestWeightZeroChangesNothing`, `TestWeightedProbitDerivatives` (gradient and curvature against central differences), `TestWeightedWindow`, `TestWeightIsGraded` (`engine/gp`); `TestGraded`, `TestGradedRefinesWeights` (`estimate`); `TestQuickApprovalsMoveLearned2Less`, `TestRuleAnswersLeaveLearned2`, `TestConformanceLearned2` (`engine`) |
+| 21 | `TestCompareThePublishHistory`, `TestCompareLedger` (a ledger compares as the records it came from, shell input included, and the replayed `learned/1` repeats each recorded verdict), `TestCompareErrors`, `TestLooser` (`engine`); `TestCompareFile`, `TestCompareToposAndLedger`, `TestCompareUsage` (`cmd/limen`). The record of a deployment is the owner's, when the hosted installation switches |
+| 004, 10 | `TestVersionsSideBySide`, `TestCrossedSnapshotFails`, `TestSwitchStartsFromThePrior` (`engine`), `TestModelSwitch` (`cmd/limend`) |
+
+#### The comparison
+
+The comparison was run on three histories. The synthetic history
+reproduces the owner's measurement under Careful, the default profile
+(allow above 0.90): three persons each approve eight `publish: update`
+in two sessions, deny one `publish: make public`, and approve four more
+updates. One person answers each after six seconds (each approval
+considered), one each approval after one second, and one the first three
+after six seconds and the rest after one second.
+
+| Approvals of `publish: update` | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| `learned/1`, any answers | 0.729 | 0.805 | 0.845 | 0.870 | 0.887 | 0.899 | 0.908 |
+| `learned/2`, considered approvals | 0.729 | 0.805 | 0.845 | 0.870 | 0.887 | 0.899 | 0.908 |
+| `learned/2`, approvals after one second | 0.579 | 0.633 | 0.673 | 0.703 | 0.727 | 0.747 | 0.763 |
+
+| `limen compare file engine/testdata/compare/publish.ndjson` | considered | mixed | quick | all |
+|---|---|---|---|---|
+| actions, all answered | 13 | 13 | 13 | 39 |
+| allows of `learned/1` | 1 | 1 | 0 | 2 |
+| allows of `learned/2` | 4 | 0 | 0 | 4 |
+| allows that `learned/2` does not give | 0 | 1 | 0 | 1 |
+| allows that only `learned/2` gives | 3 | 0 | 0 | 3 |
+| verdicts of `learned/2` that permit more | 3 | 0 | 0 | 3 |
+| of these, not held by the cover rule | 0 | 0 | 0 | 0 |
+| covers that differ between the versions | 0 | 0 | 0 | 0 |
+| Brier score, `learned/1` | 0.1071 | 0.1071 | 0.1071 | 0.1071 |
+| Brier score, `learned/2` | 0.0738 | 0.0791 | 0.1235 | 0.0921 |
+
+The changes, by kind:
+
+| From `learned/1` to `learned/2` | Records | Why |
+|---|---|---|
+| `ask (wider)` to `ask (unsure)` | 3 | `publish: make public` after eight approvals: `learned/1` gives it 0.916, the same point as an update, and only the cover rule holds it. `learned/2` gives it 0.627 to 0.700 |
+| `allow` to `ask (short)` | 1 | the mixed person after seven approvals, three of them considered: 0.908 and covered under `learned/1`, 0.859 under `learned/2` |
+| `ask (few)` to `ask (short)` | 1 | the quick person after seven approvals: 0.908 under `learned/1`, held by the cover rule, 0.763 under `learned/2` |
+| `ask (short)` to `ask (unsure)` | 3 | the quick person after one to three approvals: the evidence ratio of `learned/2` stays below 0.5 |
+| `ask (split)` to `allow` | 3 | the considered person after the denial of `publish: make public`: `learned/1` reads the denial at the same point as the updates and drops them to 0.821 to 0.852. `learned/2` keeps them at 0.904 to 0.918, covered by 9 to 11 considered approvals from 2 sessions |
+
+The three verdicts that permit more are the expected effect of the scope
+in the kernel: a denial of a wider reach no longer counts in full
+against the reach the person approved. Each is an allow of an action
+that considered approvals cover, so none is outside the cover rule.
+
+The Topos fixture of the importer (`importer/topos/testdata/topos-v0.66.0`,
+6 actions, 2 answered) gives `ask (unsure)` for each action under both
+versions, with Brier scores 0.2965 and 0.2841. The Topos history of the
+command's tests (320 actions of one person in 4 sessions, approvals of
+`go test` and denials of `rm -rf`) gives the same verdicts under both
+versions (119 `allow`, 158 `block`, 31 `ask (few)`, 10 `ask (short)`, 2
+`ask (unsure)`), with Brier scores 0.0059 and 0.0060, from its logs and
+from the ledger a kept replay wrote. That comparison took 7 seconds.
+
+#### What diverges from the design as written
+
+| What it said | What was built | Why |
+|---|---|---|
+| the new release keeps the `features/1` vectors of each new case beside its `features/2` vectors | a case keeps its `features/1` vectors and its scope, and `featurize.Of2` makes the `features/2` vectors from them at each fit and prediction | each group of `features/2` is a group of `features/1`, a word of the scope, or a hold of the environment, so the vectors of a stored case are the ones it had when new, and a rollback reads the records as they are |
+| holds: 1 if held, else 0 | each hold is `sqrt(2/3)` | the scaling rule: three holds of 1 put two environments at squared distance 3 |
+| `weights/2`: "one gesture for many" and "too quick" give 0.2; a lean and a long session multiply by 0.5 | the two rules together give 0.2, each factor multiplies, so the least weight of an approval is 0.05; details opened give 1, and a standing rule 0, as in `weights/1` | one reading of the text, for the owner to confirm |
+| an answer with weight 0 leaves the fit | the window of the 512 most recent answered cases comes first, then the answers of weight 0 leave, so a fit can hold fewer than 512 | the window stays the window of the cover rule. A denial from a standing rule has weight 0, so it leaves the fit of `learned/2`, where `learned/1` learns it |
+| the refit fits version 2 at the first prediction of each person and serves it | the first prediction of each person under `learned/2` starts the fit in the background, and is predicted from the prior: 0.5, `ask (unsure)`, about one second | a prediction never fits ([[004-engine]], criterion 6) |
+| criterion 10 of [[004-engine]]: two versions side by side | an installation serves one version and an operator chooses it; each version reads and writes its own snapshots; no second fit of each answer | decision 1 |
+| a replay of the ledger beside the recorded predictions of version 1 | `limen compare` replays both versions, and for a ledger also counts the recorded verdicts and how many the replayed `learned/1` repeats | a recorded prediction can be from a release before the cover rule, so a replayed `learned/1` is the fair base |
+| the calibration error of each version | a Brier score over the answered records | the calibration report of wave 2 is not on main. Only seen actions have answers, so the score compares the versions and estimates no error over all actions |
+| more permissive outside the cover rule | `looser` counts each verdict of `learned/2` that permits more, and `outside` those that are not an allow of a covered action | the cover rule reads `weights/1` in both versions, so a looser verdict comes from the model, and the cover tells if the person's considered approvals hold it |
+| the reason "Limen has no answers from this person yet" | it reads the answered cases of the person, not the answers the model fitted | a model of a new version, before its first fit, gave it to a person with answers |
+| nothing about conformance | the conformance suite passes under `learned/2`, in the background and inline | the contract holds for each version |
+
+#### What the owner decides before the switch
+
+- Run `limen compare ledger --store` on a copy of the hosted ledger, and
+  read each verdict that permits more.
+- Confirm the reading of `weights/2` above, and the holds at `sqrt(2/3)`.
+- Accept the prior for about one second for each person after the
+  switch, or ask for a fit of each person before `limend` serves.
+- Set the margins of gate 1 of [[007-evidence-gates]] for the
+  comparison, if the switch is to pass that gate.
+
 ### What this leaves open
 
-- `features/2`, `learned/2` with `weights/2`, the replay comparison and
-  the refit, wave 3, criteria 18, 19 and 21.
+- The switch of the hosted installation to `learned/2`, and the record
+  of its deployment (criterion 21), wait for the owner
+  ([wave 3](#wave-3-learned2-and-the-replay-comparison)).
 - The ledger a model keeps is not counted in the byte budget of the
   cache of models. Each prediction still weighs every answer of the
   person, which is linear in the cases.
