@@ -193,13 +193,18 @@ the two versions on your ledger.
 
 To compare the two versions, do these steps:
 
-1. Make a copy of the ledger directory, as the backup steps in
-   [The ledger directory](#the-ledger-directory) tell.
-2. Run the comparison on the copy:
+1. Copy the ledger directory.
+2. On a system other than Linux or macOS, remove the file `LOCK` from the
+   copy.
+3. Run the comparison on the copy:
 
    ```sh
    limen compare ledger --store /path/to/the/copy
    ```
+
+You do not have to stop `limend` before the copy. The comparison
+discards an incomplete last line of a log, and it changes nothing in the
+ledger of `limend`.
 
 `limen compare` replays the cases of the ledger through each version, in
 the order of time. Each version learns an answer before the next
