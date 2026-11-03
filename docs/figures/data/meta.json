@@ -1,8 +1,67 @@
 {
   "allow_above": 0.9,
   "audit_rate": 0.05,
+  "audits": {
+    "allow_above": 0.65,
+    "block_below": 0.35,
+    "draws": 5,
+    "profile": "Balanced",
+    "rates": [
+      0.02,
+      0.05,
+      0.1,
+      0.2
+    ]
+  },
   "block_below": 0.25,
+  "calibration": {
+    "bins": 10,
+    "min_effective": 20
+  },
   "changepoint": 750,
+  "cover": {
+    "allow_above": 0.9,
+    "answer_floor_ms": 2000,
+    "audit_rate": 0.05,
+    "block_below": 0.25,
+    "decisions": 600,
+    "kinds": [
+      {
+        "approve": 0.99,
+        "name": "go test",
+        "weight": 6
+      },
+      {
+        "approve": 0.96,
+        "name": "git push to a feature branch",
+        "weight": 3
+      },
+      {
+        "approve": 0.75,
+        "name": "git push to main",
+        "weight": 1.5
+      },
+      {
+        "approve": 0.1,
+        "name": "git push --force to main",
+        "weight": 0.5
+      },
+      {
+        "approve": 0.97,
+        "name": "publish: update",
+        "weight": 3
+      },
+      {
+        "approve": 0.45,
+        "name": "publish: make public",
+        "weight": 1
+      }
+    ],
+    "min_sessions": 2,
+    "min_weight": 3,
+    "opened": 0.5,
+    "session": 40
+  },
   "decisions": 1500,
   "kernel": {
     "SStatic": 1.6,
@@ -13,7 +72,7 @@
     "Lambda": 90
   },
   "max_labels": 512,
-  "model": "engine/gp, kernel.DefaultAdditive",
+  "model": "engine/gp",
   "oracle": {
     "A0": 1.4,
     "WRisk": 3.4,
@@ -30,6 +89,12 @@
     "WBase": 0.12
   },
   "persons": 20,
+  "product": {
+    "Sigma2": 1.6,
+    "LTool": 1.1,
+    "LCtx": 1.2,
+    "Lambda": 90
+  },
   "refit": "after every answer",
   "seeds": "0-19",
   "stream_seeds": "1000-1019"
