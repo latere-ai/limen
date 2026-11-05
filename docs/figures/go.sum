@@ -1,4 +1,4 @@
 gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
 gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
-latere.ai/x/pkg v0.110.2 h1:+KCH8EXEXkW/sAhKR2ExowMJBUYxfp8HRXWUKsHkG98=
-latere.ai/x/pkg v0.110.2/go.mod h1:neEq6JP/IEi6keAMCdlHzADcdgv1o5kJePrLKYjVb4M=
+latere.ai/x/pkg v0.111.0 h1:JyfGkrrW59Zus/ipX4q9g4gfey7JXGKP/OD2dvPAxTA=
+latere.ai/x/pkg v0.111.0/go.mod h1:YwdrBwW35YWDl0Rnz/Du2Qx2etmpILv22V+MzdliDks=
