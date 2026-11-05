@@ -84,7 +84,8 @@ Then a reviewer can see the exception.
 5. Open a pull request.
 
 Maintainers push to `main` directly. The pipeline runs the gate on each
-push and on each pull request.
+push and on each pull request. A maintainer cuts a release with
+`go tool lateregate release vX.Y.Z`.
 
 If you plan a large change, open an issue first. A reviewer can examine a
 design more easily if its spec gives the reasons.
