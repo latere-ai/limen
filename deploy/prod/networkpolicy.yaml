@@ -11,7 +11,7 @@
 # - the resolver;
 # - platformd's internal TLS listener, pod port 8443 behind the Service's
 #   443, for every decision; platformd's side admits the core in
-#   limend-platformd-tls, which deploy/bootstrap holds;
+#   limend-platformd-tls, which platform's release applies;
 # - auth at https://auth.latere.ai, for its discovery and key set, read at
 #   start and as keys rotate: a public name this cluster serves, whose
 #   address inside the cluster is the load balancer's, which Cilium

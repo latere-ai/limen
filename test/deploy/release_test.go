@@ -309,7 +309,7 @@ func TestProdNamesTheImageTheDeployPins(t *testing.T) {
 // TestProdSelectsOnlyItsOwnPods: a rollout identity may write an object that
 // selects its own service's Pods and no other's, so every selector at the
 // top of a policy in deploy/prod names limend. The policy that selects
-// platformd's Pods is in deploy/bootstrap.
+// platformd's Pods belongs to platform's deploy/prod.
 func TestProdSelectsOnlyItsOwnPods(t *testing.T) {
 	for _, file := range []string{"networkpolicy.yaml", "networkpolicy-platformd.yaml"} {
 		text := read(t, "deploy/prod/"+file)
@@ -323,9 +323,6 @@ func TestProdSelectsOnlyItsOwnPods(t *testing.T) {
 		if n := strings.Count(text, "\nkind: NetworkPolicy\n"); n != 1 {
 			t.Errorf("deploy/prod/%s holds %d policies, want one", file, n)
 		}
-	}
-	if !strings.Contains(read(t, "deploy/bootstrap/networkpolicy-platformd-tls.yaml"), "      app: platformd\n") {
-		t.Error("deploy/bootstrap does not hold the policy that admits the core to platformd")
 	}
 }
 
