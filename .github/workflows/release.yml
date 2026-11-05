@@ -48,11 +48,6 @@ jobs:
         for arch in amd64 arm64; do
           CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$ldflags" -o "dist/limend_linux_${arch}" ./cmd/limend
         done
-      # A verify run still going refuses the release at once rather than
-      # waiting, so a release never holds a runner the run it waits for
-      # needs. The stage prints the command that re-runs the release once
-      # verify is green.
-      wait_minutes: "0"
 
   publish:
     needs: build
