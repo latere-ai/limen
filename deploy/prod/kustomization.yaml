@@ -33,7 +33,7 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/latere-ai/limen
-    newTag: v0.9.0
+    newTag: v0.9.1
 configMapGenerator:
   - name: limend
     envs:

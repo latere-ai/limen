@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.9.1 - 2026-11-05
+
 ### Changed
 
 - **A request id Limen mints starts with `req_`,** as the other services'
