@@ -37,8 +37,6 @@ import (
 	"bufio"
 	"cmp"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,6 +50,7 @@ import (
 	"time"
 
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/requestid"
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/authorizer"
@@ -67,7 +66,7 @@ const (
 // RequestIDHeader carries the request id in and out. An id the caller sends
 // is kept when it is short and printable, so a decision point can correlate
 // its own logs; otherwise the server mints one.
-const RequestIDHeader = "X-Request-Id"
+const RequestIDHeader = requestid.Header
 
 // Options configure the handler.
 type Options struct {
@@ -222,7 +221,7 @@ type call struct {
 
 func (h *handler) serve(rt route) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := &call{w: w, r: r, id: requestID(r), action: rt.action}
+		c := &call{w: w, r: r, id: requestid.FromRequest(r), action: rt.action}
 		w.Header().Set(RequestIDHeader, c.id)
 		defer func() {
 			if p := recover(); p != nil {
@@ -237,25 +236,6 @@ func (h *handler) serve(rt route) http.Handler {
 			h.fail(c, err)
 		}
 	})
-}
-
-func requestID(r *http.Request) string {
-	id := r.Header.Get(RequestIDHeader)
-	if id != "" && len(id) <= 128 && printable(id) {
-		return id
-	}
-	var b [12]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
-}
-
-func printable(s string) bool {
-	for _, c := range []byte(s) {
-		if c < 0x21 || c > 0x7e {
-			return false
-		}
-	}
-	return true
 }
 
 func (h *handler) authenticate(c *call) error {

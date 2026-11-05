@@ -26,6 +26,7 @@ import (
 
 	"latere.ai/x/pkg/authz"
 	azstub "latere.ai/x/pkg/authz/stub"
+	"latere.ai/x/pkg/requestid"
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/authorizer"
@@ -858,12 +859,12 @@ func TestRequestID(t *testing.T) {
 	if got := do(t, h, profile, RequestIDHeader, "trace-123").Header().Get(RequestIDHeader); got != "trace-123" {
 		t.Errorf("a caller's id was replaced: %q", got)
 	}
-	for _, bad := range []string{strings.Repeat("x", 200), "with space", "tab\tid"} {
-		if got := do(t, h, profile, RequestIDHeader, bad).Header().Get(RequestIDHeader); got == bad || len(got) != 24 {
+	for _, bad := range []string{strings.Repeat("x", 200), "with space", "tab\tid", "caf\u00e9", ""} {
+		if got := do(t, h, profile, RequestIDHeader, bad).Header().Get(RequestIDHeader); got == bad || !requestid.Valid(got) || !strings.HasPrefix(got, "req_") {
 			t.Errorf("id %q kept as %q", bad, got)
 		}
 	}
-	if got := do(t, h, profile).Header().Get(RequestIDHeader); len(got) != 24 {
+	if got := do(t, h, profile).Header().Get(RequestIDHeader); !requestid.Valid(got) || !strings.HasPrefix(got, "req_") {
 		t.Errorf("minted id %q", got)
 	}
 }
