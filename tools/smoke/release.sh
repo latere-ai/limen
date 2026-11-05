@@ -6,22 +6,25 @@
 # it after a rollout and attaches its markdown evidence to the release; an
 # operator can run it by hand after an upgrade.
 #
-# BASE_URL is the public route of this installation, which at Latere is
-# https://api.latere.ai/v1/oversight (LIMEN_BASE_PATH). It has no default.
+# BASE_URL is the public route of this installation, such as
+# https://api.example.com/v1/oversight (LIMEN_BASE_PATH). It has no default.
 #
-# Limen serves no probe route and no version route: every route of its API
-# asks for a token. So the only public fact is that the route reaches
-# limend, which answers an unauthenticated GET /cases with a 401 in its own
+# Limen serves no probe route. Every route of its API but the version asks
+# for a token, so the check that the route reaches limend is an
+# unauthenticated GET /cases, which limend answers with a 401 in its own
 # error envelope. A route that no Ingress rule claims answers 404, and a
-# service that is down answers a 502, 503 or nothing. The served version is
-# not readable from any public route (missing: GET <BASE_URL>/version), so
-# TAG cannot be compared; the evidence says so instead of claiming a match.
+# service that is down answers a 502, 503 or nothing.
+#
+# Checks, in order, stopping at the first failure:
+#   1. GET $BASE_URL/cases answers 401 in limend's error envelope.
+#   2. GET $BASE_URL/version serves a version, and when TAG is set it
+#      equals TAG.
 #
 # Required tools: curl, grep.
 #
 # Environment:
 #   BASE_URL   the public route to check; required
-#   TAG        the release being proved; recorded, not verifiable (see above)
+#   TAG        the release being proved; when set the served version must equal it
 #   COMMIT     the release commit, for the evidence
 #   DEPLOY_URL the run that deployed it, for the evidence
 #   OUTPUT_MD  where to write the markdown evidence; nowhere when unset
@@ -55,8 +58,19 @@ grep -q '"unauthenticated"' "$tmp/cases" \
   || fail "GET ${path}: the 401 is not limend's error (body: $(head -c 200 "$tmp/cases" 2>/dev/null || true))"
 pass "GET ${path} (401, limend refused the request for want of a token)"
 
+vcode=$(curl -sS -o "$tmp/version" -w '%{http_code}' "${BASE_URL}/version") \
+  || fail "GET /version: curl failed"
+[ "$vcode" = "200" ] \
+  || fail "GET /version: expected 200, got $vcode (body: $(head -c 200 "$tmp/version" 2>/dev/null || true))"
+pass "GET /version (200)"
+# `|| true`: grep exits 1 on no match, and the message below should be said.
+served=$(grep -o '"version":"[^"]*"' "$tmp/version" | head -1 | cut -d'"' -f4 || true)
+[ -n "$served" ] || fail "GET /version: no version in $(head -c 200 "$tmp/version")"
 if [ -n "$TAG" ]; then
-  pass "tag ${TAG} recorded; limend serves no public version route, so it is not compared"
+  [ "$served" = "$TAG" ] || fail "version mismatch: served $served, expected $TAG"
+  pass "served version matches the tag ($served)"
+else
+  pass "served version recorded ($served)"
 fi
 
 if [ -n "$OUTPUT_MD" ]; then
@@ -69,7 +83,7 @@ if [ -n "$OUTPUT_MD" ]; then
     echo "- Commit: \`${COMMIT}\`"
     [ -n "$DEPLOY_URL" ] && echo "- Deploy: ${DEPLOY_URL}"
     echo "- Origin: ${BASE_URL}"
-    echo "- Served version: not publicly readable (limend serves no version route), so the tag is not compared"
+    echo "- Served version: \`${served}\`${TAG:+, equal to the tag}"
     echo "- Smoke: \`GET ${path}\` answered 401 in limend's error envelope, so the route reaches limend"
   } > "$OUTPUT_MD"
 fi

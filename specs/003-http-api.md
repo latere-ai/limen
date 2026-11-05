@@ -35,6 +35,12 @@ is an absolute path with no trailing slash and is not `/v1`; `limend`
 refuses any other at start (exit 2). The client takes the same prefix as
 `Options.BasePath`.
 
+`GET /v1/version`, and `GET <base path>/version` with a base path, is the
+one route that takes no token and asks the authorizer nothing. It answers
+`{"version", "commit", "build_time"}`, the values `limend` was built with,
+so the release smoke reads which build serves a public prefix and compares
+`version` with the tag. It is not in the contract of `api/openapi.yaml`.
+
 | Method | Path | Body | Success | Authorizer action | Contract |
 |---|---|---|---|---|---|
 | POST | `/v1/predictions` | `Action` | 200 `Prediction` | `case.predict` | `Predictor.Predict` |

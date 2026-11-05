@@ -14,6 +14,10 @@ server.
   prefix in place of `/v1` ([Running limend](running.md#configuration)).
   For example, with `/v1/oversight`, `GET /v1/oversight/learned` and
   `GET /v1/learned` are the same route, with the same permission.
+- **Build version.** `GET /v1/version`, and with `LIMEN_BASE_PATH` also
+  `GET <prefix>/version`, needs no token. It answers the build's
+  `version`, `commit` and `build_time` as JSON, for example
+  `GET /v1/oversight/version`.
 - **Authentication.** Each request must have a bearer token:
   `Authorization: Bearer <token>`. The token must come from an issuer
   that the installation lists, for the audience that the installation

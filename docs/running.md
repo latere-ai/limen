@@ -79,6 +79,11 @@ route, with the same permission. The value must start with `/`, must not
 end with `/`, and must not be `/v1`. If the value is not correct,
 `limend` stops with exit code 2.
 
+`GET /v1/version`, and `GET` on `version` under `LIMEN_BASE_PATH`, answers
+the version, the commit and the build time of the binary as JSON. It needs
+no token, so a check from outside can read which release a public prefix
+reaches.
+
 `LIMEN_MIN_ALLOWS` and `LIMEN_MIN_SESSIONS` set the
 [cover rule](theory.md#the-cover-rule). `LIMEN_ANSWER_FLOOR_MS` and
 `LIMEN_ANSWER_FATIGUE` set the weight of an answer. Each value must be a

@@ -92,6 +92,11 @@ type Options struct {
 	// /v1/predictions, with the same permissions. [New] panics on a base
 	// path [CheckBasePath] refuses.
 	BasePath string
+	// Version, Commit and BuildTime are the build identity that
+	// GET /v1/version answers, and GET <BasePath>/version with a base path,
+	// to anyone, with no token. They are the values the binary was built
+	// with; a server built without them answers empty strings.
+	Version, Commit, BuildTime string
 }
 
 // CheckBasePath reports a base path the server cannot serve: one that is
@@ -179,7 +184,31 @@ func New(svc limen.Service, o Options) http.Handler {
 			mux.Handle(rt.method+" "+o.BasePath+strings.TrimPrefix(rt.path, "/v1"), h.serve(rt))
 		}
 	}
+	mux.Handle("GET /v1/version", buildIdentity(o))
+	if o.BasePath != "" {
+		mux.Handle("GET "+o.BasePath+"/version", buildIdentity(o))
+	}
 	return mux
+}
+
+// buildIdentity answers the build the server runs as JSON, to anyone: the
+// same three fields every Latere service reports at /version, so a release
+// check reads the running version through the public prefix.
+func buildIdentity(o Options) http.Handler {
+	body, err := json.Marshal(struct {
+		Version   string `json:"version"`
+		Commit    string `json:"commit"`
+		BuildTime string `json:"build_time"`
+	}{o.Version, o.Commit, o.BuildTime})
+	if err != nil {
+		panic("server: " + err.Error())
+	}
+	body = append(body, '\n')
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(body)
+	})
 }
 
 // call is one request in flight.

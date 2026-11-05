@@ -13,6 +13,15 @@ the commit log.
 
 ### Added
 
+- **`GET /v1/version` is public.** `limend` answers the build's
+  `version`, `commit` and `build_time` with no token, and under
+  `LIMEN_BASE_PATH` as well, for example `/v1/oversight/version`, so a
+  deployment behind an ingress that forwards only that prefix shows which
+  release it runs. The release smoke compares the served version with the
+  tag.
+
+### Added
+
 - Figures from simulations that run the code of Limen, in the README, in
   [Theory](docs/theory.md), and in [The ledger](docs/ledger.md).
   `make figures` makes them again.

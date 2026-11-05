@@ -647,6 +647,38 @@ func TestBasePath(t *testing.T) {
 	}
 }
 
+// The build identity is public under /v1 and under the base path, to a
+// request that carries no token, with the values the server was given.
+func TestVersion(t *testing.T) {
+	const want = `{"version":"v1.2.3","commit":"abc1234","build_time":"2026-11-05T00:00:00Z"}`
+	o := Options{Authenticator: StaticToken(tok, bob), Authorizer: OwnerPolicy{},
+		Version: "v1.2.3", Commit: "abc1234", BuildTime: "2026-11-05T00:00:00Z", BasePath: "/v1/oversight"}
+	h := New(stub.New(stub.Options{}), o)
+	for _, path := range []string{"/v1/version", "/v1/oversight/version"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != want {
+			t.Errorf("GET %s with no token: %d %s", path, w.Code, w.Body.String())
+		}
+		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("GET %s: Content-Type %q", path, ct)
+		}
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/oversight/version", nil))
+	if w.Code == http.StatusOK {
+		t.Errorf("POST /v1/oversight/version: %d", w.Code)
+	}
+	// With no base path the route is under /v1 alone.
+	o.BasePath = ""
+	h = New(stub.New(stub.Options{}), o)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/oversight/version", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("GET /v1/oversight/version with no base path: %d", w.Code)
+	}
+}
+
 // A profile of a person's own context, an org that is their rendered
 // subject, is theirs to read and write; an organization's profiles and every
 // replay stay the admins'.

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/client"
 	"latere.ai/x/limen/conformance"
+	"latere.ai/x/limen/internal/version"
 )
 
 func env(m map[string]string) func(string) string {
@@ -148,6 +150,33 @@ func TestBasePath(t *testing.T) {
 		}
 	}
 	if code, log := stop(); code != exitOK || !strings.Contains(log, "The API is also available under /v1/oversight.") {
+		t.Fatalf("stop: exit %d: %s", code, log)
+	}
+}
+
+// The build limend was built as is public under LIMEN_BASE_PATH, with no
+// token: the route a release check reads from outside.
+func TestVersionUnderTheBasePath(t *testing.T) {
+	oldV, oldC, oldD := version.Version, version.Commit, version.Date
+	t.Cleanup(func() { version.Version, version.Commit, version.Date = oldV, oldC, oldD })
+	version.Version, version.Commit, version.Date = "v1.2.3", "abc1234", "2026-11-05T00:00:00Z"
+	addr, stop := startWith(t, map[string]string{"LIMEN_TOKEN": "s3cret", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_BASE_PATH": "/v1/oversight"})
+	const want = `{"version":"v1.2.3","commit":"abc1234","build_time":"2026-11-05T00:00:00Z"}`
+	resp, err := http.Get("http://" + addr + "/v1/oversight/version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if cerr := resp.Body.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != want {
+		t.Errorf("GET /v1/oversight/version with no token: %d %s", resp.StatusCode, body)
+	}
+	if code, log := stop(); code != exitOK {
 		t.Fatalf("stop: exit %d: %s", code, log)
 	}
 }

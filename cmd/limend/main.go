@@ -190,6 +190,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	o := acc.options
 	o.Logger = slog.New(slog.NewTextHandler(errOut, nil))
 	o.BasePath = base
+	o.Version, o.Commit, o.BuildTime = version.Version, version.Commit, version.Date
 	srv := &http.Server{
 		Handler:           server.New(eng, o),
 		ReadHeaderTimeout: 10 * time.Second,
