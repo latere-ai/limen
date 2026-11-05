@@ -13,6 +13,20 @@ identity:
   api_group: limen.latere.ai
   reached_by: self-hosted
   roles_only: true
+  # deploy/prod is Latere's own overlay inside the core's tree; it names the
+  # installation it serves, so the no-latere-value rule reads the addresses
+  # it sets and does not refuse them.
+  skip:
+    - deploy/prod
+  overlays:
+    - deploy/prod
+
+# The tag the production overlay runs is rewritten in the same commit as the
+# changelog section, so deploy/prod/kustomization.yaml never lags a release.
+release:
+  stamp:
+    - file: deploy/prod/kustomization.yaml
+      pattern: 'newTag: v\d+\.\d+\.\d+'
 
 # Apache-2.0, like the research implementation the engine is ported from
 # (github.com/changkun/trustcalib) and the harness-side cores it serves.

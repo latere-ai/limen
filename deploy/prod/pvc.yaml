@@ -1,0 +1,16 @@
+# The ledger: each person's cases, model snapshots and cost profiles, as
+# files under /var/lib/limen. One Pod mounts it at a time (ReadWriteOnce,
+# and the Deployment rolls by Recreate), which is also what limend's lock on
+# the directory requires. The class is the cluster's default block storage.
+# Deleting the claim deletes every person's ledger.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: limend-ledger
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi

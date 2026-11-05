@@ -1,0 +1,18 @@
+# The core's one listener: toposd's sessions send their predictions,
+# decisions and answers here inside the cluster, and the Ingress limend
+# routes api.latere.ai/v1/oversight here for people reading their own
+# records.
+apiVersion: v1
+kind: Service
+metadata:
+  name: limend
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: limend
+  ports:
+    - name: api
+      port: 7720
+      targetPort: api

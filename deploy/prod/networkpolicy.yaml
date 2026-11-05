@@ -1,0 +1,90 @@
+# What reaches the core, and what it reaches, and only that.
+#
+# In, on the one port:
+# - toposd's Pods, whose serve role and runners decide each tool call of a
+#   hosted session. toposd's side, the rule that lets its Pods reach this
+#   one, is toposd's own;
+# - the ingress controller, for the public route /v1/oversight on
+#   api.latere.ai (ingress.yaml).
+#
+# Out:
+# - the resolver;
+# - platformd's internal TLS listener, pod port 8443 behind the Service's
+#   443, for every decision; platformd's side admits the core in
+#   limend-platformd-tls, which deploy/bootstrap holds;
+# - auth at https://auth.latere.ai, for its discovery and key set, read at
+#   start and as keys rotate: a public name this cluster serves, whose
+#   address inside the cluster is the load balancer's, which Cilium
+#   translates to the ingress controller's Pods before policy is evaluated,
+#   so those Pods on their https port are admitted;
+# - the collector the namespace's monitoring injects, dialed at the node's
+#   address on a host port that Cilium translates to the collector's Pod on
+#   4318.
+# Nothing outside the cluster: the core calls no service but platformd's
+# decider, and its ledger is the volume.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: limend
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: limend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: toposd
+      ports:
+        - port: 7720
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 7720
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: platformd
+      ports:
+        - port: 8443
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - port: 443
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: dash0-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opentelemetry-collector
+      ports:
+        - port: 4318
+          protocol: TCP

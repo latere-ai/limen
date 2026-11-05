@@ -1,0 +1,29 @@
+# The core's one rule at the platform origin: /v1/oversight on
+# api.latere.ai, beside /v1/messaging and the other capabilities, forwarded
+# without a rewrite, because limend serves every route under that prefix
+# (LIMEN_BASE_PATH in limend.env). A person reads their own cases,
+# explanations, what the model learned, reliability and previews here with a
+# token for api.latere.ai; the owner policy answers them for their own
+# subject alone. There is no tls block and no issuer annotation: the host's
+# certificate is the origin's, which arcad's Ingress holds for every rule on
+# api.latere.ai.
+#
+# The controller's default body limit, 1 MiB, is limend's own for a JSON
+# body. A replay is larger and admin-only; it is sent inside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: limend
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.latere.ai
+      http:
+        paths:
+          - path: /v1/oversight
+            pathType: Prefix
+            backend:
+              service:
+                name: limend
+                port:
+                  name: api

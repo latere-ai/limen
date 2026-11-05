@@ -1,0 +1,25 @@
+# The console's way in: platformd's Pods reach the core on its port, where
+# the Oversight section reads and answers a person's own records with that
+# person's token, and where platformd forgets a closed account's records as
+# its own service. A policy of its own beside `limend`, whose rules add to
+# it: the core's own policy holds what decides tool calls, and this one what
+# shows a person what was decided.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: limend-platformd
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: limend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: platformd
+      ports:
+        - port: 7720
+          protocol: TCP

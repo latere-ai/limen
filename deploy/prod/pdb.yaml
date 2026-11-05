@@ -1,0 +1,15 @@
+# One replica, so a node drain may evict it: the budget lets the drain
+# proceed rather than hold the node forever. While the Pod is away, toposd's
+# decider fails closed, and each call a decision service would have decided
+# waits for its person.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: limend
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: limend

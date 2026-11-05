@@ -1,0 +1,130 @@
+# limend, one replica. The ledger is a directory on the volume `ledger`,
+# which limend holds under a lock for as long as it runs, so a second
+# process could not open it: the Deployment rolls by Recreate, the old Pod
+# stopped and the volume released before the new one starts. Under Recreate
+# there is no other replica for traffic to move to, so the container takes
+# no preStop pause. While no Pod runs, toposd's decider fails closed and each
+# call it would have decided waits for its person.
+#
+# LIMEN_OIDC_ISSUERS is auth alone, which makes limend the hosted server:
+# each caller's subject is its token's, and LIMEN_TOKEN, the one-person
+# server's bearer, is never set. LIMEN_OIDC_AUDIENCE: `limen` is the core's
+# own audience, which toposd asks auth for with topos-service's credential;
+# `api.latere.ai` is the platform origin's. limend reads auth's key set at
+# start and does not serve until it has, so a Pod that cannot reach auth
+# never becomes ready.
+#
+# Every request is decided by platformd's Limen decider on its internal TLS
+# listener (limend.env). The bearer is the file the Secret limend-authorizer
+# is mounted as, and SSL_CERT_DIR appends platformd's internal CA to the
+# system roots, which auth's certificate still needs, so the decider's
+# certificate verifies; the volume carries ca.crt alone, never the CA's key.
+# limend does not ask the decider at start: while it cannot be reached,
+# every request is refused authorizer_unavailable, so platformd's decider
+# is live before this tree is applied.
+#
+# The volume belongs to the image's user: fsGroup makes the kubelet give it
+# that group on first mount, since a new block volume is root's and limend
+# would be refused its lock file.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: limend
+  labels:
+    app.kubernetes.io/name: limend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: limend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: limend
+    spec:
+      serviceAccountName: limend
+      automountServiceAccountToken: false
+      # Above the 10 seconds limend gives open requests and the fit of what
+      # arrived since the last one, both inside one bound.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: limend
+          # The placeholder tag never resolves; the kustomization's images
+          # entry names the release this target runs.
+          image: ghcr.io/latere-ai/limen:unreleased
+          envFrom:
+            - configMapRef:
+                name: limend
+          env:
+            - name: LIMEN_OIDC_ISSUERS
+              value: https://auth.latere.ai
+            - name: LIMEN_OIDC_AUDIENCE
+              value: limen,api.latere.ai
+            - name: SSL_CERT_DIR
+              value: "/etc/ssl/certs:/var/run/limend-trust"
+          ports:
+            - name: api
+              containerPort: 7720
+          # limend serves no probe route, and every route of its API asks
+          # for a token, so both probes are the listener itself: it opens
+          # only once the ledger is open and auth's key set is read.
+          readinessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          # The request is what the core holds at rest; the limits bound a
+          # fit, a dense factorization over at most a few hundred of one
+          # person's answers, and the models kept in memory.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: ledger
+              mountPath: /var/lib/limen
+            - name: authorizer
+              mountPath: /var/run/limend-authorizer
+              readOnly: true
+            - name: internal-ca
+              mountPath: /var/run/limend-trust
+              readOnly: true
+      volumes:
+        - name: ledger
+          persistentVolumeClaim:
+            claimName: limend-ledger
+        - name: authorizer
+          secret:
+            secretName: limend-authorizer
+            items:
+              - key: token
+                path: token
+        - name: internal-ca
+          secret:
+            secretName: platformd-internal-ca
+            items:
+              - key: ca.crt
+                path: platformd-internal-ca.crt
