@@ -85,7 +85,8 @@ Then a reviewer can see the exception.
 
 Maintainers push to `main` directly. The pipeline runs the gate on each
 push and on each pull request. A maintainer cuts a release with
-`go tool lateregate release vX.Y.Z`.
+`go tool lateregate release vX.Y.Z`. After a rollout, `tools/smoke/release.sh`
+checks the public route from the outside; set `BASE_URL` to run it by hand.
 
 If you plan a large change, open an issue first. A reviewer can examine a
 design more easily if its spec gives the reasons.
