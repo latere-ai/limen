@@ -2,11 +2,27 @@
 # pipeline of latere-ai/ci, and the checks that need the tree and no
 # cluster. Every third-party action is pinned by commit.
 name: verify
+
+# A push or pull request that changes only specs or markdown outside the
+# exception starts no run, because no build or test reads them. The exception
+# is the markdown inside a testdata directory, which tests load as fixtures.
+# `lateregate release` runs the whole bar, the spec tree included, before every
+# tag. A tag is never filtered by paths.
 on:
   push:
     branches: [main]
     tags: ['v*']
+    paths:
+      - "**"
+      - "!specs/**"
+      - "!**.md"
+      - "**/testdata/**"
   pull_request:
+    paths:
+      - "**"
+      - "!specs/**"
+      - "!**.md"
+      - "**/testdata/**"
   workflow_dispatch:
 permissions:
   contents: read
