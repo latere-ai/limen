@@ -27,9 +27,6 @@ the commit log.
   deployment behind an ingress that forwards only that prefix shows which
   release it runs. The release smoke compares the served version with the
   tag.
-
-### Added
-
 - Figures from simulations that run the code of Limen, in the README, in
   [Theory](docs/theory.md), and in [The ledger](docs/ledger.md).
   `make figures` makes them again.
