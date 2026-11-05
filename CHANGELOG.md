@@ -11,6 +11,12 @@ the commit log.
 
 ## Unreleased
 
+### Changed
+
+- **A request id Limen mints starts with `req_`,** as the other services'
+  ids do. An id the client sends is still kept when it is printable and at
+  most 128 bytes.
+
 ## v0.9.0 - 2026-11-05
 
 ### Added
