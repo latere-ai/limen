@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.9.0 - 2026-11-05
+
 ### Added
 
 - **A release can deploy itself.** The release workflow has a `deploy` job
