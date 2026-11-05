@@ -13,6 +13,14 @@ the commit log.
 
 ### Added
 
+- **A release can deploy itself.** The release workflow has a `deploy` job
+  between the build and the publish, which applies `deploy/prod` with the
+  image pinned by digest, waits for the rollout and runs
+  `tools/smoke/release.sh` against the live origin. It runs only where the
+  repository variable `LIMEN_RELEASE_DEPLOY` is set, so a fork publishes
+  every artifact and deploys nothing. `deploy/prod` holds Latere's
+  production manifests and `deploy/bootstrap` the identity the job deploys
+  with and the one policy it may not write.
 - **`GET /v1/version` is public.** `limend` answers the build's
   `version`, `commit` and `build_time` with no token, and under
   `LIMEN_BASE_PATH` as well, for example `/v1/oversight/version`, so a

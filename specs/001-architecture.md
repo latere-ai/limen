@@ -3,10 +3,10 @@ title: "Architecture: the shared vocabulary, the ledger, the predictor, and the 
 status: complete
 track: core
 depends_on: []
-affects: [doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, server/, cmd/limend/, cmd/limen/, importer/topos/, api/, docs/]
+affects: [deploy/, test/deploy/, doc.go, action.go, prediction.go, decision.go, answer.go, profile.go, reliability.go, replay.go, service.go, errors.go, explanation.go, authorizer/, estimate/, stub/, conformance/, engine/, client/, server/, cmd/limend/, cmd/limen/, importer/topos/, api/, docs/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-05
 author: changkun
 ---
 
@@ -161,6 +161,15 @@ and hold no store credential, calls one `limend` over HTTP through
 against one interface. `FailClosed` wraps both: 200 milliseconds in
 process, 2 seconds over HTTP from a hook. Predictions never fit a model
 on the hot path; fitting runs in the background ([[004-engine]]).
+
+Latere's own installation is the manifests in `deploy/prod`, with the
+identity the release pipeline applies them with in `deploy/bootstrap`. The
+`deploy` job of `release.yml` applies `deploy/prod` with `limend` pinned
+by the digest the build pushed, waits for the Deployment, and repeats
+`tools/smoke/release.sh` against the live route until it serves the tag,
+where the repository variable `LIMEN_RELEASE_DEPLOY` is set. A fork sets
+neither it nor the kubeconfig secret and deploys nothing.
+`test/deploy/release_test.go` holds the job's shape.
 
 ### Invariants
 
