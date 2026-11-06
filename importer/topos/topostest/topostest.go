@@ -9,7 +9,7 @@ package topostest
 import (
 	"cmp"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"testing"
 	"time"
 
@@ -136,12 +136,12 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 			t.Fatal(err)
 		}
 		var events []session.Event
-		add := func(typ session.Type, payload json.RawMessage) string {
+		add := func(typ session.Type, payload jsontext.Value) string {
 			e := session.Event{ID: session.NewID(session.PrefixEvent), Type: typ, Time: tick(), Payload: payload}
 			events = append(events, e)
 			return e.ID
 		}
-		mustJSON := func(v any) json.RawMessage {
+		mustJSON := func(v any) jsontext.Value {
 			b, err := session.Marshal(v)
 			if err != nil {
 				t.Fatal(err)
@@ -149,7 +149,7 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 			return b
 		}
 		for _, r := range s.Raw {
-			add(r.Type, json.RawMessage(r.Payload))
+			add(r.Type, jsontext.Value(r.Payload))
 		}
 		var redact []string
 		person := session.Sender{Subject: s.Initiator, Kind: session.SenderPerson}
@@ -159,7 +159,7 @@ func Write(t testing.TB, dataDir string, sessions ...Session) []string {
 				in = "{}"
 			}
 			eid := add(session.TypeAgentToolUse, mustJSON(session.AgentToolUse{
-				ToolUseID: c.ToolUseID, Name: c.Name, Input: json.RawMessage(in),
+				ToolUseID: c.ToolUseID, Name: c.Name, Input: jsontext.Value(in),
 				Risk: c.Risk, Verdict: c.Verdict, Mode: c.Mode, ReviewProbability: c.ReviewProbability,
 				DecidedBy: c.DecidedBy, DecidedByRule: c.DecidedByRule, Attended: c.Attended,
 			}))

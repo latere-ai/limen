@@ -29,7 +29,7 @@ type Decision struct {
 	// for example after [FailClosed] stood in for an unreachable predictor,
 	// so the record and the person's answer still teach the model. When a
 	// prediction exists, an action sent here must be the same one.
-	Action *Action `json:"action,omitempty"`
+	Action *Action `json:"action,omitzero"`
 }
 
 // Validate reports every field of d that breaks the contract, as one

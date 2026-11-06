@@ -4,7 +4,7 @@
 package featurize
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -248,7 +248,7 @@ func FuzzOf2(f *testing.F) {
 	f.Add("", "", "", "", "", "", "", false)
 	f.Add("tool", "publish", `{}`, "sometimes", "galaxy", "twice", "moat", true)
 	f.Fuzz(func(t *testing.T, kind, name, input, undo, class, contact, hold string, damaged bool) {
-		a := limen.Action{Kind: kind, Name: name, Input: json.RawMessage(input), Effect: limen.EffectExternal,
+		a := limen.Action{Kind: kind, Name: name, Input: jsontext.Value(input), Effect: limen.EffectExternal,
 			Scope:       &limen.ReachClaim{Undo: undo, Contact: contact},
 			Target:      &limen.Target{Kind: kind, Class: class},
 			Environment: &limen.Environment{Holds: []string{hold}}}

@@ -6,7 +6,8 @@ package client_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"iter"
@@ -64,7 +65,7 @@ func jbAction(i int) limen.Action {
 		Name:        "bash",
 		Effect:      limen.EffectWrite,
 		Reversible:  &rev,
-		Input:       json.RawMessage(`{"command":"go test -run TestEngine -count=1 ./engine/... && git diff --stat origin/main"}`),
+		Input:       jsontext.Value(`{"command":"go test -run TestEngine -count=1 ./engine/... && git diff --stat origin/main"}`),
 		Target:      &limen.Target{Kind: "path", ID: "/workspace/engine/store/memory.go", Class: "workspace"},
 		Environment: &limen.Environment{Kind: "sandbox", Holds: []string{"no_network"}},
 		Attributes:  map[string]any{"branch": "main", "protected": true, "files": 3},

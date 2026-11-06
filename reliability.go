@@ -88,7 +88,7 @@ type Estimate struct {
 	// probability: the rate cannot be estimated, which is not zero.
 	Value *float64 `json:"value"`
 	// Interval is a 95% interval for the rate, present with Value.
-	Interval *[2]float64 `json:"interval,omitempty"`
+	Interval *[2]float64 `json:"interval,omitzero"`
 	// Covered is the share of the source's allows (or blocks) in the window
 	// whose review probability was positive. The estimate speaks for that
 	// share only.

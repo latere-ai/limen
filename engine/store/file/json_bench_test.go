@@ -5,7 +5,8 @@ package file_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,7 +36,7 @@ func jbCase(i int) store.Case {
 		Name:        "bash",
 		Effect:      limen.EffectWrite,
 		Reversible:  &rev,
-		Input:       json.RawMessage(`{"command":"go test ./engine/..."}`),
+		Input:       jsontext.Value(`{"command":"go test ./engine/..."}`),
 		Target:      &limen.Target{Kind: "path", ID: "/workspace/engine/store/memory.go", Class: "workspace"},
 		Environment: &limen.Environment{Kind: "sandbox", Holds: []string{"no_network"}},
 		Attributes:  map[string]any{"branch": "main", "protected": true, "files": 3},
@@ -156,7 +157,7 @@ func BenchmarkJSONFileCasesUnmarshal(b *testing.B) {
 
 // Put encodes the case and appends it as one line of the subject's log.
 func BenchmarkJSONFileCasePutMarshal(b *testing.B) {
-	enc, err := json.Marshal(jbCase(0))
+	enc, err := json.Marshal(jbCase(0), json.Deterministic(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -183,7 +184,7 @@ func BenchmarkJSONFileProfilesPutMarshal(b *testing.B) {
 		ps = append(ps, limen.Profile{Org: jbOrg, Kind: "tool", Agent: fmt.Sprintf("agent_%02d", i),
 			Costs: limen.DefaultCosts, AuditRate: 0.05})
 	}
-	enc, err := json.MarshalIndent(ps, "", "  ")
+	enc, err := json.Marshal(ps, json.Deterministic(true), jsontext.AllowInvalidUTF8(true), jsontext.WithIndent("  "))
 	if err != nil {
 		b.Fatal(err)
 	}

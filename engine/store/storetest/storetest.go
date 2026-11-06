@@ -14,7 +14,7 @@ package storetest
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -140,7 +140,7 @@ func ids(cs []store.Case) []string {
 func same(a, b store.Case) bool { return encode(a) == encode(b) }
 
 func encode(c store.Case) string {
-	b, err := json.Marshal(c)
+	b, err := json.Marshal(c, json.Deterministic(true))
 	if err != nil {
 		return "unencodable: " + err.Error()
 	}
@@ -366,8 +366,8 @@ func Week(from time.Time) limen.WeekReport {
 }
 
 func sameWeek(a, b limen.WeekReport) bool {
-	x, err1 := json.Marshal(a)
-	y, err2 := json.Marshal(b)
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
 	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 

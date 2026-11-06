@@ -4,7 +4,7 @@
 package engine_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -266,8 +266,8 @@ func TestEngineAndStubReportOrganizationsAlike(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		g, _ := json.Marshal(got)
-		w, _ := json.Marshal(want)
+		g, _ := json.Marshal(got, json.Deterministic(true))
+		w, _ := json.Marshal(want, json.Deterministic(true))
 		t.Errorf("the engine reports %s\nthe stub %s", g, w)
 	}
 	states := []string{}

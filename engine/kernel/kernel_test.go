@@ -4,7 +4,7 @@
 package kernel
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"math"
 	"math/rand/v2"
 	"os"

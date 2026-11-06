@@ -74,7 +74,8 @@ package featurize
 
 import (
 	"cmp"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"hash/fnv"
 	"math"
 	"slices"
@@ -279,12 +280,20 @@ func isShell(a limen.Action) bool {
 	return strings.EqualFold(a.Kind, "tool") && shellNames[strings.ToLower(a.Name)]
 }
 
+// foreignJSON reads tool arguments an agent wrote: repeated names and
+// invalid UTF-8 are accepted, as is any letter case in a name.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // command reads a shell action's command from its input: the field
 // command, or else cmd, each a string or an array of strings joined by
 // spaces. Anything else is no command.
-func command(input json.RawMessage) (string, bool) {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(input, &fields) != nil {
+func command(input jsontext.Value) (string, bool) {
+	var fields map[string]jsontext.Value
+	if json.Unmarshal(input, &fields, foreignJSON) != nil {
 		return "", false
 	}
 	for _, key := range []string{"command", "cmd"} {
@@ -293,11 +302,11 @@ func command(input json.RawMessage) (string, bool) {
 			continue
 		}
 		var s string
-		if json.Unmarshal(raw, &s) == nil {
+		if json.Unmarshal(raw, &s, foreignJSON) == nil {
 			return s, true
 		}
 		var parts []string
-		if json.Unmarshal(raw, &parts) == nil {
+		if json.Unmarshal(raw, &parts, foreignJSON) == nil {
 			return strings.Join(parts, " "), true
 		}
 	}
@@ -378,7 +387,8 @@ func attributes(v []float64, attrs map[string]any) {
 	capNorm(v, 1/math.Sqrt2)
 }
 
-// number reads a finite number of any Go numeric type or a json.Number.
+// number reads a finite number of any Go numeric type or of a decimal type
+// that converts with a Float64 method.
 func number(x any) (float64, bool) {
 	var f float64
 	switch n := x.(type) {
@@ -406,7 +416,7 @@ func number(x any) (float64, bool) {
 		f = float64(n)
 	case float64:
 		f = n
-	case json.Number:
+	case interface{ Float64() (float64, error) }:
 		var err error
 		if f, err = n.Float64(); err != nil {
 			return 0, false

@@ -4,7 +4,7 @@
 package limen
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"math"
 	"slices"
 	"strconv"
@@ -79,7 +79,7 @@ const MaxAttributes = 64
 type Action struct {
 	Key
 	// Actor is who proposed the action, when the decision point knows.
-	Actor *Actor `json:"actor,omitempty"`
+	Actor *Actor `json:"actor,omitzero"`
 	// Kind is the domain of the action and Name the operation within it:
 	// "tool" and "bash", "tool" and "mcp__github__merge_pull_request",
 	// "egress" and "https", "repo" and "ref.update", "spend" and "charge".
@@ -89,18 +89,18 @@ type Action struct {
 	// Effect is the widest effect the action can have.
 	Effect Effect `json:"effect"`
 	// Reversible says whether the action can be undone, when known.
-	Reversible *bool `json:"reversible,omitempty"`
+	Reversible *bool `json:"reversible,omitzero"`
 	// Input is the action's input, such as a tool call's arguments. Only
 	// deterministic feature extractors read it, so text an agent writes
 	// never instructs a model inside Limen, and Limen never stores it.
-	Input       json.RawMessage `json:"input,omitempty"`
-	Target      *Target         `json:"target,omitempty"`
-	Environment *Environment    `json:"environment,omitempty"`
+	Input       jsontext.Value `json:"input,omitzero"`
+	Target      *Target        `json:"target,omitzero"`
+	Environment *Environment   `json:"environment,omitzero"`
 	// Scope is what the decision point knows about the reach of the
 	// action, in the words of the vocabularies (spec 011). Limen reads the
 	// reach from the input and these fields as well, and the prediction
 	// gives the scope it used.
-	Scope *ReachClaim `json:"scope,omitempty"`
+	Scope *ReachClaim `json:"scope,omitzero"`
 	// Attributes are further observable facts the decision point's domain
 	// has, such as an amount or whether a branch is protected. Values are
 	// strings, numbers or booleans.
@@ -130,7 +130,7 @@ type Target struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
 	// Sensitivity runs from 0, a scratch directory, to 1, production.
-	Sensitivity *float64 `json:"sensitivity,omitempty"`
+	Sensitivity *float64 `json:"sensitivity,omitzero"`
 	// Class is the class of the target, a value of [TargetClasses], when
 	// the decision point knows it: a claim of the scope (spec 011).
 	Class string `json:"class,omitempty"`
@@ -160,7 +160,7 @@ func (e *Environment) Held(h string) bool { return e != nil && slices.Contains(e
 type Signal struct {
 	Source  string   `json:"source"`
 	Verdict Verdict  `json:"verdict,omitempty"`
-	Score   *float64 `json:"score,omitempty"`
+	Score   *float64 `json:"score,omitzero"`
 }
 
 // Validate reports every field of a that breaks the contract, as one
@@ -185,7 +185,9 @@ func (a Action) check(p *problems, at string) {
 	if !a.Effect.Valid() {
 		p.add(at+"effect", "is not one of none, read, write, external")
 	}
-	if len(a.Input) > 0 && !json.Valid(a.Input) {
+	// The input is a tool call's arguments, written by an agent, so
+	// repeated names and invalid UTF-8 do not make it invalid.
+	if len(a.Input) > 0 && !a.Input.IsValid(jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) {
 		p.add(at+"input", "is not valid JSON")
 	}
 	if a.Target != nil {
@@ -239,7 +241,7 @@ func scalar(v any) bool {
 		return !math.IsNaN(float64(x)) && !math.IsInf(float64(x), 0)
 	case float64:
 		return !math.IsNaN(x) && !math.IsInf(x, 0)
-	case json.Number:
+	case interface{ Float64() (float64, error) }:
 		_, err := x.Float64()
 		return err == nil
 	}

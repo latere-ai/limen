@@ -6,7 +6,8 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -158,9 +159,7 @@ func replay(args []string, stdin io.Reader, out, errOut *errwriter.Writer, geten
 		return exitFail
 	}
 	if o.json {
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(struct {
+		if err := json.MarshalEncode(jsontext.NewEncoder(out, reportJSON), struct {
 			Report  limen.ReplayReport `json:"report"`
 			Skipped map[string]int     `json:"skipped"`
 		}{rep, src.skipped}); err != nil {
@@ -206,6 +205,23 @@ func toposDataDir(getenv func(string) string) string {
 	return filepath.Join(home, ".local", "state", "topos")
 }
 
+// foreignJSON reads records people wrote or exported elsewhere: repeated
+// names, invalid UTF-8 and any letter case in a field name are accepted.
+var foreignJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
+// reportJSON writes the --json output: indented, with map keys in order so
+// two runs print the same bytes, and tolerant of invalid UTF-8 that records
+// from a file may carry.
+var reportJSON = json.JoinOptions(
+	jsontext.WithIndent("  "),
+	jsontext.AllowInvalidUTF8(true),
+	json.Deterministic(true),
+)
+
 // ndjson reads one record per line; blank lines are skipped.
 func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 	return func(yield func(limen.ReplayRecord, error) bool) {
@@ -219,7 +235,7 @@ func ndjson(r io.Reader) iter.Seq2[limen.ReplayRecord, error] {
 				continue
 			}
 			var rec limen.ReplayRecord
-			if err := json.Unmarshal([]byte(text), &rec); err != nil {
+			if err := json.Unmarshal([]byte(text), &rec, foreignJSON); err != nil {
 				yield(limen.ReplayRecord{}, fmt.Errorf("line %d is not a record: %w", line, err))
 				return
 			}

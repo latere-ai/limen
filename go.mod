@@ -9,7 +9,7 @@ tool latere.ai/x/ci-gate/cmd/lateregate
 require (
 	github.com/goccy/go-yaml v1.19.2
 	gonum.org/v1/gonum v0.17.0
-	latere.ai/x/pkg v0.111.0
+	latere.ai/x/pkg v0.113.0
 	latere.ai/x/topos v0.66.0
 )
 
@@ -50,5 +50,5 @@ require (
 	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	latere.ai/x/ci-gate v0.65.0 // indirect
-	latere.ai/x/sdk-go v0.21.0 // indirect
+	latere.ai/x/sdk-go v0.33.0 // indirect
 )

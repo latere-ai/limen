@@ -14,15 +14,16 @@ package consent
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"math/rand/v2"
 	"time"
 
+	"latere.ai/x/pkg/verdict"
+
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine"
-	"latere.ai/x/pkg/verdict"
 )
 
 // Kind is one kind of action the agent proposes, with how often it comes

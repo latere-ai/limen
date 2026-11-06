@@ -4,7 +4,8 @@
 package featurize
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -55,10 +56,10 @@ func BenchmarkJSONCommandFieldDecode(b *testing.B) {
 	for _, size := range []struct {
 		name string
 		n    int
-		raw  func(string) json.RawMessage
+		raw  func(string) jsontext.Value
 	}{
-		{"string", 300, func(s string) json.RawMessage { v, _ := json.Marshal(map[string]string{"command": s}); return v }},
-		{"array", 300, func(s string) json.RawMessage {
+		{"string", 300, func(s string) jsontext.Value { v, _ := json.Marshal(map[string]string{"command": s}); return v }},
+		{"array", 300, func(s string) jsontext.Value {
 			v, _ := json.Marshal(map[string][]string{"cmd": {"bash", "-lc", s}})
 			return v
 		}},

@@ -73,24 +73,24 @@ type HowAnswered struct {
 	// AnswerMS is the milliseconds from the moment the question was
 	// visible to the person to the answer, measured by the client, from 0
 	// to [MaxAnswerMS].
-	AnswerMS *int64 `json:"answer_ms,omitempty"`
+	AnswerMS *int64 `json:"answer_ms,omitzero"`
 	// WaitedMS is the milliseconds from the decision that showed the
 	// action to the answer, measured by the decision point, 0 or more.
-	WaitedMS *int64 `json:"waited_ms,omitempty"`
+	WaitedMS *int64 `json:"waited_ms,omitzero"`
 	// DetailsOpened is true if the person opened the details of the action
 	// (the full input, the change, the target) before the answer, and
 	// false if the client offered them and the person did not open them.
-	DetailsOpened *bool `json:"details_opened,omitempty"`
+	DetailsOpened *bool `json:"details_opened,omitzero"`
 	// SuggestionShown is true if the client showed the suggestion of Limen
 	// (the verdict, the approval probability, the reason, or an
 	// explanation) before the answer.
-	SuggestionShown *bool `json:"suggestion_shown,omitempty"`
+	SuggestionShown *bool `json:"suggestion_shown,omitzero"`
 	// Surface is where the person answered, from [Surfaces]. A surface
 	// outside the list is no surface, and it is not an error.
 	Surface string `json:"surface,omitempty"`
 	// Remembered is true if the answer also made a standing rule for
 	// later actions. The rule itself is never sent.
-	Remembered bool `json:"remembered,omitempty"`
+	Remembered bool `json:"remembered,omitzero"`
 }
 
 func (h HowAnswered) check(p *problems, at string) {
@@ -115,8 +115,8 @@ func (h HowAnswered) Kept() HowAnswered {
 // input, the prediction if one was made, the decision, and the answers.
 type Case struct {
 	Action     Action           `json:"action"`
-	Prediction *Prediction      `json:"prediction,omitempty"`
-	Decision   *Decision        `json:"decision,omitempty"`
+	Prediction *Prediction      `json:"prediction,omitzero"`
+	Decision   *Decision        `json:"decision,omitzero"`
 	Answers    []RecordedAnswer `json:"answers,omitempty"`
 }
 
@@ -140,12 +140,12 @@ type CaseQuery struct {
 	ActionID string `json:"action_id,omitempty"`
 	// Pending narrows the page to actions a decision showed a person that
 	// have no review yet: the review queue.
-	Pending bool `json:"pending,omitempty"`
+	Pending bool `json:"pending,omitzero"`
 	// Cursor is the previous page's NextCursor; empty for the first page.
 	Cursor string `json:"cursor,omitempty"`
 	// Limit bounds the page, from 1 to [MaxPageLimit]; zero is
 	// [DefaultPageLimit].
-	Limit int `json:"limit,omitempty"`
+	Limit int `json:"limit,omitzero"`
 }
 
 // The page bounds of [Ledger.Cases].

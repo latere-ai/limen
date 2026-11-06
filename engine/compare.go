@@ -102,7 +102,7 @@ type Tally struct {
 	// which a replay of decision point logs does not have, and Agree the
 	// records where Base suggests the recorded verdict again.
 	Recorded map[string]int `json:"recorded,omitempty"`
-	Agree    int            `json:"agree,omitempty"`
+	Agree    int            `json:"agree,omitzero"`
 
 	brier [2]float64
 }

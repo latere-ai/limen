@@ -171,7 +171,7 @@ type CalibrationBin struct {
 	// [NotEstimable]: null is not zero. Interval is its Wilson 95% interval
 	// at the Kish effective size of the reviews, present with Observed.
 	Observed *float64    `json:"observed"`
-	Interval *[2]float64 `json:"interval,omitempty"`
+	Interval *[2]float64 `json:"interval,omitzero"`
 	// Reviews counts the reviews of the covered cases, and Considered
 	// those whose answer has weight 1 under weights/1. No number of the
 	// bin reads the weight.

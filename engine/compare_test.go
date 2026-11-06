@@ -6,7 +6,7 @@ package engine_test
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -233,7 +233,7 @@ func TestCompareLedger(t *testing.T) {
 			c.Persons[i].Recorded, c.Persons[i].Agree = nil, 0
 		}
 		c.Overall.Recorded, c.Overall.Agree = nil, 0
-		b, _ := json.Marshal(c)
+		b, _ := json.Marshal(c, json.Deterministic(true))
 		return string(b)
 	}
 	if len(fromLedger.Persons) != 5 || fromLedger.Overall.Records != len(rs)+2 {

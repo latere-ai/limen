@@ -25,7 +25,8 @@ package main
 import (
 	"compress/gzip"
 	"encoding/csv"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -414,7 +415,7 @@ func writeMeta(w io.Writer, persons, decisions, draws int) error {
 		},
 		"cover": coverMeta(),
 	}
-	data, err := json.MarshalIndent(meta, "", "  ")
+	data, err := json.Marshal(meta, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

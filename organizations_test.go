@@ -4,7 +4,7 @@
 package limen
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"math/rand/v2"
 	"slices"
 	"testing"

@@ -37,7 +37,8 @@ import (
 	"bufio"
 	"cmp"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -202,7 +203,6 @@ func buildIdentity(o Options) http.Handler {
 	if err != nil {
 		panic("server: " + err.Error())
 	}
-	body = append(body, '\n')
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -361,15 +361,31 @@ func (h *handler) fail(c *call, err error) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(v, responseJSON)
 	if err != nil {
 		http.Error(w, "internal", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = w.Write(append(b, '\n'))
+	_, _ = w.Write(b)
 }
+
+// responseJSON writes response bodies. Strings an agent sent, and raw tool
+// arguments echoed back, may hold invalid UTF-8 or repeated names; they are
+// written as they were accepted instead of failing the response.
+var responseJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+)
+
+// requestJSON reads request bodies. The input of an action is a tool call's
+// arguments, written by an agent, so repeated names and invalid UTF-8 inside
+// it do not fail the request.
+var requestJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+)
 
 func noContent(w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) }
 
@@ -379,7 +395,7 @@ func noContent(w http.ResponseWriter) { w.WriteHeader(http.StatusNoContent) }
 // points at; a body past the bound is body_too_large.
 func (h *handler) decode(c *call, v any, invalid limen.Code) error {
 	body := http.MaxBytesReader(c.w, c.r.Body, h.maxBody)
-	if err := json.NewDecoder(body).Decode(v); err != nil {
+	if err := json.UnmarshalRead(body, v, requestJSON); err != nil {
 		return bodyError(err, invalid, "body")
 	}
 	return nil
@@ -390,10 +406,26 @@ func bodyError(err error, invalid limen.Code, where string) error {
 		return &limen.Error{Code: limen.CodeBodyTooLarge, Detail: fmt.Sprintf("%s exceeds %d bytes", where, mbe.Limit)}
 	}
 	e := &limen.Error{Code: invalid, Detail: where + ": " + err.Error()}
-	if ute, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && ute.Field != "" {
-		e.Fields = []string{ute.Field}
+	if se, ok := errors.AsType[*json.SemanticError](err); ok {
+		if f := fieldPath(se.JSONPointer); f != "" {
+			e.Fields = []string{f}
+		}
 	}
 	return e
+}
+
+// fieldPath turns a JSON pointer such as /attributes/amount into the dotted
+// name attributes.amount that error details carry. Array positions are left
+// out, so a field inside a list is named by the list's field.
+func fieldPath(p jsontext.Pointer) string {
+	var names []string
+	for tok := range p.Tokens() {
+		if _, err := strconv.ParseUint(tok, 10, 64); err == nil {
+			continue
+		}
+		names = append(names, tok)
+	}
+	return strings.Join(names, ".")
 }
 
 func (h *handler) predict(c *call) error {
@@ -721,7 +753,7 @@ func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 		}
 		at := "records[" + strconv.Itoa(len(recs)) + "]"
 		var r limen.ReplayRecord
-		if err := json.Unmarshal(b, &r); err != nil {
+		if err := json.Unmarshal(b, &r, requestJSON); err != nil {
 			// A line cut short by a failed read is the read's error.
 			if body.err != nil {
 				return nil, bodyError(body.err, limen.CodeInvalidReplay, "body")

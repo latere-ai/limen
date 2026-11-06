@@ -18,7 +18,7 @@ type ReplayRecord struct {
 	ReviewProbability float64   `json:"review_probability"`
 	Source            string    `json:"source"`
 	// Approve is the person's answer, or nil when there was none.
-	Approve *bool `json:"approve,omitempty"`
+	Approve *bool `json:"approve,omitzero"`
 	// AnsweredAt is when the person answered, not before At. A record
 	// without it has its answer at At, so the time Limen measures for the
 	// answer is zero and an approval of it does not build the cover
@@ -56,7 +56,7 @@ type ReplayOptions struct {
 	// Keep learns the records into the live models and the ledger, as if
 	// they had arrived as decisions and answers. Without it, a replay
 	// learns in a scratch model and keeps nothing.
-	Keep bool `json:"keep,omitempty"`
+	Keep bool `json:"keep,omitzero"`
 }
 
 // ReplayReport is what Limen would have suggested on a recorded history:

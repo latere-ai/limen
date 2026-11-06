@@ -5,7 +5,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"path/filepath"
 	"strings"

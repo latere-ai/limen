@@ -134,14 +134,14 @@ type WeekReport struct {
 	To    time.Time `json:"to"`
 	State string    `json:"state"`
 	// Total is the whole organization in the week.
-	Total *ReportCell `json:"total,omitempty"`
+	Total *ReportCell `json:"total,omitzero"`
 	// Agents has one cell for each agent with [ReportMinSubjects] persons
 	// or more in the week, by agent id.
 	Agents []AgentCell `json:"agents,omitempty"`
 	// Other has every other case of the week: the agents with no cell of
 	// their own and the cases with no agent. It is absent when there are
 	// none.
-	Other *ReportCell `json:"other,omitempty"`
+	Other *ReportCell `json:"other,omitzero"`
 }
 
 // ReportCell is the numbers of one group of a week's cases. Subjects,
@@ -187,13 +187,13 @@ type VerdictCounts struct {
 type FlagReviews struct {
 	Reviews int `json:"reviews"`
 	// Denied is absent when the answer rule withholds it.
-	Denied *int `json:"denied,omitempty"`
+	Denied *int `json:"denied,omitzero"`
 }
 
 // SourceRates are one source's two error rates in a cell. A rate is
 // absent when the answer rule withholds it; a rate with no review is
 // present with a null value, as in a reliability report.
 type SourceRates struct {
-	FalseAllow *Estimate `json:"false_allow,omitempty"`
-	FalseBlock *Estimate `json:"false_block,omitempty"`
+	FalseAllow *Estimate `json:"false_allow,omitzero"`
+	FalseBlock *Estimate `json:"false_block,omitzero"`
 }

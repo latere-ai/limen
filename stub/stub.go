@@ -23,7 +23,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -129,12 +130,24 @@ func New(o Options) *Service {
 	return s
 }
 
+// digestJSON writes an action the way its digest is taken. Digests are kept
+// with the ledger and compared on later requests, so the bytes stay fixed:
+// map keys in order, nil slices and maps as null, and <, > and & escaped.
+var digestJSON = json.JoinOptions(
+	json.Deterministic(true),
+	json.FormatNilSliceAsNull(true),
+	json.FormatNilMapAsNull(true),
+	jsontext.EscapeForHTML(true),
+	jsontext.EscapeForJS(true),
+	jsontext.AllowInvalidUTF8(true),
+)
+
 // digest names an action by every field but its input: the input is read
 // at prediction time and never kept, so it cannot tell two actions apart
 // afterwards.
 func digest(a limen.Action) (string, error) {
 	a.Input = nil
-	b, err := json.Marshal(a)
+	b, err := json.Marshal(a, digestJSON)
 	if err != nil {
 		return "", fmt.Errorf("stub: digest of action %s: %w", a.ActionID, err)
 	}
@@ -601,7 +614,7 @@ func (s *Service) Report(ctx context.Context, q limen.ReportQuery) (limen.Report
 			continue
 		}
 		w := estimate.Week(from, cases)
-		b, err := json.Marshal(w)
+		b, err := json.Marshal(w, json.Deterministic(true))
 		if err != nil {
 			return limen.Report{}, err
 		}

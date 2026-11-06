@@ -4,7 +4,7 @@
 package engine_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"

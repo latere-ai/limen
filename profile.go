@@ -111,7 +111,7 @@ type Profile struct {
 	Thresholds Thresholds `json:"thresholds"`
 	// Default is true for the built-in profile Limen applies to a scope
 	// with no saved profile. A caller cannot set it.
-	Default bool `json:"default,omitempty"`
+	Default bool `json:"default,omitzero"`
 }
 
 // Costs are the three prices of a decision, in any one unit. Only their

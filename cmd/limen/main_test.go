@@ -5,7 +5,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -134,7 +135,7 @@ func TestReplayFile(t *testing.T) {
 	at := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	for i := range 40 {
 		a := limen.Action{Org: "o", Subject: "s", ActionID: fmt.Sprintf("a%d", i), Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
-			Input: json.RawMessage(`{"command":"go test ./..."}`)}
+			Input: jsontext.Value(`{"command":"go test ./..."}`)}
 		approve := &yes
 		if i%5 == 0 {
 			approve = &no
@@ -280,5 +281,24 @@ func TestKeepIntoAStore(t *testing.T) {
 	code, out, errOut := runCLI(t, "", env(nil), "replay", "topos", "--data", data, "--store", ledger, "--keep")
 	if code != exitFail || !strings.Contains(out+errOut, "already has a decision") {
 		t.Errorf("a second kept replay: exit %d:\n%s%s", code, out, errOut)
+	}
+}
+
+// A record file written by hand or by another tool is read as it came:
+// a repeated name is taken, and a name in another letter case matches.
+func TestNDJSONForeignRecords(t *testing.T) {
+	line := `{"At":"2026-09-01T00:00:00Z","action":{"org":"o","subject":"s","action_id":"a","kind":"tool","name":"bash","effect":"write","name":"sh"},"verdict":"ask","Review_Probability":1,"source":"rules/1"}`
+	n := 0
+	for rec, err := range ndjson(strings.NewReader(line + "\n")) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		n++
+		if rec.Action.Name != "sh" || rec.ReviewProbability != 1 || rec.At.Year() != 2026 {
+			t.Errorf("record %+v", rec)
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d records", n)
 	}
 }

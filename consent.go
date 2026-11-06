@@ -88,8 +88,8 @@ type Approval struct {
 // setting that applies is the greater of the two. Zero is the setting of
 // the installation, and a value below zero is refused.
 type Consent struct {
-	MinWeight   int `json:"min_weight,omitempty"`
-	MinSessions int `json:"min_sessions,omitempty"`
+	MinWeight   int `json:"min_weight,omitzero"`
+	MinSessions int `json:"min_sessions,omitzero"`
 }
 
 // Minimum is the answer minimum of v0.6, the interim rule the cover rule

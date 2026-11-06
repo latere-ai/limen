@@ -4,7 +4,8 @@
 package limen
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"go/parser"
@@ -154,7 +155,7 @@ func validAction() Action {
 		Name:        "bash",
 		Effect:      EffectExternal,
 		Reversible:  b(false),
-		Input:       json.RawMessage(`{"command":"git push origin main"}`),
+		Input:       jsontext.Value(`{"command":"git push origin main"}`),
 		Target:      &Target{Kind: "ref", ID: "refs/heads/main", Sensitivity: f(0.9)},
 		Environment: &Environment{Kind: "sandbox", Credentialed: true},
 		Attributes:  map[string]any{"protected": true, "files": 3, "remote": "origin", "ratio": 0.5},
@@ -190,7 +191,7 @@ func TestActionValidate(t *testing.T) {
 		{"kind", func(a *Action) { a.Kind = "" }},
 		{"name", func(a *Action) { a.Name = "" }},
 		{"effect", func(a *Action) { a.Effect = "delete" }},
-		{"input", func(a *Action) { a.Input = json.RawMessage(`{`) }},
+		{"input", func(a *Action) { a.Input = jsontext.Value(`{`) }},
 		{"target.kind", func(a *Action) { a.Target.Kind = "" }},
 		{"target.sensitivity", func(a *Action) { a.Target.Sensitivity = f(1.5) }},
 		{"environment.kind", func(a *Action) { a.Environment.Kind = "" }},
@@ -224,13 +225,18 @@ func TestActionValidate(t *testing.T) {
 	}
 }
 
+// decimal is a number kept as text that converts with a Float64 method.
+type decimal string
+
+func (d decimal) Float64() (float64, error) { return strconv.ParseFloat(string(d), 64) }
+
 func TestScalar(t *testing.T) {
-	for _, v := range []any{"s", true, 1, int8(1), int16(1), int32(1), int64(1), uint(1), uint8(1), uint16(1), uint32(1), uint64(1), float32(1), 1.5, json.Number("2.5")} {
+	for _, v := range []any{"s", true, 1, int8(1), int16(1), int32(1), int64(1), uint(1), uint8(1), uint16(1), uint32(1), uint64(1), float32(1), 1.5, decimal("2.5")} {
 		if !scalar(v) {
 			t.Errorf("%T %v is not a scalar", v, v)
 		}
 	}
-	for _, v := range []any{nil, []int{1}, map[string]any{}, float32(math.Inf(1)), math.Inf(-1), json.Number("x")} {
+	for _, v := range []any{nil, []int{1}, map[string]any{}, float32(math.Inf(1)), math.Inf(-1), decimal("x")} {
 		if scalar(v) {
 			t.Errorf("%T %v is a scalar", v, v)
 		}
@@ -566,5 +572,20 @@ func TestScopeOfAndCandidates(t *testing.T) {
 	}
 	if got := (Scope{Org: "o", Kind: "tool"}).Candidates(); !slices.Equal(got, []Scope{{Org: "o", Kind: "tool"}, {Org: "o"}}) {
 		t.Errorf("kind only = %+v", got)
+	}
+}
+
+// An empty object is an input that is there, and is kept on the wire.
+func TestInputOmitzero(t *testing.T) {
+	b, err := json.Marshal(Action{Kind: "k", Name: "n", Input: jsontext.Value(`{}`)})
+	if err != nil || !strings.Contains(string(b), `"input":{}`) {
+		t.Errorf("empty input: %s %v", b, err)
+	}
+	if b, _ = json.Marshal(Action{Kind: "k", Name: "n"}); strings.Contains(string(b), `"input"`) {
+		t.Errorf("no input: %s", b)
+	}
+	dup := Action{Org: "o", Subject: "s", ActionID: "a", Kind: "k", Name: "n", Effect: EffectRead, Input: jsontext.Value(`{"a":1,"a":2}`)}
+	if err := dup.Validate(); err != nil {
+		t.Errorf("repeated names in the input: %v", err)
 	}
 }

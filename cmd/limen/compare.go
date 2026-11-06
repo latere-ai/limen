@@ -5,7 +5,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -121,9 +122,7 @@ func compare(args []string, stdin io.Reader, out, errOut *errwriter.Writer, gete
 		skipped = src.skipped
 	}
 	if o.json {
-		enc := json.NewEncoder(out)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(struct {
+		if err := json.MarshalEncode(jsontext.NewEncoder(out, reportJSON), struct {
 			Comparison engine.Comparison `json:"comparison"`
 			Skipped    map[string]int    `json:"skipped"`
 		}{c, skipped}); err != nil {

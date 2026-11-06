@@ -4,7 +4,8 @@
 package featurize
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -69,7 +70,7 @@ func TestEmptyAction(t *testing.T) {
 
 func TestDeterministic(t *testing.T) {
 	a := bash("cd x && rm -rf ../y | tee /etc/z")
-	a.Attributes = map[string]any{"a": 1, "b": true, "c": "x", "d": 2.5, "e": -3, "f": json.Number("4"), "g": uint8(1)}
+	a.Attributes = map[string]any{"a": 1, "b": true, "c": "x", "d": 2.5, "e": -3, "f": decimal("4"), "g": uint8(1)}
 	a.Signals = []limen.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/x", Verdict: limen.Block}}
 	first := Of(a)
 	for range 50 {
@@ -152,7 +153,7 @@ func TestShellGroups(t *testing.T) {
 	}
 	// The command may be an array, or under cmd.
 	for _, in := range []string{`{"command":["rm","-rf","x"]}`, `{"cmd":"rm -rf x"}`, `{"cmd":["rm","-rf","x"]}`} {
-		a := limen.Action{Kind: "tool", Name: "exec_command", Input: json.RawMessage(in)}
+		a := limen.Action{Kind: "tool", Name: "exec_command", Input: jsontext.Value(in)}
 		if Of(a).C[cDestructive] != 1 {
 			t.Errorf("%s is not read", in)
 		}
@@ -160,11 +161,11 @@ func TestShellGroups(t *testing.T) {
 	// A tool that is not a shell, a kind that is not a tool, malformed
 	// input, and an unusable command have zero shell groups.
 	for _, a := range []limen.Action{
-		{Kind: "tool", Name: "write", Input: json.RawMessage(`{"command":"rm -rf x"}`)},
-		{Kind: "egress", Name: "bash", Input: json.RawMessage(`{"command":"rm -rf x"}`)},
-		{Kind: "tool", Name: "bash", Input: json.RawMessage(`{`)},
-		{Kind: "tool", Name: "bash", Input: json.RawMessage(`{"command":42}`)},
-		{Kind: "tool", Name: "bash", Input: json.RawMessage(`{"other":"rm -rf x"}`)},
+		{Kind: "tool", Name: "write", Input: jsontext.Value(`{"command":"rm -rf x"}`)},
+		{Kind: "egress", Name: "bash", Input: jsontext.Value(`{"command":"rm -rf x"}`)},
+		{Kind: "tool", Name: "bash", Input: jsontext.Value(`{`)},
+		{Kind: "tool", Name: "bash", Input: jsontext.Value(`{"command":42}`)},
+		{Kind: "tool", Name: "bash", Input: jsontext.Value(`{"other":"rm -rf x"}`)},
 	} {
 		f := Of(a)
 		if f.C[cDestructive] != 0 || slices.ContainsFunc(f.A[aClasses:aClasses+numClasses], func(v float64) bool { return v != 0 }) {
@@ -224,11 +225,11 @@ func TestAttributes(t *testing.T) {
 	}
 	// NaN, infinity, and unsupported values add nothing.
 	v = make([]float64, attrBuckets)
-	attributes(v, map[string]any{"a": math.NaN(), "b": math.Inf(1), "c": []int{1}, "d": nil, "e": json.Number("x")})
+	attributes(v, map[string]any{"a": math.NaN(), "b": math.Inf(1), "c": []int{1}, "d": nil, "e": decimal("x")})
 	if slices.ContainsFunc(v, func(x float64) bool { return x != 0 }) {
 		t.Errorf("unusable values added %v", v)
 	}
-	for _, x := range []any{int(1), int8(1), int16(1), int32(1), int64(1), uint(1), uint8(1), uint16(1), uint32(1), uint64(1), float32(1), 1.0, json.Number("1")} {
+	for _, x := range []any{int(1), int8(1), int16(1), int32(1), int64(1), uint(1), uint8(1), uint16(1), uint32(1), uint64(1), float32(1), 1.0, decimal("1")} {
 		if f, ok := number(x); !ok || f != 1 {
 			t.Errorf("number(%T) = %v, %v", x, f, ok)
 		}
@@ -363,7 +364,7 @@ func FuzzOf(f *testing.F) {
 	f.Add("tool", "exec_command", `{"cmd":["sh","-c","eval $(x)"]}`, -3.0, 9.0, "x=y", -1e300, "classifier/a")
 	f.Fuzz(func(t *testing.T, kind, name, input string, sens, score float64, key string, num float64, source string) {
 		a := limen.Action{
-			Kind: kind, Name: name, Input: json.RawMessage(input),
+			Kind: kind, Name: name, Input: jsontext.Value(input),
 			Target:     &limen.Target{Kind: kind, Sensitivity: &sens},
 			Attributes: map[string]any{key: num, key + "s": name, key + "b": sens > 0},
 			Signals:    []limen.Signal{{Source: source, Verdict: limen.Verdict(name), Score: &score}},
@@ -382,5 +383,24 @@ func BenchmarkOf(b *testing.B) {
 	a.Signals = []limen.Signal{{Source: "rules/1", Score: ptr(0.4)}, {Source: "classifier/claude-auto-mode", Verdict: limen.Allow}}
 	for b.Loop() {
 		Of(a)
+	}
+}
+
+// decimal is a number kept as text that converts with a Float64 method.
+type decimal string
+
+func (d decimal) Float64() (float64, error) { return strconv.ParseFloat(string(d), 64) }
+
+// Tool arguments an agent wrote are read as they came: repeated names are
+// taken, the last one winning, and invalid UTF-8 does not hide the command.
+func TestCommandForeignInput(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"command":"ls","command":"pwd"}`:          "pwd",
+		"{\"command\":\"ls \xff\"}":                 "ls �",
+		`{"cmd":["go","vet"],"cmd":["go","build"]}`: "go build",
+	} {
+		if got, ok := command(jsontext.Value(in)); !ok || got != want {
+			t.Errorf("%q: %q %v, want %q", in, got, ok, want)
+		}
 	}
 }

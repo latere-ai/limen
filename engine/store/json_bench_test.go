@@ -5,7 +5,8 @@ package store_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func jbCase(i int) store.Case {
 		Name:        "bash",
 		Effect:      limen.EffectWrite,
 		Reversible:  &rev,
-		Input:       json.RawMessage(`{"command":"go test ./engine/..."}`),
+		Input:       jsontext.Value(`{"command":"go test ./engine/..."}`),
 		Target:      &limen.Target{Kind: "path", ID: "/workspace/engine/store/memory.go", Sensitivity: &sens, Class: "workspace"},
 		Environment: &limen.Environment{Kind: "sandbox", Holds: []string{"no_network"}},
 		Attributes:  map[string]any{"branch": "main", "protected": true, "files": 3},
@@ -68,7 +69,7 @@ func jbMemory(b *testing.B, n int) *store.Memory {
 
 func jbCaseSize(b *testing.B) int64 {
 	b.Helper()
-	enc, err := json.Marshal(jbCase(0))
+	enc, err := json.Marshal(jbCase(0), json.Deterministic(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -49,7 +49,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -65,6 +66,13 @@ import (
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/engine/store"
+)
+
+// storedJSON writes what the store keeps: map keys in order, so the same
+// value is the same bytes, and invalid UTF-8 in a string replaced.
+var storedJSON = json.JoinOptions(
+	json.Deterministic(true),
+	jsontext.AllowInvalidUTF8(true),
 )
 
 // ErrLocked is returned by Open when another owner holds the directory.
@@ -245,7 +253,7 @@ func (s *Store) ensureDir(sub *subject, org, name string) error {
 	if err := os.MkdirAll(sub.dir, 0o700); err != nil {
 		return fmt.Errorf("file store: create %s: %w", sub.dir, err)
 	}
-	meta, err := json.Marshal(map[string]string{"org": org, "subject": name})
+	meta, err := json.Marshal(map[string]string{"org": org, "subject": name}, storedJSON)
 	if err != nil {
 		return err
 	}
@@ -290,7 +298,7 @@ func (s *Store) Put(ctx context.Context, c store.Case) error {
 		return err
 	}
 	c.Action.Input = nil
-	b, err := json.Marshal(c)
+	b, err := json.Marshal(c, storedJSON)
 	if err != nil {
 		return fmt.Errorf("file store: encode case %s: %w", k.ActionID, err)
 	}
@@ -467,7 +475,7 @@ func (s *Store) writeProfiles(org string, ps map[limen.Scope]limen.Profile) erro
 	slices.SortFunc(list, func(a, b limen.Profile) int {
 		return strings.Compare(a.Kind+"\x00"+a.Agent+"\x00"+a.Subject, b.Kind+"\x00"+b.Agent+"\x00"+b.Subject)
 	})
-	data, err := json.MarshalIndent(list, "", "  ")
+	data, err := json.Marshal(list, storedJSON, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -541,7 +549,10 @@ func (s *Store) Subjects(ctx context.Context, org string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("file store: read %s: %w", path, err)
 		}
-		var meta struct{ Org, Subject string }
+		var meta struct {
+			Org     string `json:"org"`
+			Subject string `json:"subject"`
+		}
 		if err := json.Unmarshal(data, &meta); err != nil || meta.Org != org {
 			return nil, fmt.Errorf("file store: %s does not name a subject of %s", path, org)
 		}
@@ -591,7 +602,9 @@ func (s *Store) Orgs(ctx context.Context) ([]string, error) {
 			if err != nil {
 				return nil, fmt.Errorf("file store: read %s: %w", path, err)
 			}
-			var meta struct{ Org string }
+			var meta struct {
+				Org string `json:"org"`
+			}
 			if err := json.Unmarshal(data, &meta); err != nil || encode(meta.Org) != o.Name() {
 				return nil, fmt.Errorf("file store: %s does not name an organization of %s", path, o.Name())
 			}
@@ -637,7 +650,7 @@ func (s *Store) PutWeekReport(ctx context.Context, org string, w limen.WeekRepor
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(w, "", "  ")
+	data, err := json.Marshal(w, storedJSON, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

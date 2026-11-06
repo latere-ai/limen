@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	latere.ai/x/limen v0.0.0
-	latere.ai/x/pkg v0.111.0
+	latere.ai/x/pkg v0.113.0
 )
 
 require gonum.org/v1/gonum v0.17.0 // indirect

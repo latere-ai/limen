@@ -6,7 +6,7 @@ package file_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
@@ -627,7 +627,36 @@ func TestKeptWeekSurvivesAReopen(t *testing.T) {
 
 // sameReport compares two reports by their JSON, the form the store keeps.
 func sameReport(a, b limen.Report) bool {
-	x, err1 := json.Marshal(a)
-	y, err2 := json.Marshal(b)
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
 	return err1 == nil && err2 == nil && bytes.Equal(x, y)
+}
+
+// A subject's meta.json names its organization and subject in lower case,
+// the form a reader of the directory sees.
+func TestMetaBytes(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	k := limen.Key{Org: "o", Subject: "s", ActionID: "a"}
+	if err := s.Put(context.Background(), store.Case{Action: limen.Action{Key: k, Kind: "tool", Name: "bash", Effect: limen.EffectWrite}}); err != nil {
+		t.Fatal(err)
+	}
+	var found int
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil && d.Name() == "meta.json" {
+			b, rerr := os.ReadFile(p)
+			if rerr != nil || string(b) != `{"org":"o","subject":"s"}` {
+				t.Errorf("meta.json %q %v", b, rerr)
+			}
+			found++
+		}
+		return err
+	})
+	if err != nil || found != 1 {
+		t.Fatalf("%d meta.json files, %v", found, err)
+	}
+	subs, err := s.Subjects(context.Background(), "o")
+	if err != nil || len(subs) != 1 || subs[0] != "s" {
+		t.Errorf("subjects %v %v", subs, err)
+	}
 }

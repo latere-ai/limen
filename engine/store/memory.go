@@ -5,12 +5,20 @@ package store
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"slices"
 	"sync"
 	"time"
 
 	"latere.ai/x/limen"
+)
+
+// storedJSON writes what the store keeps: map keys in order, so the same
+// value is the same bytes, and invalid UTF-8 in a string replaced.
+var storedJSON = json.JoinOptions(
+	json.Deterministic(true),
+	jsontext.AllowInvalidUTF8(true),
 )
 
 type subjectKey struct{ org, subject string }
@@ -70,7 +78,7 @@ func (m *Memory) Put(ctx context.Context, c Case) error {
 		return err
 	}
 	c.Action.Input = nil
-	b, err := json.Marshal(c)
+	b, err := json.Marshal(c, storedJSON)
 	if err != nil {
 		return err
 	}
@@ -190,7 +198,7 @@ func (m *Memory) PutWeekReport(ctx context.Context, org string, w limen.WeekRepo
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	b, err := json.Marshal(w)
+	b, err := json.Marshal(w, storedJSON)
 	if err != nil {
 		return err
 	}

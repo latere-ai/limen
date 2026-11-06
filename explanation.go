@@ -88,7 +88,7 @@ type Explanation struct {
 	// named. When the two differ the model has learned since, and the
 	// explanation is of what it suggests now.
 	Model       ModelRef  `json:"model"`
-	PredictedBy *ModelRef `json:"predicted_by,omitempty"`
+	PredictedBy *ModelRef `json:"predicted_by,omitzero"`
 	// Approve, Uncertainty and Verdict are the prediction Model makes for
 	// the action, at the action's own time, under Thresholds: those of the
 	// recorded prediction, or of the profile that applies now. Verdict is
@@ -119,7 +119,7 @@ type Explanation struct {
 	// Mean is the latent mean; Parts split it and sum to it, and are absent
 	// for a model whose kernel has no parts.
 	Mean  float64 `json:"mean"`
-	Parts *Parts  `json:"parts,omitempty"`
+	Parts *Parts  `json:"parts,omitzero"`
 	// EvidenceRatio is the share of the prior variance the person's answers
 	// removed at this action, in [0, 1).
 	EvidenceRatio float64 `json:"evidence_ratio"`

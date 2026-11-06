@@ -29,7 +29,8 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -199,12 +200,24 @@ func (e *Engine) lock(org, subject string) func() {
 	return m.Unlock
 }
 
+// digestJSON writes an action the way its digest is taken. Digests are kept
+// with the ledger and compared on later requests, so the bytes stay fixed:
+// map keys in order, nil slices and maps as null, and <, > and & escaped.
+var digestJSON = json.JoinOptions(
+	json.Deterministic(true),
+	json.FormatNilSliceAsNull(true),
+	json.FormatNilMapAsNull(true),
+	jsontext.EscapeForHTML(true),
+	jsontext.EscapeForJS(true),
+	jsontext.AllowInvalidUTF8(true),
+)
+
 // digest names an action by every field but its input: the input is read
 // at prediction time and never kept, so it cannot tell two actions apart
 // later.
 func digest(a limen.Action) (string, error) {
 	a.Input = nil
-	b, err := json.Marshal(a)
+	b, err := json.Marshal(a, digestJSON)
 	if err != nil {
 		return "", fmt.Errorf("engine: digest of action %s: %w", a.ActionID, err)
 	}

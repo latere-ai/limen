@@ -17,7 +17,8 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -107,11 +108,19 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if out == nil || resp.StatusCode == http.StatusNoContent {
 		return nil
 	}
-	if err := json.Unmarshal(raw, out); err != nil {
+	if err := json.Unmarshal(raw, out, lenientJSON); err != nil {
 		return fmt.Errorf("client: %s %s: decoding a %d response: %w", method, path, resp.StatusCode, err)
 	}
 	return nil
 }
+
+// lenientJSON reads and writes the bodies of the API. The input of an action
+// is a tool call's arguments, written by an agent, so repeated names and
+// invalid UTF-8 inside it pass through instead of failing the call.
+var lenientJSON = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+)
 
 // envelope is the API's error body.
 type envelope struct {
@@ -132,7 +141,7 @@ type envelope struct {
 // internal otherwise.
 func responseError(method, path string, status int, raw []byte) error {
 	var env envelope
-	if json.Unmarshal(raw, &env) == nil && env.Error.Code != "" {
+	if json.Unmarshal(raw, &env, lenientJSON) == nil && env.Error.Code != "" {
 		d := env.Error.Details
 		detail := d.Detail
 		if d.RequestID != "" {
@@ -153,7 +162,7 @@ func responseError(method, path string, status int, raw []byte) error {
 }
 
 func (c *Client) json(ctx context.Context, method, path string, in, out any) error {
-	b, err := json.Marshal(in)
+	b, err := json.Marshal(in, lenientJSON)
 	if err != nil {
 		return fmt.Errorf("client: encoding the %s %s body: %w", method, path, err)
 	}
@@ -263,14 +272,14 @@ func (c *Client) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		enc := json.NewEncoder(pw)
+		enc := jsontext.NewEncoder(pw, lenientJSON)
 		for r, err := range records {
 			if err != nil {
 				srcErr = err
 				pw.CloseWithError(err)
 				return
 			}
-			if err := enc.Encode(r); err != nil {
+			if err := json.MarshalEncode(enc, r); err != nil {
 				pw.CloseWithError(err)
 				return
 			}

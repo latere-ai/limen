@@ -7,7 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -110,7 +111,7 @@ func (s *spy) Preview(ctx context.Context, r limen.PreviewRequest) (limen.Previe
 
 func action(subject, id string) limen.Action {
 	return limen.Action{Org: "o", Subject: subject, ActionID: id, Kind: "tool", Name: "bash", Effect: limen.EffectWrite,
-		Input: json.RawMessage(`{"command":"ls"}`)}
+		Input: jsontext.Value(`{"command":"ls"}`)}
 }
 
 func body(t *testing.T, v any) string {
@@ -914,3 +915,15 @@ func TestReplayReadError(t *testing.T) {
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
+
+// An agent's tool arguments may repeat a name or carry invalid UTF-8; the
+// request is still taken, and a type error names its field with dots.
+func TestDecodingForeignInput(t *testing.T) {
+	h := New(stub.New(stub.Options{}), Local(tok, admin))
+	dup := strings.Replace(body(t, action(alice, "u2")), `{"command":"ls"}`, "{\"command\":\"ls\",\"command\":\"pwd\",\"bad\":\"\xff\"}", 1)
+	if w := do(t, h, req{http.MethodPost, "/v1/predictions", dup}); w.Code != http.StatusOK {
+		t.Errorf("repeated names and invalid UTF-8 in the input: %d %s", w.Code, w.Body.String())
+	}
+	nested := strings.Replace(body(t, action(alice, "u3")), `{`, `{"target":{"kind":3},`, 1)
+	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", nested}), limen.CodeInvalidAction, "target.kind")
+}

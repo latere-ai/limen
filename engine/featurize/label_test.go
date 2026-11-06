@@ -4,7 +4,8 @@
 package featurize
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ func TestLabel(t *testing.T) {
 		{shell("kubectl apply -f prod.yaml"), "bash: kubectl"},
 		{shell("./deploy.sh --token abc"), "bash: other command"},
 		{shell(""), "bash: other command"},
-		{limen.Action{Kind: "tool", Name: "bash", Input: json.RawMessage(`{"cmd":["go","vet","./..."]}`)}, "bash: go vet"},
+		{limen.Action{Kind: "tool", Name: "bash", Input: jsontext.Value(`{"cmd":["go","vet","./..."]}`)}, "bash: go vet"},
 		{limen.Action{Kind: "tool", Name: "Web_Fetch"}, "web_fetch"},
 		{limen.Action{Kind: "egress", Name: "https"}, "egress https"},
 		{limen.Action{Kind: "repo"}, "repo"},

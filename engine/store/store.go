@@ -43,13 +43,13 @@ type Case struct {
 	// made, and Families its families for the cover rule, both in words of
 	// the vocabularies alone (spec 011). A case from before labels/2 has
 	// neither, and the cover rule reads them from its records.
-	Scope      *limen.Reach      `json:"scope,omitempty"`
+	Scope      *limen.Reach      `json:"scope,omitzero"`
 	Families   []string          `json:"families,omitempty"`
-	Prediction *limen.Prediction `json:"prediction,omitempty"`
+	Prediction *limen.Prediction `json:"prediction,omitzero"`
 	// PredictedBy is the number of answers the model that made Prediction
 	// was fitted through, nil for a case from before models were named.
-	PredictedBy *int64                 `json:"predicted_by,omitempty"`
-	Decision    *limen.Decision        `json:"decision,omitempty"`
+	PredictedBy *int64                 `json:"predicted_by,omitzero"`
+	Decision    *limen.Decision        `json:"decision,omitzero"`
 	DecidedAt   time.Time              `json:"decided_at,omitzero"`
 	Answers     []limen.RecordedAnswer `json:"answers,omitempty"`
 }
