@@ -77,7 +77,7 @@ different token, `limend` refuses it with `unauthenticated`.
 
 When it starts, `limend` reads the key set of each issuer before it
 opens its port. If it cannot read a key set, or an issuer does not answer
-in 10 seconds, it stops with exit code 1. A token must not be older than
+a request in 10 seconds, it stops with exit code 1. A token must not be older than
 one day, and it must carry the time when it was issued.
 
 Without an authorization endpoint, the shared owner policy decides:
@@ -125,5 +125,5 @@ error and stops. It does not start with a part of its configuration.
 | 2 | `LIMEN_BASE_PATH`, `LIMEN_MIN_ALLOWS`, `LIMEN_MIN_SESSIONS`, `LIMEN_ANSWER_FLOOR_MS`, `LIMEN_ANSWER_FATIGUE`, or `LIMEN_MODEL` is not correct. |
 | 2 | There is no ledger directory: `LIMEN_DATA_DIR`, `XDG_STATE_HOME`, and `HOME` are all empty. |
 | 1 | `limend` cannot open the ledger directory, for example because a different process holds it. |
-| 1 | `limend` cannot read the key set of an issuer in `LIMEN_OIDC_ISSUERS`, or the issuer does not answer in 10 seconds. |
+| 1 | `limend` cannot read the key set of an issuer in `LIMEN_OIDC_ISSUERS`, or the issuer does not answer a request in 10 seconds. |
 | 1 | `limend` cannot listen on `LIMEN_ADDR`. |

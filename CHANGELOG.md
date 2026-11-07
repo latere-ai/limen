@@ -47,9 +47,10 @@ the commit log.
   counts of persons and decisions obey the rule of 5 persons only. A
   failure of Limen never makes Limen suggest `allow`, and your rules
   then decide up to their ceiling.
-- **A start stops when an issuer does not answer in 10 seconds.** Before,
-  `limend` could wait for an issuer without a limit, at a start and when
-  it read a key set again, and requests waited behind it.
+- **A start stops when an issuer does not answer a request in 10
+  seconds.** Before, `limend` could wait for an issuer without a limit,
+  at a start and when it read a key set again, and requests waited
+  behind it.
 - **`limend` opens its port after it reads the key sets of the issuers.**
   A TCP probe that passes now means that `limend` can check a token.
   Before, the port opened first, and the probe passed while `limend`
