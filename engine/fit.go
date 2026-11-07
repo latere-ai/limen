@@ -31,8 +31,11 @@ type model struct {
 	// answers arriving together are fitted once.
 	fitMu     sync.Mutex
 	scheduled atomic.Bool
-	bytes     atomic.Int64
-	elem      *list.Element
+	// gone is set when Forget drops the model, under the subject's lock. A
+	// fit queued behind the one Forget interrupted finds it set and stops.
+	gone  atomic.Bool
+	bytes atomic.Int64
+	elem  *list.Element
 	// ledger is the subject's cases as the cover rule reads them, built
 	// when the model is loaded and kept with each write, so a prediction
 	// reads no case from the store. The subject's lock guards it.
@@ -123,6 +126,7 @@ func (c *cache) drop(k subjectKey) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if m := c.byKey[k]; m != nil {
+		m.gone.Store(true)
 		c.lru.Remove(m.elem)
 		delete(c.byKey, k)
 		c.used -= m.bytes.Load()
@@ -254,9 +258,16 @@ func (e *Engine) training(ctx context.Context, k subjectKey) ([]kernel.Point, []
 // fit refits a model on the subject's answers, stores the state, and swaps
 // the new posterior in. One fit runs per model at a time. The answers are
 // read under the subject's lock, which locked says the caller holds, and the
-// factorization runs without it, so predictions never wait for a fit. Locks
-// are taken in one order, the subject's and then the model's fit lock.
+// factorization runs without it, so predictions never wait for a fit. The
+// snapshot is written under the subject's write guard, and only if the
+// subject was not forgotten since the fit began, so a fit never brings back
+// a person Forget removed. Locks are taken in one order, the subject's, then
+// the model's fit lock, then the write guard.
 func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
+	g := e.writeGuard(m.key)
+	g.mu.Lock()
+	gen := g.forgets
+	g.mu.Unlock()
 	unlock := func() {}
 	if !locked {
 		unlock = e.lock(m.key.org, m.key.subject)
@@ -278,6 +289,11 @@ func (e *Engine) fit(ctx context.Context, m *model, locked bool) error {
 	b, err := encodeSnapshot(snapshot{State: post.State(), Answers: answers})
 	if err != nil {
 		return err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if m.gone.Load() || g.forgets != gen {
+		return nil
 	}
 	if err := e.st.PutSnapshot(ctx, m.key.org, m.key.subject, e.ver.snapshot, b); err != nil {
 		return err

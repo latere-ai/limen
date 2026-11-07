@@ -116,6 +116,8 @@ type Engine struct {
 
 	locksMu sync.Mutex
 	locks   map[subjectKey]*sync.Mutex
+	// writes holds each subject's snapshot-write guard (see [writeGuard]).
+	writes map[subjectKey]*writeGuard
 	// reports serializes the reports of one organization, so two first
 	// reads of a closed week keep one entry.
 	reports map[string]*sync.Mutex
@@ -156,6 +158,7 @@ func build(o Options) *Engine {
 		inline:  o.Inline,
 		debounc: cmp.Or(o.Debounce, time.Second),
 		locks:   map[subjectKey]*sync.Mutex{},
+		writes:  map[subjectKey]*writeGuard{},
 		reports: map[string]*sync.Mutex{},
 		models:  newCache(cmp.Or(o.CacheBytes, 1<<30)),
 		stop:    make(chan struct{}),
@@ -185,6 +188,29 @@ func (e *Engine) Close() error {
 	e.closeMu.Do(func() { close(e.stop) })
 	e.wg.Wait()
 	return nil
+}
+
+// writeGuard orders a subject's snapshot writes against its Forget. A fit
+// holds mu for the check of forgets and the write that follows it, and Forget
+// holds it while it counts itself and removes the subject. mu is a leaf: no
+// other lock is taken while it is held, and the subject's lock may be held
+// when it is taken. It is separate from the subject's lock so that a fit
+// holding its own fit lock can take it without inverting the order of the
+// two.
+type writeGuard struct {
+	mu      sync.Mutex
+	forgets uint64 // Forgets of the subject so far
+}
+
+func (e *Engine) writeGuard(k subjectKey) *writeGuard {
+	e.locksMu.Lock()
+	defer e.locksMu.Unlock()
+	g, ok := e.writes[k]
+	if !ok {
+		g = &writeGuard{}
+		e.writes[k] = g
+	}
+	return g
 }
 
 func (e *Engine) lock(org, subject string) func() {
@@ -648,6 +674,12 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: p, Detail: "forget needs an org and a subject"}
 	}
 	defer e.lock(org, subject)()
+	// The write guard is held through the removal, so a snapshot write
+	// either finished before it or sees the new count and does not happen.
+	g := e.writeGuard(subjectKey{org, subject})
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.forgets++
 	// Forget is idempotent, so a retry ends a Forget that failed part way.
 	if err := e.st.DeleteProfile(ctx, limen.Scope{Org: org, Subject: subject}); err != nil {
 		return err
