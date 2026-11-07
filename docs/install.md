@@ -291,10 +291,10 @@ that came after the change, in the background.
   and stop the old process before the new process starts.
 - **Backups of the ledger.** Stop `limend`, copy the ledger directory,
   and start `limend` again ([The ledger directory](#the-ledger-directory)).
-- **A limit in front of `limend`.** `limend` does not limit the rate of
-  requests, and it does not limit the time that a client takes to send a
-  request body. A proxy in front can limit both
-  ([What Limen does not defend](security.md#what-limen-does-not-defend)).
+- **The client address behind a proxy.** `limend` limits the rate of
+  each client address. Set `LIMEN_TRUSTED_PROXIES` to the addresses of
+  your proxy or ingress. If you do not, all clients behind it share one
+  address and one rate ([Both modes](configuration.md#both-modes)).
 - **A model cache below the memory limit.** If the container has a
   memory limit, set `LIMEN_MODEL_CACHE_BYTES` to half of it or less
   ([Both modes](configuration.md#both-modes)). The default, 1 GiB, is

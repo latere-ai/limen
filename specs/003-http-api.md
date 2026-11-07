@@ -6,7 +6,7 @@ depends_on: [001-architecture.md, 002-contract.md]
 affects: [api/, authorizer/, client/, cmd/limend/, server/]
 effort: medium
 created: 2026-09-28
-updated: 2026-11-03
+updated: 2026-11-07
 author: changkun
 ---
 
@@ -68,9 +68,16 @@ a profile, `subject` on the profile routes, and the reports are
 Every route answers the errors of [[002-contract]] that its contract
 method can return, plus `unauthenticated`, `forbidden`, `body_too_large`
 for a body past its limit, `internal` and `authorizer_unavailable`; the
-OpenAPI document lists them per operation. `rate_limited` is reserved for
-an installation that puts a rate limit in front of `limend`, which itself
-limits nothing.
+OpenAPI document lists them per operation. *Amended 2026-11-07:* every
+route can also answer `rate_limited` (429, with `Retry-After`): the
+server counts each request against its client address before it reads
+the token, `server.DefaultAddressRequestsPerMinute` (6000) a minute per
+replica, the client address being the peer or, from a proxy in
+`LIMEN_TRUSTED_PROXIES`, the address `X-Forwarded-For` names. A write
+that would add a person to an organization holding
+`engine.MaxSubjectsPerOrg` (10000) answers `quota_exceeded` (403), and a
+string field other than `input` past `limen.MaxStringBytes` (256) is the
+route's `invalid_*`.
 
 ### The authorizer
 
@@ -83,14 +90,18 @@ it acts, about a resource whose kind and fields are fixed per action:
 | `case.predict`, `case.decide`, `case.answer`, `case.list` | `Case` | `org`, `subject` |
 | `reliability.read` | `Reliability` | `org`, `subject` |
 | `profile.read`, `profile.write` | `Profile` | `org`, `action_kind`, `agent` (empty when unscoped), and `subject` for a person's own context (below). The field is `action_kind`, not `kind`, because the shared authorizer's flat wire object reserves `kind` for the resource kind |
-| `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own |
+| `replay.create` | `Replay` | `org`, asked once for each organization the records name, because the route takes no `org` of its own; asked while the body streams, when a record first names the organization and before the next line is read (amended 2026-11-07), so a caller who may not replay makes the server hold none of the upload |
 | `subject.forget` | `Subject` | `org`, `subject` |
 | `report.read` | `Report` | `org` ([[010-organizations]]) |
 
 With no endpoint configured, `limend` applies the shared owner policy: a
 caller acts on cases and reports whose `subject` is the caller's own
 rendered subject, and forgets that subject, admins act on everything,
-and every other request is refused.
+and every other request is refused. *Amended 2026-11-07:* in hosted mode
+`limend` sets `OwnerPolicy.AdminsDecide`, so `case.decide` is the admins'
+alone: a person who could record decisions on their own actions would
+set the review probabilities the ledger learns from (see the next
+section).
 
 *Amended 2026-11-01: a person's own context.* A decision point keys the
 actions of a person with no organization by the person's rendered
@@ -153,7 +164,10 @@ The error body is the family's envelope:
 ```
 
 `message` is `Code.Message()`, `detail` is the `*Error`'s detail, and
-`fields` its fields. A 503 answer to a prediction means the decision
+`fields` its fields. *Amended 2026-11-07:* an answer of status 500 or
+more carries `request_id` alone; its detail can name a ledger path or a
+subject, so it goes to the log line under the same request id and not to
+the caller. A 503 answer to a prediction means the decision
 point holds the action for a person (`FailClosed` does this for a Go
 caller).
 
@@ -266,11 +280,12 @@ test in the tree.
 | the proofs of criteria 2 to 6 are `limend` handler tests | they are tests of `server/` | the handler moved to its own package so the client tests and `cmd/limend` share it |
 | a replay is bounded by its record count | the upload is also at most 256 MiB, and each line at most 1 MiB, both `body_too_large` | a record count alone does not bound the memory a line can take |
 | the owner policy covers cases and reports | it also lets a caller forget its own subject | a person's records are theirs ([[001-architecture]], invariant 8) |
+| `rate_limited` is reserved for an installation that limits in front of `limend` | `limend` limits each client address, sets read timeouts, caps string fields and the persons of an organization, and authorizes a replay as it streams (2026-11-07) | a security review found that a valid token, or none, could hold memory and connections without bound |
+| an error answer carries its detail | a 5xx answer carries the request id alone (2026-11-07) | a server error's text can name a ledger path or a subject |
 | not in the design | the server keeps a caller's `X-Request-Id` or makes one; an error that is not the contract's answers `unavailable`, and a panic `internal`; `CheckBasePath` also refuses a space and the characters `?`, `#`, `{` and `}`; the authorization endpoint's bearer comes from `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | operation details; `docs/api.md` gives the limits and the request ID, and `docs/configuration.md` the variables |
 
 ### What this leaves open
 
 | Open | Why |
 |---|---|
-| a rate limit | `rate_limited` is reserved for an installation that limits in front of `limend` |
 | a `limend` that more than one process serves | the ledger is the directory store, so one process serves it until the shared store of [[004-engine]] exists |

@@ -41,13 +41,15 @@ it. A method that breaks one of these properties is a vulnerability.
 | **A deny from your rules is final, and a failure of Limen never suggests allow.** `verdict.Decide`, in `latere.ai/x/pkg/verdict`, never returns a verdict more permissive than the ceiling from your rules. `limen.FailClosed` turns an error or a timeout of Limen into the verdict `ask`. The server answers an error that is not in the contract as `unavailable`, and a panic as `internal`. | A failing, slow, or wrong Limen, seen from a decision point that uses `FailClosed` and `verdict.Decide` | `limen.TestDecideNeverExceedsTheCeiling`, `limen.TestFailClosedOnError`, `limen.TestFailClosedOnTimeout`, `engine.TestCoverFailsClosed`, `engine.TestStoreFailuresSurface`, `server.TestErrorMapping`, the conformance rule `FailClosed` |
 | **An action that Limen knows nothing about gets `ask`.** A person with no answers has the approval probability 0.5, and Limen refuses a cost profile that puts 0.5 outside the range of `ask`. | A new person, a new agent, or a cost profile that would allow without evidence | `engine/gp.TestPrior`, `limen.TestCostsRefusesDecidingOnNoEvidence`, the conformance rules `UnknownIsAnAsk` and `AskTooCostly` |
 | **No allow beyond what the person allowed.** Limen suggests `allow` only if considered approvals of the same scope or a wider scope cover the action. A quick approval, or an approval late in a long session, has the weight 0 if the person did not open the details. A cost profile of a person can only be stricter than that of the organization. | Approvals of a narrower action, and approvals without attention | `engine.TestCoverNeedsTwoSessions`, `engine.TestCoverIsPerFamily`, `engine.TestCapNeverTouchesABlock`, `cmd/limend.TestCoverSettings`, `limen.TestStricterProperties`, the conformance rules `CoverCapsAllow`, `AnswerWeights`, and `PersonProfileNeverLoosens` |
-| **Only the decision point sets the review probability.** Limen records a decision only with the permission `case.decide`, and one decision for each action. The review probability must agree with the verdict. Only the first answer to a decision that showed the action to a person is a review. An action with a different digest under an earlier key is `action_conflict`. | A caller without `case.decide` or `case.answer`, a second decision for one action, and a changed action under an earlier key | `server.TestAuthorizerQuestions`, `server.TestRefusalsActOnNothing`, `server.TestSubjectBinding`, `limen.TestDecisionValidate`, the conformance rules `OneDecision`, `AnswerRoles`, `ReviewsWeightedByProbability`, and `LaterAnswersNeverEstimate` |
+| **Only the decision point sets the review probability.** Limen records a decision only with the permission `case.decide`, and one decision for each action. The review probability must agree with the verdict. Only the first answer to a decision that showed the action to a person is a review. An action with a different digest under an earlier key is `action_conflict`. Under the owner policy in hosted mode, only a subject in `LIMEN_ADMINS` has `case.decide`. | A caller without `case.decide` or `case.answer`, a person who records decisions for their own actions, a second decision for one action, and a changed action under an earlier key | `server.TestAuthorizerQuestions`, `server.TestOwnerPolicyAdminsDecide`, `cmd/limend.TestHostedOnlyAdminsDecide`, `server.TestRefusalsActOnNothing`, `server.TestSubjectBinding`, `limen.TestDecisionValidate`, the conformance rules `OneDecision`, `AnswerRoles`, `ReviewsWeightedByProbability`, and `LaterAnswersNeverEstimate` |
 | **Limen never keeps the input of an action, and never gives it to a language model.** Limen discards the `input` before it records a case, and keeps only the features that it calculates from it. `limend` has no client of a language model: it calls only the token issuers and the authorization endpoint. | A person who reads the ledger directory or the responses of the API | `engine/store/file.TestNoFileHoldsTheInput`, `engine.TestStoredScopeHoldsNoInput`, `limen.TestRootImports`, the conformance rule `CasesNeverReturnInput` |
 | **Only a caller with permission can get to the records of a person.** Each route except `GET /v1/version` needs a valid token. Then Limen asks the permission of the route about one resource, and does the work only after an allow. A deny or no answer changes nothing. | A caller without a token, and a caller without the permission of the route | `server.TestAuthorizerQuestions`, `server.TestRefusalsActOnNothing`, `server.TestAuthentication`, `server.TestOwnerPolicy`, `server.TestPersonProfileOwnership`, `cmd/limend.TestHostedOwnerPolicy`, `cmd/limend.TestHostedAuthorizer` |
 | **Each organization is separate.** Each record has three key fields: the organization, the person, and the action ID. A key of one organization never reads or changes a record of a different organization. Names become safe file names, so a name cannot point outside its directory. | A caller that names a different organization in a key | `engine/store/file.TestContract`, `engine/store/file.TestAwkwardNames`, `engine.TestForgetRemovesTheOwnProfile`, the conformance rule `ForgetIsScoped` |
 | **`Forget` removes all the records of a person in one organization:** the cases, the answers, the models, and the cost profile of the person. A fit that was in progress does not write the model again after `Forget`. | A record of a forgotten person that stays in the ledger | `engine.TestForgetDropsTheModel`, `engine.TestAFitInFlightDoesNotReviveAForgottenPerson`, `engine.TestForgetRemovesTheOwnProfile`, the conformance rules `ForgetIsScoped` and `ForgetRemovesThePersonProfile` |
 | **A crash does not damage the ledger.** Limen writes each line of a log to the disk before it continues, discards an incomplete last line, and writes each other file whole in one step. One process owns a ledger directory. | A crash or a second process on the same directory | `engine/store/file.TestTornLastLine`, `engine/store/file.TestDamagedLog`, `engine/store/file.TestLock`, `engine/store/file.TestReopen` |
-| **The errors of the authorization endpoint do not go to the caller.** When the endpoint does not answer, the `503` response names the permission and the resource, and not the address of the endpoint. The log line keeps the cause, without the user information and the query of the address. The line that `limend` writes when it starts names the endpoint in the same way. | A caller with a valid token while the authorization endpoint is down, and a person who reads the logs | `server.TestAnOutageDoesNotNameTheAuthorizer`, `cmd/limend.TestTheStartLineDoesNotPrintTheAuthorizerSecrets`, `internal/redact.TestErrorRedactsTheURLOfATransportError` |
+| **A server error gives no detail to the caller.** A response with the status 500 or more has the code, its message, and the request ID only. The text of the error can name a path in the ledger directory, and stays in the log. When the authorization endpoint does not answer, the log line keeps the permission, the resource, and the cause, without the user information and the query of the address. The line that `limend` writes when it starts names the endpoint in the same way. | A caller who causes a failure, a caller with a valid token while the authorization endpoint is down, and a person who reads the logs | `server.TestServerErrorsAnswerOnlyWithTheRequestID`, `server.TestAnOutageDoesNotNameTheAuthorizer`, `cmd/limend.TestTheStartLineDoesNotPrintTheAuthorizerSecrets`, `internal/redact.TestErrorRedactsTheURLOfATransportError` |
+| **Each client address has a rate.** `limend` counts each request of a client address before it reads the token, and refuses more than 6,000 in one minute with `rate_limited`. A request must arrive in one minute, and a replay in ten minutes. | A client that sends too many requests or sends them slowly, with or without a token | `server.TestAddressRequestLimit`, `server.TestAddressRequestLimitDefaultAndOff`, `server.TestAddressLimitFollowsTrustedProxies`, `server.TestReplayExtendsItsReadDeadline`, `cmd/limend.TestServerCarriesTheReadTimeouts` |
+| **Records have bounds.** Each string field other than `input` is 256 bytes or less, and an action has 64 signals and 64 holds or less. An organization has 10,000 persons or less. A replay asks `replay.create` for an organization before it reads the record after the first record of that organization. | A caller with a valid token that sends long fields, many persons, or a large replay that it cannot send | `limen.TestStringLengths`, `limen.TestListCountBounds`, `engine.TestEngineRefusesLongStrings`, `engine.TestPersonCap`, `engine.TestPersonCapConcurrent`, `engine.TestPersonCapReplay`, `server.TestReplayAsksBeforeReadingTheBody`, `server.TestForgetValidatesLengthsBeforeAsking` |
 
 ## What is not defended
 
@@ -61,11 +63,10 @@ than this file says is a vulnerability.
   probability, the source, the session, and the way that the person
   answered as the decision point sends them.
 - **The owner policy has no organizations.** Without an authorization
-  endpoint, a person can do each operation for their own subject, under
-  each organization name. So a person can record decisions for their own
-  actions with a review probability that they choose, and add cases to
-  the report of an organization. Only an authorization endpoint that
-  gives `case.decide` to the decision point alone separates the two.
+  endpoint, a person can predict, answer, and read for their own subject
+  under each organization name. In hosted mode, only a subject in
+  `LIMEN_ADMINS` can record a decision. Only an authorization endpoint
+  can keep a person out of an organization.
 - **A change of the input alone.** Limen does not keep the input, so the
   digest of an action does not include it. A prediction for an earlier
   key with a different input gives the first prediction again. Give each
@@ -75,14 +76,15 @@ than this file says is a vulnerability.
   `GET /v1/cases`: the name, the actor, the target, the environment, the
   attributes, and the names of the signal sources. Do not put a secret
   in these fields.
-- **Load.** `limend` does not limit the rate of requests, the time that
-  a client takes to send a body, the length of a string, or the number of
-  persons and organizations. A caller with a valid token can make
-  `limend` read 1 MiB, or 256 MiB for a replay, before Limen asks the
-  authorization endpoint. A proxy in front must limit these.
-- **The network.** `limend` supplies plain HTTP only. The address that
-  the authorization endpoint gets is the address of the peer: behind a
-  proxy, it is the address of the proxy.
+- **Load.** The rate of `limend` is for each client address and each
+  replica. Many addresses together can send more. Behind a proxy, set
+  `LIMEN_TRUSTED_PROXIES`, or all clients share the address of the proxy.
+  `limend` does not limit the number of organizations. A caller with a
+  valid token can make `limend` read 1 MiB before Limen asks the
+  authorization endpoint.
+- **The network.** `limend` supplies plain HTTP only. Without
+  `LIMEN_TRUSTED_PROXIES`, the client address is the address of the peer.
+  Behind a proxy, it is then the address of the proxy.
 - **A permission withdrawn moments ago.** Limen uses an allow of the
   authorization endpoint again for its `ttl`: 60 seconds if the endpoint
   sets none, and 600 seconds or less. Limen accepts a token until it
@@ -90,9 +92,8 @@ than this file says is a vulnerability.
   revoke a token.
 - **What an error says.** A `403` gives the reason of the authorization
   endpoint to the caller. A `401` gives the reason why the token was
-  refused. A `500` or a `503` other than `authorizer_unavailable` gives
-  the text of the error, which can contain a path in the ledger directory
-  with the names of the organization and the person.
+  refused. A response with the status 500 or more gives only the request
+  ID.
 - **One replica.** One process owns a ledger directory. While `limend`
   restarts, no decision point can ask Limen, and each decision point
   must fail closed.

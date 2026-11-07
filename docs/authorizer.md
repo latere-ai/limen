@@ -42,9 +42,10 @@ A question for a prediction:
 - `action` is one of the permissions below.
 - `resource` has its `kind` and its `id`, and the fields of the
   permission next to them.
-- `request` has the request ID, the network address of the peer, and the
-  user agent. Limen does not read `X-Forwarded-For`. Behind a proxy, `ip`
-  is the address of the proxy.
+- `request` has the request ID, the client address, and the user agent.
+  The client address is the address of the peer. For a request from a
+  proxy in `LIMEN_TRUSTED_PROXIES`, it is the address that
+  `X-Forwarded-For` gives.
 
 ## The permissions
 
@@ -63,7 +64,7 @@ and no others:
 | `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
 | `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
 | `DELETE /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
-| `POST /v1/replays` | `replay.create` | `Replay` | `org` |
+| `POST /v1/replays` | `replay.create` | `Replay` | `org`. Limen asks one time for each organization of the records, when the first record of that organization arrives. |
 | `POST /v1/subjects/forget` | `subject.forget` | `Subject` | `org`, `subject` |
 | `GET /v1/explanations` | `case.list` | `Case` | `org`, `subject` |
 | `GET /v1/learned` | `case.list` | `Case` | `org`, `subject` |
@@ -123,16 +124,20 @@ Limen reads no other member.
 If the endpoint does not answer in time, answers with an error, or
 answers without `allow`, Limen has no decision. It refuses the request
 with `authorizer_unavailable`, status 503, and does not do the work of
-the route. A decision point that calls Limen through `FailClosed` then
+the route. The response gives only the request ID. The log line of
+`limend` gives the permission, the resource, and the cause. A decision point that calls Limen through `FailClosed` then
 gets the verdict `ask` for the action. A failure never allows an action.
 
 ## The owner policy
 
 Without an endpoint, the owner policy decides:
 
-- A person can do the operations for their own subject: predict, decide,
+- A person can do the operations for their own subject: predict,
   answer, list cases, read explanations and reports, and forget their
   data.
+- In hosted mode, only a subject in `LIMEN_ADMINS` can record a
+  decision. In one-person mode, the person of `LIMEN_SUBJECT` is the
+  admin.
 - A person can read and save the cost profiles of their own context, and
   read, save, and remove their own cost profile in an organization.
 - A subject in `LIMEN_ADMINS` can do all operations for all persons.

@@ -23,7 +23,15 @@ These variables apply in both modes:
 | `LIMEN_ANSWER_FLOOR_MS` | An approval faster than this number of milliseconds has the weight 0, if the person did not open the details. `0` turns this rule off. The largest value is `86400000`, one day. | `2000` |
 | `LIMEN_ANSWER_FATIGUE` | An approval with this number of reviews or more before it in its session has the weight 0, if the person did not open the details. `0` turns this rule off. | `50` |
 | `LIMEN_MODEL` | The model version that the server uses: `learned/1` or `learned/2`. Read [Switch the model](install.md#switch-the-model) before you change it. | `learned/1` |
+| `LIMEN_TRUSTED_PROXIES` | The proxies in front of `limend`, separated by commas: CIDR prefixes or single addresses. For a request from one of them, `limend` takes the client address from `X-Forwarded-For`. It uses the client address for the [rate](api.md#conventions) and sends it to the authorization endpoint. | None. The client address is the address of the peer. |
 | `LIMEN_MODEL_CACHE_BYTES` | The memory, in bytes, for the fitted models that `limend` keeps. When it is full, `limend` removes the model that it used least recently, and reads it from the ledger again when it is necessary. The bound counts only the models, so set it to half of the memory limit of the container or less. | `1073741824` (1 GiB) |
+
+`limend` gives each request time limits that you cannot change. The
+request line and the headers must arrive in 10 seconds. The full request
+must arrive in one minute, and a replay in ten minutes. A connection
+without a request closes after two minutes. The
+[conventions of the API](api.md#conventions) give the rate, the size
+limits, and the bounds of a record.
 
 The server always supplies each route under `/v1`. If you set
 `LIMEN_BASE_PATH`, the server also supplies each route under that prefix.
@@ -85,9 +93,9 @@ one day, and it must carry the time when it was issued.
 
 Without an authorization endpoint, the shared owner policy decides:
 
-- A person can do the operations for their own subject: predict, decide,
+- A person can do the operations for their own subject: predict,
   answer, list cases, read explanations and reports, and forget their
-  data.
+  data. Only a subject in `LIMEN_ADMINS` can record a decision.
 - A person can read and save the cost profiles of their own context. The
   `org` of these cost profiles is the subject of the person.
 - A person can read, save, and remove their own cost profile in an
@@ -126,6 +134,7 @@ error and stops. It does not start with a part of its configuration.
 | 2 | `LIMEN_AUTHORIZER_URL` is not an `http` or `https` URL. |
 | 2 | With `LIMEN_AUTHORIZER_URL`, `LIMEN_AUTHORIZER_TOKEN` and `LIMEN_AUTHORIZER_TOKEN_FILE` are both set or both empty, or the file cannot be read or is empty. |
 | 2 | `LIMEN_BASE_PATH`, `LIMEN_MIN_ALLOWS`, `LIMEN_MIN_SESSIONS`, `LIMEN_ANSWER_FLOOR_MS`, `LIMEN_ANSWER_FATIGUE`, `LIMEN_MODEL`, or `LIMEN_MODEL_CACHE_BYTES` is not correct. |
+| 2 | `LIMEN_TRUSTED_PROXIES` has a value that is not a CIDR prefix or an address. |
 | 2 | There is no ledger directory: `LIMEN_DATA_DIR`, `XDG_STATE_HOME`, and `HOME` are all empty. |
 | 1 | `limend` cannot open the ledger directory, for example because a different process holds it. |
 | 1 | `limend` cannot read the key set of an issuer in `LIMEN_OIDC_ISSUERS`, or the issuer does not answer a request in 10 seconds. |

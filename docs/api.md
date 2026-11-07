@@ -52,6 +52,19 @@ server.
   256 MiB or less, with not more than 100,000 records, and each line can
   be 1 MiB or less. If a request is larger, Limen refuses it with
   `body_too_large`.
+- **Length.** Each string field can be 256 bytes or less, except
+  `input`. An action can have 64 attributes, 64 signals, and 64 holds or
+  less. If a field is longer, Limen refuses the request with the
+  `invalid_` code of the route and names the field.
+- **Persons.** An organization can have 10,000 persons or less. A person
+  is a subject with a case or with an own cost profile in the
+  organization. Limen refuses a request that adds a person to a full
+  organization with `quota_exceeded`. The persons in the organization
+  keep their access.
+- **Rate.** `limend` answers 6,000 requests or less in one minute from
+  one client address. It counts each request before it reads the token.
+  Above this rate, Limen refuses the request with `rate_limited`, and
+  `Retry-After` gives the seconds to wait.
 - **Pages.** A list returns `{"entries": [...], "next_cursor": "..."}`.
   The `next_cursor` is present only if there is a next page. To get the
   next page, send this value as `cursor`. The `limit` is 1 to 500. The
@@ -491,6 +504,12 @@ With `keep`, a record that conflicts with a case in the ledger
 (`action_conflict` or `already_decided`) stops the replay, and the
 records before it stay in the ledger.
 
+Limen reads the body one line at a time. When a record names an
+organization for the first time, Limen asks `replay.create` for that
+organization before it reads the next line. If the answer is not an
+allow, Limen stops and replays nothing. Limen replays the records only
+after it reads and validates all of them.
+
 The body is newline-delimited JSON
 (`Content-Type: application/x-ndjson`). Each line is one record. The
 [size limits](#conventions) apply.
@@ -522,7 +541,8 @@ cover. Then Limen reports what it would suggest:
 
 The numbers are examples. Errors: `invalid_replay`, with the incorrect
 records in the details, `body_too_large`, and the common errors. With
-`keep`, also `action_conflict` and `already_decided`.
+`keep`, also `action_conflict`, `already_decided`, and
+`quota_exceeded`.
 
 ## Forget a person
 
@@ -829,6 +849,7 @@ has one status and one message:
 | `no_case` | 404 | Limen has no record of this action. Check the organization, the person, and the action ID. |
 | `unauthenticated` | 401 | The request has no valid credential. Sign in again, then send the request again. |
 | `forbidden` | 403 | You do not have permission for this request. Ask an administrator of the organization for access. |
+| `quota_exceeded` | 403 | This organization has the maximum number of persons. Forget a person who does not need records, then send the request again. |
 | `body_too_large` | 413 | The request is larger than the limit of Limen. Send it in smaller parts. |
 | `rate_limited` | 429 | There are too many requests. Wait a short time, then send the request again. |
 | `internal` | 500 | Limen had an internal failure. Send the request again. If the failure continues, report it with the request ID. |
@@ -836,9 +857,12 @@ has one status and one message:
 | `unavailable` | 503 | Limen is not available now. Hold the action for a person, and send the request again after a short time. |
 
 Each route can return the common errors: `unauthenticated`, `forbidden`,
-`internal`, `authorizer_unavailable`, and `unavailable`. `limend` does not
-limit the rate of requests, and never returns `rate_limited`. A proxy in
-front of `limend` that limits the rate can return it.
+`rate_limited`, `internal`, `authorizer_unavailable`, and `unavailable`.
+A response with the status 500 or more has only `request_id` in
+`details`. The cause is in the log of `limend`, under the same request
+ID. A request that adds a person can also return `quota_exceeded`: a
+prediction, a decision that carries its action, a cost profile of a
+person, and a replay with `keep`.
 
 ## Permissions
 

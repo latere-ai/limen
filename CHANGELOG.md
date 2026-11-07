@@ -27,6 +27,10 @@ the commit log.
   limit of the container or less. Before, the bound could not be set,
   and a container with a smaller memory limit could be stopped as the
   cache grew.
+- **`LIMEN_TRUSTED_PROXIES` names the proxies in front of `limend`.** For
+  a request from one of them, the client address comes from
+  `X-Forwarded-For`. `limend` uses it for the rate and sends it to the
+  authorization endpoint as `ip`.
 - **`deploy/README.md` tells what each folder of `deploy/` contains.**
   `deploy/prod` is the maintainer's own installation, not an install
   path.
@@ -70,13 +74,38 @@ the commit log.
   model of the person again.** Before, such a fit could put the model
   back in the ledger directory after `Forget`, and the next prediction
   for the person used it.
-- **The errors of the authorization endpoint no longer go to the
-  caller.** A `503 authorizer_unavailable` names the permission and the
-  resource, and not the address of the endpoint or the error of the
-  connection. The log line keeps the cause, without the user information
-  and the query of the address. The line that `limend` writes when it
-  starts leaves them out too. Before, both could show a key that was in
-  the address.
+- **A response with the status 500 or more gives only the request ID.**
+  The text of the error stays in the log line under the same request ID.
+  Before, `details.detail` of a `500` or a `503` could name a path in the
+  ledger directory, a subject, or the address of the authorization
+  endpoint with a key in its query. The line that `limend` writes when it
+  starts no longer prints the user information and the query of that
+  address. A client that read `details.detail` of a `5xx` gets nothing
+  there now.
+- **`limend` limits each client address to 6,000 requests in one
+  minute,** and counts each request before it reads the token. Above
+  this rate it answers `rate_limited`, status 429, with `Retry-After`.
+  A request must arrive in one minute, and a replay in ten minutes.
+  Before, `limend` had no rate and no time limit for a request body.
+- **In hosted mode without an authorization endpoint, only a subject in
+  `LIMEN_ADMINS` can record a decision.** Before, a person could record
+  decisions for their own actions, with a review probability that they
+  chose. This is an incompatible change for an installation where
+  persons record their own decisions: add the decision point to
+  `LIMEN_ADMINS`.
+- **Limen bounds what a record can hold.** Each string field other than
+  `input` is 256 bytes or less. An action has 64 signals and 64 holds or
+  less. An organization has 10,000 persons or less, and a request that
+  adds a person to a full organization gets the new code
+  `quota_exceeded`, status 403. Before, a 1 MB `action_id` was kept.
+  This is an incompatible change for a client that sends longer fields.
+- **A replay asks `replay.create` before it reads past the first record
+  of each organization.** Before, `limend` read and kept up to 256 MiB
+  of a replay before it asked. The organizations are now asked in the
+  order of their first record.
+- **Reads for persons that Limen does not have keep nothing in memory.**
+  Before, each read for a new organization or person added a lock and an
+  entry that `limend` kept until it stopped.
 
 ## v0.9.1 - 2026-11-05
 

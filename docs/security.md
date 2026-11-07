@@ -32,7 +32,7 @@ telemetry: it ignores the `OTEL_*` environment variables.
 | Service | Credential | What `limend` sends |
 |---|---|---|
 | Each issuer in `LIMEN_OIDC_ISSUERS`, in hosted mode | None | Requests for the discovery document and the key set: when `limend` starts, when the cached key set is 5 minutes old, and for a token with an unknown key, not more than one time in 15 seconds. They contain nothing about a caller. |
-| The authorization endpoint in `LIMEN_AUTHORIZER_URL` | `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | One question for each request that Limen has no fresh answer for: the subject, each claim of the token of the caller, the permission, the resource, the request ID, the address of the peer, and the user agent. [Writing an authorization endpoint](authorizer.md#the-question) gives the fields. |
+| The authorization endpoint in `LIMEN_AUTHORIZER_URL` | `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | One question for each request that Limen has no fresh answer for: the subject, each claim of the token of the caller, the permission, the resource, the request ID, the client address, and the user agent. [Writing an authorization endpoint](authorizer.md#the-question) gives the fields. |
 
 The authorization endpoint sees each claim of the token of each caller.
 A claim can be an email address or other personal data. The endpoint
@@ -71,7 +71,7 @@ no line for each request.
   person and a path in the ledger directory. When the authorization
   endpoint does not answer, the line also gives the cause, with the
   address of the endpoint without its user information and its query.
-  The response to the caller does not give the cause.
+  The response to the caller gives only the request ID.
 - It writes no input of an action, no body, and no query.
 
 ## For the author of a decision point
@@ -93,11 +93,15 @@ no line for each request.
 These are the limits that an operator plans for:
 
 - **The owner policy has no organizations.** Without an authorization
-  endpoint, a person can record decisions for their own actions, with a
-  review probability that they choose, under each organization name.
-- **Load.** `limend` does not limit the rate of requests, the time that
-  a client takes to send a body, or the number of persons and
-  organizations. Put a proxy in front of it that limits them.
+  endpoint, a person can predict and answer for their own subject under
+  each organization name. In hosted mode, only a subject in
+  `LIMEN_ADMINS` can record a decision.
+- **Load.** `limend` limits the rate of each client address, the time
+  that a request takes, the length of a field, and the persons of an
+  organization ([conventions](api.md#conventions)). The rate is for one
+  replica and one address. Many addresses together can send more, and
+  `limend` does not limit the number of organizations. Behind a proxy,
+  set `LIMEN_TRUSTED_PROXIES`.
 - **A permission withdrawn moments ago.** Limen uses an allow again for
   its `ttl`, 600 seconds or less, and accepts a token until it expires.
 - **One replica.** While `limend` restarts, no decision point can ask
