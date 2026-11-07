@@ -22,7 +22,12 @@ info:
     is newline-delimited JSON); a receiver ignores fields it does not know,
     so a newer client can talk to an older server, and validates the fields
     it knows strictly. Where several error codes share a status on one
-    route, the response lists them in x-limen-codes.
+    route, the response lists them in x-limen-codes. Every string a client
+    sends is at most 256 bytes, except an action's input, which only the
+    body limit bounds; a longer one is refused with the invalid code of the
+    route and the path of the field. An organization keeps at most 10000
+    people; a request that would add one more is refused with
+    quota_exceeded, and people already in the organization are served.
   license:
     name: Apache-2.0
     identifier: Apache-2.0
@@ -63,7 +68,12 @@ paths:
         "401":
           $ref: "#/components/responses/unauthenticated"
         "403":
-          $ref: "#/components/responses/forbidden"
+          description: "403 forbidden or quota_exceeded: the caller lacks permission for the request, or the request would add a person to an organization that already has the most people Limen keeps for one organization."
+          x-limen-codes: [forbidden, quota_exceeded]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           $ref: "#/components/responses/action_conflict"
         "413":
@@ -104,7 +114,12 @@ paths:
         "401":
           $ref: "#/components/responses/unauthenticated"
         "403":
-          $ref: "#/components/responses/forbidden"
+          description: "403 forbidden or quota_exceeded: the caller lacks permission for the request, or the request would add a person to an organization that already has the most people Limen keeps for one organization."
+          x-limen-codes: [forbidden, quota_exceeded]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           description: "409 already_decided or action_conflict: the action already has a decision, or the action the decision carries differs from the one predicted."
           x-limen-codes: [already_decided, action_conflict]
@@ -415,7 +430,12 @@ paths:
         "401":
           $ref: "#/components/responses/unauthenticated"
         "403":
-          $ref: "#/components/responses/forbidden"
+          description: "403 forbidden or quota_exceeded: the caller lacks permission for the request, or the request would add a person to an organization that already has the most people Limen keeps for one organization."
+          x-limen-codes: [forbidden, quota_exceeded]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           $ref: "#/components/responses/ask_too_costly"
         "429":
@@ -551,7 +571,12 @@ paths:
         "401":
           $ref: "#/components/responses/unauthenticated"
         "403":
-          $ref: "#/components/responses/forbidden"
+          description: "403 forbidden or quota_exceeded: the caller lacks permission for the request, or the request would add a person to an organization that already has the most people Limen keeps for one organization."
+          x-limen-codes: [forbidden, quota_exceeded]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "413":
           $ref: "#/components/responses/body_too_large"
         "429":
@@ -842,6 +867,7 @@ components:
             type: [string, number, boolean]
         signals:
           type: array
+          maxItems: 64
           items:
             $ref: "#/components/schemas/Signal"
       required: [org, subject, action_id, kind, name, effect]
@@ -899,6 +925,7 @@ components:
           description: The environment holds a credential that reaches outside it.
         holds:
           type: array
+          maxItems: 64
           description: The limits the environment enforces, so a reach cannot occur. Each bounds Limen's reading of the input. egress, no host outside the session's network is reachable without its own approval, so crosses.network is no; protected_refs, the git host refuses a push to a protected branch, so a primary class read from a git push is unknown; checkpoints, a copy of the workspace can restore it, so an action that crosses no boundary is at most recoverable. A hold outside the list is no hold.
           items:
             type: string
@@ -2099,6 +2126,12 @@ components:
             $ref: "#/components/schemas/Error"
     forbidden:
       description: "403 forbidden: You do not have permission for this request. Ask an administrator of the organization for access."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    quota_exceeded:
+      description: "403 quota_exceeded: This organization has the maximum number of persons. Forget a person who does not need records, then send the request again."
       content:
         application/json:
           schema:

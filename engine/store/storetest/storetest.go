@@ -81,6 +81,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"PersonProfiles", personProfiles},
 		{"DeleteProfile", deleteProfile},
 		{"Subjects", subjects},
+		{"ProfileSubjects", profileSubjects},
 		{"WeekReports", weekReports},
 		{"Snapshots", snapshots},
 		{"Forget", forget},
@@ -350,6 +351,27 @@ func subjects(t *testing.T, s store.Store) {
 	expect(t, slices.Equal(got, []string{"x"}), "Subjects(p) = %v", got)
 }
 
+func profileSubjects(t *testing.T, s store.Store) {
+	got, err := s.ProfileSubjects(ctx, "o")
+	must(t, err)
+	expect(t, len(got) == 0 && got != nil, "an empty store lists %v", got)
+	// Only a person's own profile names a subject: the profiles of a kind,
+	// an agent and the organization do not.
+	for _, sc := range []limen.Scope{{Org: "o"}, {Org: "o", Kind: "tool"}, {Org: "o", Agent: "agt"}, {Org: "o", Subject: "b"}, {Org: "o", Subject: "a"}, {Org: "p", Subject: "x"}} {
+		must(t, s.PutProfile(ctx, profile(sc, 2)))
+	}
+	got, err = s.ProfileSubjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{"a", "b"}), "ProfileSubjects(o) = %v", got)
+	must(t, s.DeleteProfile(ctx, limen.Scope{Org: "o", Subject: "a"}))
+	got, err = s.ProfileSubjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{"b"}), "after a delete, ProfileSubjects(o) = %v", got)
+	got, err = s.ProfileSubjects(ctx, "p")
+	must(t, err)
+	expect(t, slices.Equal(got, []string{"x"}), "ProfileSubjects(p) = %v", got)
+}
+
 // Monday is the start of a week of a report.
 var Monday = time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
 
@@ -463,19 +485,20 @@ func canceled(t *testing.T, s store.Store) {
 	cancel()
 	cs := Case("o", "s", "a", 0)
 	errs := map[string]error{
-		"Case":          func() error { _, _, err := s.Case(c, cs.Action.Key); return err }(),
-		"Put":           s.Put(c, cs),
-		"NextT":         func() error { _, err := s.NextT(c, "o", "s"); return err }(),
-		"Cases":         func() error { _, err := s.Cases(c, "o", "s"); return err }(),
-		"Profile":       func() error { _, _, err := s.Profile(c, limen.Scope{Org: "o"}); return err }(),
-		"PutProfile":    s.PutProfile(c, profile(limen.Scope{Org: "o"}, 1)),
-		"Snapshot":      func() error { _, _, err := s.Snapshot(c, "o", "s", "1"); return err }(),
-		"PutSnapshot":   s.PutSnapshot(c, "o", "s", "1", []byte("x")),
-		"Forget":        s.Forget(c, "o", "s"),
-		"DeleteProfile": s.DeleteProfile(c, limen.Scope{Org: "o"}),
-		"Subjects":      func() error { _, err := s.Subjects(c, "o"); return err }(),
-		"WeekReport":    func() error { _, _, err := s.WeekReport(c, "o", Monday); return err }(),
-		"PutWeekReport": s.PutWeekReport(c, "o", Week(Monday)),
+		"Case":            func() error { _, _, err := s.Case(c, cs.Action.Key); return err }(),
+		"Put":             s.Put(c, cs),
+		"NextT":           func() error { _, err := s.NextT(c, "o", "s"); return err }(),
+		"Cases":           func() error { _, err := s.Cases(c, "o", "s"); return err }(),
+		"Profile":         func() error { _, _, err := s.Profile(c, limen.Scope{Org: "o"}); return err }(),
+		"PutProfile":      s.PutProfile(c, profile(limen.Scope{Org: "o"}, 1)),
+		"Snapshot":        func() error { _, _, err := s.Snapshot(c, "o", "s", "1"); return err }(),
+		"PutSnapshot":     s.PutSnapshot(c, "o", "s", "1", []byte("x")),
+		"Forget":          s.Forget(c, "o", "s"),
+		"DeleteProfile":   s.DeleteProfile(c, limen.Scope{Org: "o"}),
+		"Subjects":        func() error { _, err := s.Subjects(c, "o"); return err }(),
+		"ProfileSubjects": func() error { _, err := s.ProfileSubjects(c, "o"); return err }(),
+		"WeekReport":      func() error { _, _, err := s.WeekReport(c, "o", Monday); return err }(),
+		"PutWeekReport":   s.PutWeekReport(c, "o", Week(Monday)),
 	}
 	for name, err := range errs {
 		expect(t, errors.Is(err, context.Canceled), "%s under a canceled context: %v", name, err)
@@ -581,6 +604,9 @@ func keepsEverything(t *testing.T, open func(t *testing.T, dir string) store.Sto
 	subs, err := s.Subjects(ctx, "o")
 	must(t, err)
 	expect(t, slices.Equal(subs, []string{subject}), "after a reopen Subjects(o) = %v", subs)
+	subs, err = s.ProfileSubjects(ctx, "o")
+	must(t, err)
+	expect(t, slices.Equal(subs, []string{subject}), "after a reopen ProfileSubjects(o) = %v", subs)
 	got := next(t, s, "o", subject)
 	expect(t, got > 7, "after a reopen NextT = %d, an ordinal a stored case holds", got)
 }

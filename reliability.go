@@ -31,15 +31,11 @@ type ReliabilityQuery struct {
 // [*Error] with [CodeInvalidQuery], or nil.
 func (q ReliabilityQuery) Validate() error {
 	var p problems
-	if q.Org == "" {
-		p.add("org", "is empty")
-	}
-	if q.Subject == "" {
-		p.add("subject", "is empty")
-	}
+	checkPerson(&p, q.Org, q.Subject)
 	if q.Of == "" {
 		p.add("of", "is empty")
 	}
+	p.long("of", q.Of)
 	checkWindow(&p, q.From, q.To)
 	return p.err(CodeInvalidQuery)
 }

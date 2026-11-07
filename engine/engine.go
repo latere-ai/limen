@@ -48,6 +48,14 @@ import (
 	"latere.ai/x/limen/estimate"
 )
 
+// MaxSubjectsPerOrg is the most people one organization may have in an
+// engine unless [Options.MaxSubjects] says otherwise. A person is a subject
+// with a case, or with a profile of their own, in the organization. It is
+// the engine's limit, not the contract's: a hosted installation sets its own,
+// and the contract only says that a request over it fails with
+// [limen.CodeQuotaExceeded].
+const MaxSubjectsPerOrg = 10000
+
 // Options configure an [Engine]. The zero value is a working engine over a
 // fresh in-memory store with background fitting.
 type Options struct {
@@ -96,6 +104,11 @@ type Options struct {
 	// negative value turns a rule off.
 	AnswerFloor   time.Duration
 	AnswerFatigue int
+	// MaxSubjects is the most people one organization may have: a request
+	// that would add one more fails with [limen.CodeQuotaExceeded], and the
+	// people already there are served as before. Zero is
+	// [MaxSubjectsPerOrg]; a negative value turns the limit off.
+	MaxSubjects int
 }
 
 type subjectKey struct{ org, subject string }
@@ -115,14 +128,16 @@ type Engine struct {
 	policy                 estimate.Policy
 
 	locksMu sync.Mutex
-	locks   map[subjectKey]*sync.Mutex
+	locks   map[subjectKey]*refLock
 	// writes holds each subject's snapshot-write guard (see [writeGuard]).
 	writes map[subjectKey]*writeGuard
 	// reports serializes the reports of one organization, so two first
 	// reads of a closed week keep one entry.
-	reports map[string]*sync.Mutex
+	reports map[string]*refLock
 
 	models *cache
+	// people holds the count of each organization's people against the cap.
+	people *people
 
 	work    chan subjectKey
 	stop    chan struct{}
@@ -157,9 +172,9 @@ func build(o Options) *Engine {
 		opts:    gp.Options{MaxLabels: cmp.Or(o.MaxLabels, gp.DefaultMaxLabels)},
 		inline:  o.Inline,
 		debounc: cmp.Or(o.Debounce, time.Second),
-		locks:   map[subjectKey]*sync.Mutex{},
+		locks:   map[subjectKey]*refLock{},
 		writes:  map[subjectKey]*writeGuard{},
-		reports: map[string]*sync.Mutex{},
+		reports: map[string]*refLock{},
 		models:  newCache(cmp.Or(o.CacheBytes, 1<<30)),
 		stop:    make(chan struct{}),
 
@@ -173,10 +188,23 @@ func build(o Options) *Engine {
 	if e.st == nil {
 		e.st = store.NewMemory()
 	}
+	e.people = newPeople(e.st, subjectCap(o.MaxSubjects))
 	if e.clock == nil {
 		e.clock = time.Now
 	}
 	return e
+}
+
+// subjectCap is the cap on the people of an organization an option sets:
+// zero is the default, a negative value is no cap (stored as 0).
+func subjectCap(n int) int {
+	switch {
+	case n < 0:
+		return 0
+	case n == 0:
+		return MaxSubjectsPerOrg
+	}
+	return n
 }
 
 // Model is the model version the engine serves.
@@ -213,17 +241,39 @@ func (e *Engine) writeGuard(k subjectKey) *writeGuard {
 	return g
 }
 
-func (e *Engine) lock(org, subject string) func() {
-	k := subjectKey{org, subject}
+// refLock is a mutex with the number of callers that hold it or wait for
+// it. The count is read and written under [Engine.locksMu], and the entry
+// leaves its map when the count reaches zero, so a lock in use is never
+// replaced and a name nobody uses is not kept.
+type refLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockIn takes the lock of k in m, creating its entry, and returns the
+// function that releases it.
+func lockIn[K comparable](e *Engine, m map[K]*refLock, k K) func() {
 	e.locksMu.Lock()
-	m, ok := e.locks[k]
+	l, ok := m[k]
 	if !ok {
-		m = &sync.Mutex{}
-		e.locks[k] = m
+		l = &refLock{}
+		m[k] = l
 	}
+	l.refs++
 	e.locksMu.Unlock()
-	m.Lock()
-	return m.Unlock
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		e.locksMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(m, k)
+		}
+		e.locksMu.Unlock()
+	}
+}
+
+func (e *Engine) lock(org, subject string) func() {
+	return lockIn(e, e.locks, subjectKey{org, subject})
 }
 
 // digestJSON writes an action the way its digest is taken. Digests are kept
@@ -276,7 +326,7 @@ func (e *Engine) Predict(ctx context.Context, a limen.Action) (limen.Prediction,
 	return e.predictAt(ctx, a, e.clock())
 }
 
-func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (limen.Prediction, error) {
+func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (_ limen.Prediction, rerr error) {
 	if err := ctx.Err(); err != nil {
 		return limen.Prediction{}, err
 	}
@@ -297,6 +347,20 @@ func (e *Engine) predictAt(ctx context.Context, a limen.Action, at time.Time) (l
 		return limen.Prediction{}, conflict(a.Key)
 	case ok && c.Prediction != nil:
 		return *c.Prediction, nil
+	}
+	// A case for a person the organization does not hold yet takes a place
+	// among its people, or fails when none is left. The place goes back if
+	// the prediction then fails.
+	if !ok {
+		added, err := e.people.admit(ctx, a.Org, a.Subject)
+		if err != nil {
+			return limen.Prediction{}, err
+		}
+		defer func() {
+			if rerr != nil {
+				e.people.release(a.Org, a.Subject, added)
+			}
+		}()
 	}
 	// The cover rule reads the subject's cases from the ledger the model
 	// keeps; a model that cannot be loaded is an error, which the decision
@@ -393,7 +457,7 @@ func (e *Engine) Record(ctx context.Context, d limen.Decision) error {
 	return e.recordAt(ctx, d, e.clock())
 }
 
-func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) error {
+func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) (rerr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -417,6 +481,15 @@ func (e *Engine) recordAt(ctx context.Context, d limen.Decision, at time.Time) e
 		if err != nil {
 			return err
 		}
+		added, err := e.people.admit(ctx, d.Org, d.Subject)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if rerr != nil {
+				e.people.release(d.Org, d.Subject, added)
+			}
+		}()
 		var approved []*limen.Target
 		if m := e.models.get(subjectKey{d.Org, d.Subject}); m != nil {
 			approved = m.ledger.approved()
@@ -652,6 +725,22 @@ func (e *Engine) PutProfile(ctx context.Context, p limen.Profile) (limen.Profile
 	if p.Certify == (limen.Certify{}) {
 		p.Certify = limen.DefaultCertify
 	}
+	if p.Subject != "" {
+		// A person's own profile is a record of the person, so it adds
+		// them to the organization like a case does. The person's lock
+		// keeps a prediction for them from reading the count between the
+		// admission and the write.
+		defer e.lock(p.Org, p.Subject)()
+		added, err := e.people.admit(ctx, p.Org, p.Subject)
+		if err != nil {
+			return limen.Profile{}, err
+		}
+		if err := e.st.PutProfile(ctx, p); err != nil {
+			e.people.release(p.Org, p.Subject, added)
+			return limen.Profile{}, err
+		}
+		return p, nil
+	}
 	if err := e.st.PutProfile(ctx, p); err != nil {
 		return limen.Profile{}, err
 	}
@@ -663,15 +752,8 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	var p []string
-	if org == "" {
-		p = append(p, "org")
-	}
-	if subject == "" {
-		p = append(p, "subject")
-	}
-	if len(p) > 0 {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: p, Detail: "forget needs an org and a subject"}
+	if err := limen.ValidatePerson(org, subject); err != nil {
+		return err
 	}
 	defer e.lock(org, subject)()
 	// The write guard is held through the removal, so a snapshot write
@@ -685,7 +767,11 @@ func (e *Engine) Forget(ctx context.Context, org, subject string) error {
 		return err
 	}
 	e.models.drop(subjectKey{org, subject})
-	return e.st.Forget(ctx, org, subject)
+	if err := e.st.Forget(ctx, org, subject); err != nil {
+		return err
+	}
+	e.people.remove(org, subject)
+	return nil
 }
 
 // Replay implements [limen.Admin]. Records are predicted in the order of
@@ -715,7 +801,8 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	// holds allows to this engine's cover rule and weights.
 	scratch := build(Options{Store: mem, Model: e.ver.model, Inline: 8, MaxLabels: e.opts.MaxLabels,
 		MinWeight: optionOf(e.minWeight), MinSessions: optionOf(e.minSessions),
-		AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue)})
+		AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue),
+		MaxSubjects: -1})
 
 	report := limen.ReplayReport{Records: len(recs), Would: map[limen.Verdict]int{}, Kept: o.Keep}
 	var rows []estimate.Row
@@ -751,6 +838,11 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 	if !o.Keep {
 		return report, nil
 	}
+	// Refuse a replay that would add more people than an organization has
+	// room for before it writes a record, so nothing is kept half way.
+	if err := e.replayFits(ctx, recs); err != nil {
+		return limen.ReplayReport{}, err
+	}
 	touched := map[subjectKey]bool{}
 	for _, r := range recs {
 		if err := e.recordAt(ctx, decisionOf(r, true), r.At); err != nil {
@@ -771,6 +863,21 @@ func (e *Engine) Replay(ctx context.Context, records iter.Seq2[limen.ReplayRecor
 		}
 	}
 	return report, nil
+}
+
+// replayFits checks that the people the records name fit in their
+// organizations.
+func (e *Engine) replayFits(ctx context.Context, recs []limen.ReplayRecord) error {
+	byOrg := map[string][]string{}
+	for _, r := range recs {
+		byOrg[r.Action.Org] = append(byOrg[r.Action.Org], r.Action.Subject)
+	}
+	for org, subjects := range byOrg {
+		if err := e.people.fits(ctx, org, subjects); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // answerOf is a replayed record's answer, with how the person gave it.

@@ -25,6 +25,7 @@ import (
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/authorizer"
+	"latere.ai/x/limen/engine"
 )
 
 type doc = map[string]any
@@ -328,6 +329,16 @@ func TestOperations(t *testing.T) {
 	for _, c := range limen.Codes() {
 		if !served[c] {
 			t.Errorf("code %s is served by no route", c)
+		}
+	}
+}
+
+// The document states the bounds the contract enforces.
+func TestDocumentStatesLimits(t *testing.T) {
+	info := fmt.Sprint(at(t, load(t), "info")["description"])
+	for _, want := range []string{strconv.Itoa(limen.MaxStringBytes) + " bytes", strconv.Itoa(engine.MaxSubjectsPerOrg) + " people", "quota_exceeded"} {
+		if !strings.Contains(info, want) {
+			t.Errorf("info.description does not say %q", want)
 		}
 	}
 }

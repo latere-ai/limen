@@ -306,7 +306,8 @@ func (e *Engine) compare(ctx context.Context, steps []step, o CompareOptions) (C
 		}
 		scratch[i] = build(Options{Store: mem, Model: m, Inline: cmp.Or(o.Refit, 1), MaxLabels: e.opts.MaxLabels,
 			MinWeight: optionOf(e.minWeight), MinSessions: optionOf(e.minSessions),
-			AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue)})
+			AnswerFloor: optionOf(e.policy.Floor), AnswerFatigue: optionOf(e.policy.Fatigue),
+			MaxSubjects: -1})
 	}
 
 	// The steps in the order of time, and of the person at one time, so a

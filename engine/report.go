@@ -5,7 +5,6 @@ package engine
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"latere.ai/x/limen"
@@ -90,13 +89,5 @@ func (e *Engine) orgCases(ctx context.Context, org string, from, to time.Time) (
 }
 
 func (e *Engine) reportLock(org string) func() {
-	e.locksMu.Lock()
-	m, ok := e.reports[org]
-	if !ok {
-		m = &sync.Mutex{}
-		e.reports[org] = m
-	}
-	e.locksMu.Unlock()
-	m.Lock()
-	return m.Unlock
+	return lockIn(e, e.reports, org)
 }

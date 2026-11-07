@@ -320,6 +320,7 @@ func TestLock(t *testing.T) {
 		s.Forget(ctx, "o", "s"),
 		s.DeleteProfile(ctx, limen.Scope{Org: "o"}),
 		func() error { _, err := s.Subjects(ctx, "o"); return err }(),
+		func() error { _, err := s.ProfileSubjects(ctx, "o"); return err }(),
 		func() error { _, err := s.Orgs(ctx); return err }(),
 		func() error { _, _, err := s.WeekReport(ctx, "o", storetest.Monday); return err }(),
 		s.PutWeekReport(ctx, "o", storetest.Week(storetest.Monday)),

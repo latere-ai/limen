@@ -91,6 +91,10 @@ type Store interface {
 	// Subjects returns, sorted, the subjects of the organization that have
 	// a case: the persons a report of the organization reads.
 	Subjects(ctx context.Context, org string) ([]string, error)
+	// ProfileSubjects returns, sorted, the subjects of the organization
+	// that have an own profile saved, which are persons the organization
+	// holds a record of even when they have no case.
+	ProfileSubjects(ctx context.Context, org string) ([]string, error)
 	// WeekReport returns the kept week of the organization that starts at
 	// from, and false when none is kept.
 	WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error)

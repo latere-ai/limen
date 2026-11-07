@@ -44,6 +44,10 @@ func (s Scope) check(p *problems) {
 	if s.Org == "" {
 		p.add("org", "is empty")
 	}
+	p.long("org", s.Org)
+	p.long("kind", s.Kind)
+	p.long("agent", s.Agent)
+	p.long("subject", s.Subject)
 	if s.Subject == "" {
 		return
 	}

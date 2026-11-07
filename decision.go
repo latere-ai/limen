@@ -44,6 +44,7 @@ func (d Decision) Validate() error {
 	if d.Source == "" {
 		p.add("source", "is empty")
 	}
+	p.long("source", d.Source)
 	if d.Action != nil {
 		d.Action.check(&p, "action.")
 		if d.Action.Key != d.Key {

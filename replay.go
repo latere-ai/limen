@@ -44,6 +44,7 @@ func (r ReplayRecord) Validate() error {
 	if r.Source == "" {
 		p.add("source", "is empty")
 	}
+	p.long("source", r.Source)
 	if !r.AnsweredAt.IsZero() && r.AnsweredAt.Before(r.At) {
 		p.add("answered_at", "is before at")
 	}

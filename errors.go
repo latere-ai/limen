@@ -6,6 +6,7 @@ package limen
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +31,7 @@ const (
 	CodeNoCase                Code = "no_case"
 	CodeUnauthenticated       Code = "unauthenticated"
 	CodeForbidden             Code = "forbidden"
+	CodeQuotaExceeded         Code = "quota_exceeded"
 	CodeBodyTooLarge          Code = "body_too_large"
 	CodeRateLimited           Code = "rate_limited"
 	CodeInternal              Code = "internal"
@@ -60,6 +62,7 @@ var table = map[Code]row{
 	CodeNoCase:                {404, "Limen has no record of this action. Check the organization, the person, and the action ID."},
 	CodeUnauthenticated:       {401, "The request has no valid credential. Sign in again, then send the request again."},
 	CodeForbidden:             {403, "You do not have permission for this request. Ask an administrator of the organization for access."},
+	CodeQuotaExceeded:         {403, "This organization has the maximum number of persons. Forget a person who does not need records, then send the request again."},
 	CodeBodyTooLarge:          {413, "The request is larger than the limit of Limen. Send it in smaller parts."},
 	CodeRateLimited:           {429, "There are too many requests. Wait a short time, then send the request again."},
 	CodeInternal:              {500, "Limen had an internal failure. Send the request again. If the failure continues, report it with the request ID."},
@@ -73,7 +76,7 @@ func Codes() []Code {
 	return []Code{
 		CodeInvalidAction, CodeInvalidDecision, CodeInvalidAnswer, CodeInvalidProfile,
 		CodeInvalidQuery, CodeInvalidReplay, CodeAskTooCostly, CodeActionConflict,
-		CodeAlreadyDecided, CodeNoDecision, CodeNoCase, CodeUnauthenticated, CodeForbidden,
+		CodeAlreadyDecided, CodeNoDecision, CodeNoCase, CodeUnauthenticated, CodeForbidden, CodeQuotaExceeded,
 		CodeBodyTooLarge, CodeRateLimited, CodeInternal, CodeAuthorizerUnavailable,
 		CodeUnavailable,
 	}
@@ -133,6 +136,14 @@ type problems struct {
 func (p *problems) add(field, note string) {
 	p.fields = append(p.fields, field)
 	p.notes = append(p.notes, field+" "+note)
+}
+
+// long records a string field of more than [MaxStringBytes] bytes. The
+// detail never holds the value, so a refused megabyte is not echoed back.
+func (p *problems) long(field, v string) {
+	if len(v) > MaxStringBytes {
+		p.add(field, "is longer than "+strconv.Itoa(MaxStringBytes)+" bytes")
+	}
 }
 
 func (p *problems) err(code Code) error {

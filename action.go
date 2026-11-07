@@ -47,6 +47,9 @@ func (k Key) check(p *problems, at string) {
 	if k.ActionID == "" {
 		p.add(at+"action_id", "is empty")
 	}
+	p.long(at+"org", k.Org)
+	p.long(at+"subject", k.Subject)
+	p.long(at+"action_id", k.ActionID)
 }
 
 // Effect is what an action can do to the world: nothing, read, write
@@ -72,6 +75,19 @@ func (e Effect) Valid() bool {
 
 // MaxAttributes bounds an action's attributes.
 const MaxAttributes = 64
+
+// MaxSignals bounds an action's signals.
+const MaxSignals = 64
+
+// MaxHolds bounds the holds of an action's environment.
+const MaxHolds = 64
+
+// MaxStringBytes bounds every string a client sends, in bytes: an
+// identifier, a name, a kind, an attribute key or value. Each is kept in a
+// record and some are map keys or path elements, so one unbounded string
+// costs memory and disk for as long as the record lives. An action's input
+// is no string of this kind: it is never kept.
+const MaxStringBytes = 256
 
 // Action is one proposed action, described by what the decision point can
 // observe before it runs. Limen learns from these fields and from time,
@@ -173,8 +189,13 @@ func (a Action) Validate() error {
 
 func (a Action) check(p *problems, at string) {
 	a.Key.check(p, at)
-	if a.Actor != nil && a.Actor.Kind == "" {
-		p.add(at+"actor.kind", "is empty")
+	if a.Actor != nil {
+		if a.Actor.Kind == "" {
+			p.add(at+"actor.kind", "is empty")
+		}
+		p.long(at+"actor.kind", a.Actor.Kind)
+		p.long(at+"actor.id", a.Actor.ID)
+		p.long(at+"actor.session", a.Actor.Session)
 	}
 	if a.Kind == "" {
 		p.add(at+"kind", "is empty")
@@ -182,6 +203,8 @@ func (a Action) check(p *problems, at string) {
 	if a.Name == "" {
 		p.add(at+"name", "is empty")
 	}
+	p.long(at+"kind", a.Kind)
+	p.long(at+"name", a.Name)
 	if !a.Effect.Valid() {
 		p.add(at+"effect", "is not one of none, read, write, external")
 	}
@@ -197,9 +220,28 @@ func (a Action) check(p *problems, at string) {
 		if s := a.Target.Sensitivity; s != nil && !unit(*s) {
 			p.add(at+"target.sensitivity", "is outside [0, 1]")
 		}
+		p.long(at+"target.kind", a.Target.Kind)
+		p.long(at+"target.id", a.Target.ID)
+		p.long(at+"target.class", a.Target.Class)
 	}
-	if a.Environment != nil && a.Environment.Kind == "" {
-		p.add(at+"environment.kind", "is empty")
+	if e := a.Environment; e != nil {
+		if e.Kind == "" {
+			p.add(at+"environment.kind", "is empty")
+		}
+		p.long(at+"environment.kind", e.Kind)
+		p.long(at+"environment.repositories", e.Repositories)
+		if len(e.Holds) > MaxHolds {
+			p.add(at+"environment.holds", "has more than "+strconv.Itoa(MaxHolds)+" entries")
+		}
+		// Past the bound the count is the problem; the entries beyond it
+		// are not read.
+		for i, h := range e.Holds[:min(len(e.Holds), MaxHolds)] {
+			p.long(at+"environment.holds["+strconv.Itoa(i)+"]", h)
+		}
+	}
+	if c := a.Scope; c != nil {
+		p.long(at+"scope.undo", c.Undo)
+		p.long(at+"scope.contact", c.Contact)
 	}
 	if len(a.Attributes) > MaxAttributes {
 		p.add(at+"attributes", "has more than "+strconv.Itoa(MaxAttributes)+" entries")
@@ -208,15 +250,28 @@ func (a Action) check(p *problems, at string) {
 		if k == "" {
 			p.add(at+"attributes", "has an empty key")
 		}
-		if !scalar(v) {
-			p.add(at+"attributes."+k, "is not a string, a finite number, or a boolean")
+		// A key past the bound is named by the map alone, so the path of
+		// the field never carries it.
+		path := at + "attributes." + k
+		if len(k) > MaxStringBytes {
+			p.add(at+"attributes", "has a key longer than "+strconv.Itoa(MaxStringBytes)+" bytes")
+			path = at + "attributes"
+		}
+		if s, ok := v.(string); ok {
+			p.long(path, s)
+		} else if !scalar(v) {
+			p.add(path, "is not a string, a finite number, or a boolean")
 		}
 	}
-	for i, s := range a.Signals {
+	if len(a.Signals) > MaxSignals {
+		p.add(at+"signals", "has more than "+strconv.Itoa(MaxSignals)+" entries")
+	}
+	for i, s := range a.Signals[:min(len(a.Signals), MaxSignals)] {
 		si := at + "signals[" + strconv.Itoa(i) + "]"
 		if s.Source == "" {
 			p.add(si+".source", "is empty")
 		}
+		p.long(si+".source", s.Source)
 		if s.Verdict != "" && !s.Verdict.Valid() {
 			p.add(si+".verdict", "is not one of allow, flag, ask, block")
 		}

@@ -39,6 +39,7 @@ type Answer struct {
 func (a Answer) Validate() error {
 	var p problems
 	a.Key.check(&p, "")
+	p.long("by", a.By)
 	a.HowAnswered.check(&p, "")
 	return p.err(CodeInvalidAnswer)
 }
@@ -100,6 +101,7 @@ func (h HowAnswered) check(p *problems, at string) {
 	if h.WaitedMS != nil && *h.WaitedMS < 0 {
 		p.add(at+"waited_ms", "is below 0")
 	}
+	p.long(at+"surface", h.Surface)
 }
 
 // Kept is h as Limen keeps it: a surface outside the list is dropped, so
@@ -164,6 +166,10 @@ func (q CaseQuery) Validate() error {
 	if q.Subject == "" {
 		p.add("subject", "is empty")
 	}
+	p.long("org", q.Org)
+	p.long("subject", q.Subject)
+	p.long("action_id", q.ActionID)
+	p.long("cursor", q.Cursor)
 	if q.Limit < 0 || q.Limit > MaxPageLimit {
 		p.add("limit", "is outside [0, 500]")
 	}

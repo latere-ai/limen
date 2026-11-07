@@ -84,6 +84,7 @@ func (q ReportQuery) Validate() error {
 	if q.Org == "" {
 		p.add("org", "is empty")
 	}
+	p.long("org", q.Org)
 	from := weekBound(&p, "from", q.From)
 	to := weekBound(&p, "to", q.To)
 	switch {

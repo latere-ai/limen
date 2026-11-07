@@ -176,8 +176,27 @@ func encode(name string) string {
 	return b.String()
 }
 
-// subjectFor returns the subject's state, registering it on first use.
+// subjectFor returns the subject's state, registering it on first use. A
+// write takes it; a read uses [Store.subjectIfAny].
 func (s *Store) subjectFor(ctx context.Context, org, name string) (*subject, error) {
+	return s.lookup(ctx, org, name, true)
+}
+
+// subjectIfAny returns the subject's state, or nil when the store holds
+// nothing about the subject: no entry in memory and no directory on disk.
+// A read of such a person is answered as an empty person and keeps no
+// entry, so reads of names nobody wrote do not grow the map. A directory
+// found on disk registers an entry, as for any person that has data.
+func (s *Store) subjectIfAny(ctx context.Context, org, name string) (*subject, error) {
+	return s.lookup(ctx, org, name, false)
+}
+
+// lookup finds the subject's state, registering an entry when create is
+// set or the subject's directory exists. The directory is looked for under
+// s.mu, and a write registers its entry under s.mu before it creates the
+// directory, so a read either finds the writer's entry or ran before the
+// write began.
+func (s *Store) lookup(ctx context.Context, org, name string, create bool) (*subject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -189,7 +208,15 @@ func (s *Store) subjectFor(ctx context.Context, org, name string) (*subject, err
 	k := subjectKey{org, name}
 	sub, ok := s.subjects[k]
 	if !ok {
-		sub = &subject{dir: filepath.Join(s.dir, "subjects", encode(org), encode(name))}
+		dir := filepath.Join(s.dir, "subjects", encode(org), encode(name))
+		if !create {
+			if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+				return nil, nil
+			} else if err != nil {
+				return nil, fmt.Errorf("file store: look for %s: %w", dir, err)
+			}
+		}
+		sub = &subject{dir: dir}
 		s.subjects[k] = sub
 	}
 	return sub, nil
@@ -273,8 +300,8 @@ func (s *Store) write(path string, data []byte) error {
 
 // Case implements [store.Store].
 func (s *Store) Case(ctx context.Context, k limen.Key) (store.Case, bool, error) {
-	sub, err := s.subjectFor(ctx, k.Org, k.Subject)
-	if err != nil {
+	sub, err := s.subjectIfAny(ctx, k.Org, k.Subject)
+	if err != nil || sub == nil {
 		return store.Case{}, false, err
 	}
 	sub.mu.Lock()
@@ -375,9 +402,12 @@ func (s *Store) NextT(ctx context.Context, org, name string) (int64, error) {
 
 // Cases implements [store.Store].
 func (s *Store) Cases(ctx context.Context, org, name string) ([]store.Case, error) {
-	sub, err := s.subjectFor(ctx, org, name)
+	sub, err := s.subjectIfAny(ctx, org, name)
 	if err != nil {
 		return nil, err
+	}
+	if sub == nil {
+		return []store.Case{}, nil
 	}
 	sub.mu.Lock()
 	if err := sub.load(); err != nil {
@@ -562,6 +592,31 @@ func (s *Store) Subjects(ctx context.Context, org string) ([]string, error) {
 	return out, nil
 }
 
+// ProfileSubjects implements [store.Store]: the subjects named by the own
+// profiles in the organization's profile file.
+func (s *Store) ProfileSubjects(ctx context.Context, org string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, ErrClosed
+	}
+	ps, err := s.orgProfiles(org)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for sc := range ps {
+		if sc.Subject != "" {
+			out = append(out, sc.Subject)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 // Orgs returns, sorted, the organizations that have a subject with a
 // case, read from the meta.json of their subjects, since a directory's name
 // may be a hash. A replay comparison of a whole ledger reads them; a store
@@ -675,8 +730,8 @@ func snapshotPath(sub *subject, version string) string {
 
 // Snapshot implements [store.Store].
 func (s *Store) Snapshot(ctx context.Context, org, name, version string) ([]byte, bool, error) {
-	sub, err := s.subjectFor(ctx, org, name)
-	if err != nil {
+	sub, err := s.subjectIfAny(ctx, org, name)
+	if err != nil || sub == nil {
 		return nil, false, err
 	}
 	sub.mu.Lock()
@@ -718,8 +773,8 @@ func (s *Store) PutSnapshot(ctx context.Context, org, name, version string, stat
 // Forget implements [store.Store]: the subject's directory goes, and its
 // state in memory with it.
 func (s *Store) Forget(ctx context.Context, org, name string) error {
-	sub, err := s.subjectFor(ctx, org, name)
-	if err != nil {
+	sub, err := s.subjectIfAny(ctx, org, name)
+	if err != nil || sub == nil {
 		return err
 	}
 	sub.mu.Lock()

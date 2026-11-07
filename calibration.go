@@ -108,12 +108,7 @@ type CalibrationQuery struct {
 // [*Error] with [CodeInvalidQuery], or nil.
 func (q CalibrationQuery) Validate() error {
 	var p problems
-	if q.Org == "" {
-		p.add("org", "is empty")
-	}
-	if q.Subject == "" {
-		p.add("subject", "is empty")
-	}
+	checkPerson(&p, q.Org, q.Subject)
 	checkWindow(&p, q.From, q.To)
 	return p.err(CodeInvalidQuery)
 }

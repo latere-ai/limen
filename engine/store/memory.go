@@ -178,6 +178,23 @@ func (m *Memory) Subjects(ctx context.Context, org string) ([]string, error) {
 	return out, nil
 }
 
+// ProfileSubjects implements [Store].
+func (m *Memory) ProfileSubjects(ctx context.Context, org string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []string{}
+	for sc := range m.profiles {
+		if sc.Org == org && sc.Subject != "" {
+			out = append(out, sc.Subject)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 // WeekReport implements [Store].
 func (m *Memory) WeekReport(ctx context.Context, org string, from time.Time) (limen.WeekReport, bool, error) {
 	if err := ctx.Err(); err != nil {

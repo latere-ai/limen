@@ -33,6 +33,28 @@ func (k Key) Validate() error {
 	return p.err(CodeInvalidQuery)
 }
 
+// ValidatePerson reports an empty or oversized org or subject as one
+// [*Error] with [CodeInvalidQuery], or nil: a route that names a person
+// and nothing else, such as forgetting them.
+func ValidatePerson(org, subject string) error {
+	var p problems
+	checkPerson(&p, org, subject)
+	return p.err(CodeInvalidQuery)
+}
+
+// checkPerson holds an org and a subject to being set and within
+// [MaxStringBytes].
+func checkPerson(p *problems, org, subject string) {
+	if org == "" {
+		p.add("org", "is empty")
+	}
+	if subject == "" {
+		p.add("subject", "is empty")
+	}
+	p.long("org", org)
+	p.long("subject", subject)
+}
+
 // The kinds of a suggested [Ask] (specs 009 and 011). Three are asks in
 // the ask band, told apart by the evidence ratio at the action and by the
 // answers of its family. Two are allows the cover rule turned into asks.
@@ -168,12 +190,9 @@ type LearnedQuery struct {
 // [*Error] with [CodeInvalidQuery], or nil.
 func (q LearnedQuery) Validate() error {
 	var p problems
-	if q.Org == "" {
-		p.add("org", "is empty")
-	}
-	if q.Subject == "" {
-		p.add("subject", "is empty")
-	}
+	checkPerson(&p, q.Org, q.Subject)
+	p.long("agent", q.Agent)
+	p.long("kind", q.Kind)
 	return p.err(CodeInvalidQuery)
 }
 
@@ -240,12 +259,7 @@ type PreviewRequest struct {
 // on no evidence fail with [CodeAskTooCostly].
 func (r PreviewRequest) Validate() error {
 	var p problems
-	if r.Org == "" {
-		p.add("org", "is empty")
-	}
-	if r.Subject == "" {
-		p.add("subject", "is empty")
-	}
+	checkPerson(&p, r.Org, r.Subject)
 	checkWindow(&p, r.From, r.To)
 	if !unit(r.AuditRate) {
 		p.add("audit_rate", "is outside [0, 1]")
