@@ -39,7 +39,7 @@
 //
 // A hosted server sets LIMEN_OIDC_ISSUERS and LIMEN_OIDC_AUDIENCE in place
 // of LIMEN_TOKEN and LIMEN_SUBJECT, and LIMEN_AUTHORIZER_URL or LIMEN_ADMINS
-// for who may do what; docs/running.md has every variable. It keeps one
+// for who may do what; docs/configuration.md has every variable. It keeps one
 // ledger directory, so one process serves it.
 //
 // It stops on an interrupt or a termination signal, after fitting what
@@ -73,6 +73,11 @@ import (
 	"latere.ai/x/limen/server"
 )
 
+// maxAnswerFloorMS is the longest LIMEN_ANSWER_FLOOR_MS: one day, the bound
+// the API puts on an answer's answer_ms. A larger value would overflow the
+// duration and turn the rule off.
+const maxAnswerFloorMS = 24 * 60 * 60 * 1000
+
 // The exit codes.
 const (
 	exitOK     = 0
@@ -96,9 +101,19 @@ var signalContext = func() (context.Context, context.CancelFunc) {
 // listen opens the server's listener; a test replaces it to learn the port.
 var listen = func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) }
 
+// issuerClientTimeout bounds one call to an issuer or the authorization
+// endpoint, which is the jwt package's own default; without it a stalled
+// issuer blocks the start, and a hung refresh blocks requests.
+const issuerClientTimeout = 10 * time.Second
+
+// issuerTimeout is the bound httpClient sets; a test shortens it.
+var issuerTimeout = issuerClientTimeout
+
 // httpClient reads the issuers' key sets and asks the authorization
 // endpoint, instrumented as every outbound call of the family is.
-var httpClient = otel.HTTPClient
+var httpClient = func() *http.Client {
+	return &http.Client{Timeout: issuerTimeout, Transport: otel.Transport(nil)}
+}
 
 // clock stamps the records the engine keeps; nil is the wall clock. A test
 // sets it to run the conformance cases that need a closed week.
@@ -143,6 +158,10 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 			return exitConfig
 		}
 	}
+	if settings[2] > maxAnswerFloorMS {
+		errOut.Printf("limend: LIMEN_ANSWER_FLOOR_MS is not correct: %d. Use %d (one day) or less.\n", settings[2], maxAnswerFloorMS)
+		return exitConfig
+	}
 	minWeight, minSessions, floorMS, fatigue := settings[0], settings[1], settings[2], settings[3]
 	model, err := engine.ParseModel(getenv("LIMEN_MODEL"))
 	if err != nil {
@@ -165,18 +184,20 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 			errOut.Printf("limend: cannot close the ledger: %v\n", err)
 		}
 	}()
-	ln, err := listen(addr)
-	if err != nil {
-		errOut.Printf("limend: cannot listen on %s: %v\n", addr, err)
-		return exitFail
-	}
 	ctx, stop := signalContext()
 	defer stop()
+	// The key sets come first: a port that accepts connections promises
+	// that limend can verify a token.
 	if acc.warm != nil {
 		if err := acc.warm(ctx); err != nil {
 			errOut.Printf("limend: cannot read the key sets of LIMEN_OIDC_ISSUERS: %v\n", err)
 			return exitFail
 		}
+	}
+	ln, err := listen(addr)
+	if err != nil {
+		errOut.Printf("limend: cannot listen on %s: %v\n", addr, err)
+		return exitFail
 	}
 
 	floor := time.Duration(floorMS) * time.Millisecond

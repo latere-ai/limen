@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"latere.ai/x/pkg/authkit/issuertest"
+
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/client"
 	"latere.ai/x/limen/conformance"
@@ -422,5 +424,129 @@ func TestModelSwitch(t *testing.T) {
 	back := probe(c, "back")
 	if code, _ := stop(); code != exitOK || back.Source != "learned/1" {
 		t.Errorf("back to learned/1: %+v, exit %d", back, code)
+	}
+}
+
+// stopped is a signal context that has already ended, so run starts, finds
+// the stop, and returns.
+func stopped(t *testing.T) {
+	t.Helper()
+	restore(t)
+	signalContext = func() (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx, cancel
+	}
+}
+
+// An issuer that takes a connection and never answers ends the start with
+// an error once the client's bound passes, instead of holding the start
+// forever past a termination signal.
+func TestAStalledIssuerEndsTheStart(t *testing.T) {
+	iss := issuertest.New(t, issuertest.WithDefaultAudience("limen"))
+	iss.Hang()
+	t.Cleanup(iss.Resume)
+	old := issuerTimeout
+	issuerTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { issuerTimeout = old })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	restore(t)
+	signalContext = func() (context.Context, context.CancelFunc) { return ctx, cancel }
+	var out, errOut syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- run(nil, &out, &errOut, env(map[string]string{
+			"LIMEN_OIDC_ISSUERS": iss.URL(), "LIMEN_OIDC_AUDIENCE": "limen",
+			"LIMEN_DATA_DIR": t.TempDir(), "LIMEN_ADDR": "127.0.0.1:0",
+		}))
+	}()
+	select {
+	case c := <-code:
+		if c != exitFail || !strings.Contains(errOut.String(), "cannot read the key sets") {
+			t.Errorf("exit %d: %s", c, errOut.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the start is still waiting for the issuer after 5s")
+	}
+}
+
+// The port stays closed until the key sets are read, so a TCP probe that
+// connects means limend can verify a token.
+func TestThePortOpensAfterTheKeySetsAreRead(t *testing.T) {
+	iss := issuertest.New(t, issuertest.WithDefaultAudience("limen"))
+	iss.Hang()
+	released := false
+	release := func() {
+		if !released {
+			released = true
+			iss.Resume()
+		}
+	}
+	t.Cleanup(release)
+	free, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := free.Addr().String()
+	if err := free.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	restore(t)
+	signalContext = func() (context.Context, context.CancelFunc) { return ctx, cancel }
+	var out, errOut syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- run(nil, &out, &errOut, env(map[string]string{
+			"LIMEN_OIDC_ISSUERS": iss.URL(), "LIMEN_OIDC_AUDIENCE": "limen",
+			"LIMEN_DATA_DIR": t.TempDir(), "LIMEN_ADDR": addr,
+		}))
+	}()
+	probe := func() bool {
+		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		_ = c.Close()
+		return true
+	}
+	time.Sleep(300 * time.Millisecond)
+	if probe() {
+		t.Error("the port accepted a connection before the key sets were read")
+	}
+	release()
+	deadline := time.Now().Add(5 * time.Second)
+	for !probe() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the port never opened: %s%s", out.String(), errOut.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	if c := <-code; c != exitOK {
+		t.Errorf("exit %d: %s", c, errOut.String())
+	}
+}
+
+// A floor beyond one day, the bound the API puts on an answer's answer_ms,
+// is refused at the start. Left alone it would wrap the duration negative
+// and turn the rule off without a word.
+func TestAnAnswerFloorBeyondADayIsRefused(t *testing.T) {
+	for _, tc := range []struct {
+		ms   string
+		code int
+	}{{"10000000000000", exitConfig}, {"86400001", exitConfig}, {"86400000", exitOK}} {
+		stopped(t)
+		var out, errOut syncBuffer
+		c := run(nil, &out, &errOut, env(map[string]string{
+			"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_ADDR": "127.0.0.1:0", "LIMEN_ANSWER_FLOOR_MS": tc.ms,
+		}))
+		if c != tc.code {
+			t.Errorf("LIMEN_ANSWER_FLOOR_MS=%s: exit %d, want %d: %s%s", tc.ms, c, tc.code, out.String(), errOut.String())
+		}
+		if tc.code == exitConfig && !strings.Contains(errOut.String(), "LIMEN_ANSWER_FLOOR_MS") {
+			t.Errorf("LIMEN_ANSWER_FLOOR_MS=%s: the message does not name the variable: %s", tc.ms, errOut.String())
+		}
 	}
 }
