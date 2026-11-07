@@ -11,6 +11,67 @@ the commit log.
 
 ## Unreleased
 
+### Added
+
+- **Pages for each reader of a service:** `docs/local.md` runs `limend`
+  from a checkout, `docs/install.md` gets, verifies, runs, and upgrades
+  it, `docs/configuration.md` gives each variable and each value that
+  stops a start, `docs/security.md` tells what `limend` sends, keeps, and
+  writes in its logs, and `docs/authorizer.md` gives the contract of an
+  authorization endpoint. `docs/running.md` is removed: its content is in
+  `docs/install.md` and `docs/configuration.md`.
+- **`SECURITY.md` gives each property with the tests that check it,** the
+  known limits, the audit state, and the commands that verify a release.
+- **`deploy/README.md` tells what each folder of `deploy/` contains.**
+  `deploy/prod` is the maintainer's own installation, not an install
+  path.
+
+### Changed
+
+- **The README starts with what Limen is, then its status, a quickstart,
+  and how it fits with the other services.** The quickstart waits until
+  `limend` answers before the first request. Before, the first
+  prediction could arrive before the server listened, and the output was
+  different from the README.
+- **Issues are filed through the forms only.** A blank issue is no
+  longer offered.
+
+### Fixed
+
+- **Documents that did not agree with the code.** `docs/api.md` no
+  longer says that each route can return `rate_limited`: `limend` limits
+  no rate. The message of `invalid_answer` is the one that `limend`
+  sends. The ten seconds at a stop are for the requests and the update
+  of the models together. A replay with `keep` that stops at a conflict
+  keeps the records before it. In the report of an organization, the
+  counts of persons and decisions obey the rule of 5 persons only. A
+  failure of Limen never makes Limen suggest `allow`, and your rules
+  then decide up to their ceiling.
+- **A start stops when an issuer does not answer in 10 seconds.** Before,
+  `limend` could wait for an issuer without a limit, at a start and when
+  it read a key set again, and requests waited behind it.
+- **`limend` opens its port after it reads the key sets of the issuers.**
+  A TCP probe that passes now means that `limend` can check a token.
+  Before, the port opened first, and the probe passed while `limend`
+  still waited for an issuer.
+- **`LIMEN_ANSWER_FLOOR_MS` above one day stops the start with exit code
+  2.** Before, a value of 10^13 or more overflowed and turned the rule
+  off without a warning.
+
+### Security
+
+- **A fit that runs while `Forget` removes a person no longer writes the
+  model of the person again.** Before, such a fit could put the model
+  back in the ledger directory after `Forget`, and the next prediction
+  for the person used it.
+- **The errors of the authorization endpoint no longer go to the
+  caller.** A `503 authorizer_unavailable` names the permission and the
+  resource, and not the address of the endpoint or the error of the
+  connection. The log line keeps the cause, without the user information
+  and the query of the address. The line that `limend` writes when it
+  starts leaves them out too. Before, both could show a key that was in
+  the address.
+
 ## v0.9.1 - 2026-11-05
 
 ### Changed
@@ -580,14 +641,15 @@ The documents:
   `limend` binaries for linux/amd64 and linux/arm64, the bill of materials
   of the image, and `checksums.txt` with its signature.
 
-### Security
-
-- Built with Go 1.27.2 and golang.org/x/net v0.60.0, which fix GO-2026-6611, GO-2026-6612, GO-2026-6613 and GO-2026-6617.
-- **Built with gRPC-Go 1.83.2,** which fixes GHSA-2v4p-qf9q-27wj, a crash
-  of gRPC xDS servers on a request with neither `:authority` nor `Host`.
-  This code runs no xDS server, so the flaw was not reachable.
-
 ### Fixed
 
 - **Built with Go 1.27.3,** which fixes GO-2026-6809, a flaw in the
   standard library's certificate verification that this code can reach.
+
+### Security
+
+- **Built with Go 1.27.2 and golang.org/x/net v0.60.0,** which fix
+  GO-2026-6611, GO-2026-6612, GO-2026-6613 and GO-2026-6617.
+- **Built with gRPC-Go 1.83.2,** which fixes GHSA-2v4p-qf9q-27wj, a crash
+  of gRPC xDS servers on a request with neither `:authority` nor `Host`.
+  This code runs no xDS server, so the flaw was not reachable.
