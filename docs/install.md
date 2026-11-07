@@ -295,5 +295,10 @@ that came after the change, in the background.
   requests, and it does not limit the time that a client takes to send a
   request body. A proxy in front can limit both
   ([What Limen does not defend](security.md#what-limen-does-not-defend)).
+- **A model cache below the memory limit.** If the container has a
+  memory limit, set `LIMEN_MODEL_CACHE_BYTES` to half of it or less
+  ([Both modes](configuration.md#both-modes)). The default, 1 GiB, is
+  more than many limits, and a container that goes above its limit is
+  stopped.
 - **Probes on the port.** Use a TCP probe for readiness and for liveness
   ([Check that limend runs](#check-that-limend-runs)).

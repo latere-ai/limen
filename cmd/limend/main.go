@@ -36,6 +36,10 @@
 //	                  default, or learned/2, which reads the scope of an
 //	                  action and the weight of each answer under weights/2
 //	                  (spec 011); compare the two with limen compare first
+//	LIMEN_MODEL_CACHE_BYTES
+//	                the memory, in bytes, for the fitted models limend
+//	                  keeps; default 1 GiB, the engine's; set it below the
+//	                  container's memory limit
 //
 // A hosted server sets LIMEN_OIDC_ISSUERS and LIMEN_OIDC_AUDIENCE in place
 // of LIMEN_TOKEN and LIMEN_SUBJECT, and LIMEN_AUTHORIZER_URL or LIMEN_ADMINS
@@ -115,6 +119,9 @@ var httpClient = func() *http.Client {
 	return &http.Client{Timeout: issuerTimeout, Transport: otel.Transport(nil)}
 }
 
+// newEngine builds the engine; a test replaces it to read the options.
+var newEngine = engine.New
+
 // clock stamps the records the engine keeps; nil is the wall clock. A test
 // sets it to run the conformance cases that need a closed week.
 var clock func() time.Time
@@ -168,6 +175,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		errOut.Printf("limend: LIMEN_MODEL is not correct: %v.\n", err)
 		return exitConfig
 	}
+	cache, err := cacheBytes(getenv)
+	if err != nil {
+		errOut.Printf("limend: %v\n", err)
+		return exitConfig
+	}
 	addr := cmp.Or(strings.TrimSpace(getenv("LIMEN_ADDR")), defaultAddr)
 	dir := dataDir(getenv)
 	if dir == "" {
@@ -204,8 +216,8 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	if floorMS < 0 {
 		floor = -1
 	}
-	eng := engine.New(engine.Options{Store: st, Clock: clock, Model: model, MinWeight: minWeight, MinSessions: minSessions,
-		AnswerFloor: floor, AnswerFatigue: fatigue})
+	eng := newEngine(engine.Options{Store: st, Clock: clock, Model: model, MinWeight: minWeight, MinSessions: minSessions,
+		AnswerFloor: floor, AnswerFatigue: fatigue, CacheBytes: cache})
 	// Close stops the fitters and cannot fail.
 	defer func() { _ = eng.Close() }()
 	o := acc.options
@@ -266,6 +278,22 @@ func setting(getenv func(string) string, name string) (int, error) {
 		return 0, errors.New(name + " is not correct: " + strconv.Quote(v) + ". Use a whole number, 0 or more. 0 turns this setting off.")
 	case n == 0:
 		return -1, nil
+	}
+	return n, nil
+}
+
+// cacheBytes reads LIMEN_MODEL_CACHE_BYTES, the bound on the memory of the
+// fitted models; empty is 0, the engine's default. A container's memory
+// limit below the default would otherwise end the process once the cache
+// fills.
+func cacheBytes(getenv func(string) string) (int64, error) {
+	v := strings.TrimSpace(getenv("LIMEN_MODEL_CACHE_BYTES"))
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, errors.New("LIMEN_MODEL_CACHE_BYTES is not correct: " + strconv.Quote(v) + ". Use a whole number of bytes, more than 0, for example 268435456 for 256 MiB.")
 	}
 	return n, nil
 }

@@ -22,6 +22,11 @@ the commit log.
   `docs/install.md` and `docs/configuration.md`.
 - **`SECURITY.md` gives each property with the tests that check it,** the
   known limits, the audit state, and the commands that verify a release.
+- **`LIMEN_MODEL_CACHE_BYTES` sets the memory for the fitted models that
+  `limend` keeps.** The default stays 1 GiB. Set it to half of the memory
+  limit of the container or less. Before, the bound could not be set,
+  and a container with a smaller memory limit could be stopped as the
+  cache grew.
 - **`deploy/README.md` tells what each folder of `deploy/` contains.**
   `deploy/prod` is the maintainer's own installation, not an install
   path.

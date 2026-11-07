@@ -23,6 +23,7 @@ import (
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/client"
 	"latere.ai/x/limen/conformance"
+	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/internal/version"
 )
 
@@ -547,6 +548,45 @@ func TestAnAnswerFloorBeyondADayIsRefused(t *testing.T) {
 		}
 		if tc.code == exitConfig && !strings.Contains(errOut.String(), "LIMEN_ANSWER_FLOOR_MS") {
 			t.Errorf("LIMEN_ANSWER_FLOOR_MS=%s: the message does not name the variable: %s", tc.ms, errOut.String())
+		}
+	}
+}
+
+// LIMEN_MODEL_CACHE_BYTES bounds the fitted models limend keeps, so an
+// installation sets the bound below its container's memory limit; an
+// empty value leaves the engine's default, and a value that is not a
+// positive number of bytes stops the start.
+func TestTheModelCacheBoundComesFromTheEnvironment(t *testing.T) {
+	ne := newEngine
+	t.Cleanup(func() { newEngine = ne })
+	for _, tc := range []struct {
+		value string
+		code  int
+		want  int64
+	}{{"", exitOK, 0}, {"268435456", exitOK, 268435456}, {" 1048576 ", exitOK, 1 << 20},
+		{"0", exitConfig, 0}, {"-1", exitConfig, 0}, {"256Mi", exitConfig, 0}, {"1.5", exitConfig, 0}} {
+		stopped(t)
+		got := int64(-1)
+		newEngine = func(o engine.Options) *engine.Engine {
+			got = o.CacheBytes
+			return ne(o)
+		}
+		var out, errOut syncBuffer
+		c := run(nil, &out, &errOut, env(map[string]string{
+			"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": t.TempDir(), "LIMEN_ADDR": "127.0.0.1:0", "LIMEN_MODEL_CACHE_BYTES": tc.value,
+		}))
+		if c != tc.code {
+			t.Errorf("LIMEN_MODEL_CACHE_BYTES=%q: exit %d, want %d: %s%s", tc.value, c, tc.code, out.String(), errOut.String())
+			continue
+		}
+		if tc.code == exitConfig {
+			if !strings.Contains(errOut.String(), "LIMEN_MODEL_CACHE_BYTES") {
+				t.Errorf("LIMEN_MODEL_CACHE_BYTES=%q: the message does not name the variable: %s", tc.value, errOut.String())
+			}
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("LIMEN_MODEL_CACHE_BYTES=%q: the engine got CacheBytes %d, want %d", tc.value, got, tc.want)
 		}
 	}
 }

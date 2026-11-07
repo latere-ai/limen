@@ -23,6 +23,7 @@ These variables apply in both modes:
 | `LIMEN_ANSWER_FLOOR_MS` | An approval faster than this number of milliseconds has the weight 0, if the person did not open the details. `0` turns this rule off. The largest value is `86400000`, one day. | `2000` |
 | `LIMEN_ANSWER_FATIGUE` | An approval with this number of reviews or more before it in its session has the weight 0, if the person did not open the details. `0` turns this rule off. | `50` |
 | `LIMEN_MODEL` | The model version that the server uses: `learned/1` or `learned/2`. Read [Switch the model](install.md#switch-the-model) before you change it. | `learned/1` |
+| `LIMEN_MODEL_CACHE_BYTES` | The memory, in bytes, for the fitted models that `limend` keeps. When it is full, `limend` removes the model that it used least recently, and reads it from the ledger again when it is necessary. The bound counts only the models, so set it to half of the memory limit of the container or less. | `1073741824` (1 GiB) |
 
 The server always supplies each route under `/v1`. If you set
 `LIMEN_BASE_PATH`, the server also supplies each route under that prefix.
@@ -41,10 +42,12 @@ reaches.
 [cover rule](theory.md#the-cover-rule). `LIMEN_ANSWER_FLOOR_MS` and
 `LIMEN_ANSWER_FATIGUE` set the weight of an answer. Each value must be a
 whole number, 0 or more, and `LIMEN_ANSWER_FLOOR_MS` is not more than
-one day. If a value is not correct, `limend` stops with exit code 2. If `LIMEN_MODEL` is not a model version, `limend` also stops
-with exit code 2. A cost profile can make `min_weight` and `min_sessions`
-greater for its scope, but not smaller. A prediction gives the settings
-that applied in `cover.min_weight` and `cover.min_sessions`.
+one day. If a value is not correct, `limend` stops with exit code 2. If
+`LIMEN_MODEL` is not a model version, or `LIMEN_MODEL_CACHE_BYTES` is not
+a whole number more than 0, `limend` also stops with exit code 2. A cost
+profile can make `min_weight` and `min_sessions` greater for its scope,
+but not smaller. A prediction gives the settings that applied in
+`cover.min_weight` and `cover.min_sessions`.
 
 > **Warning:** With `0` in `LIMEN_MIN_ALLOWS` or `LIMEN_MIN_SESSIONS`,
 > Limen can suggest `allow` after fewer approvals, for example after one
@@ -122,7 +125,7 @@ error and stops. It does not start with a part of its configuration.
 | 2 | `LIMEN_ADMINS` and `LIMEN_AUTHORIZER_URL` are both set. |
 | 2 | `LIMEN_AUTHORIZER_URL` is not an `http` or `https` URL. |
 | 2 | With `LIMEN_AUTHORIZER_URL`, `LIMEN_AUTHORIZER_TOKEN` and `LIMEN_AUTHORIZER_TOKEN_FILE` are both set or both empty, or the file cannot be read or is empty. |
-| 2 | `LIMEN_BASE_PATH`, `LIMEN_MIN_ALLOWS`, `LIMEN_MIN_SESSIONS`, `LIMEN_ANSWER_FLOOR_MS`, `LIMEN_ANSWER_FATIGUE`, or `LIMEN_MODEL` is not correct. |
+| 2 | `LIMEN_BASE_PATH`, `LIMEN_MIN_ALLOWS`, `LIMEN_MIN_SESSIONS`, `LIMEN_ANSWER_FLOOR_MS`, `LIMEN_ANSWER_FATIGUE`, `LIMEN_MODEL`, or `LIMEN_MODEL_CACHE_BYTES` is not correct. |
 | 2 | There is no ledger directory: `LIMEN_DATA_DIR`, `XDG_STATE_HOME`, and `HOME` are all empty. |
 | 1 | `limend` cannot open the ledger directory, for example because a different process holds it. |
 | 1 | `limend` cannot read the key set of an issuer in `LIMEN_OIDC_ISSUERS`, or the issuer does not answer a request in 10 seconds. |
