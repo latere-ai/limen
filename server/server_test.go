@@ -855,6 +855,44 @@ func TestOwnerPolicy(t *testing.T) {
 	}
 }
 
+// With AdminsDecide only the Admins hold case.decide, on any subject;
+// everything else is the owner policy's.
+func TestOwnerPolicyAdminsDecide(t *testing.T) {
+	ask := func(p OwnerPolicy, subject, action string, res authz.Resource) bool {
+		d, err := p.Authorize(context.Background(), authz.Request{Subject: subject, Action: action, Resource: res})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Allow
+	}
+	own := caseResource("o", alice)
+	open := OwnerPolicy{Admins: []string{admin}}
+	hosted := OwnerPolicy{Admins: []string{admin}, AdminsDecide: true}
+	if !ask(open, alice, authorizer.ActionCaseDecide, own) {
+		t.Error("without the field a person decides on their own subject")
+	}
+	if ask(hosted, alice, authorizer.ActionCaseDecide, own) || ask(hosted, bob, authorizer.ActionCaseDecide, own) {
+		t.Error("a person decided with AdminsDecide")
+	}
+	if !ask(hosted, admin, authorizer.ActionCaseDecide, own) || !ask(hosted, admin, authorizer.ActionCaseDecide, caseResource("o", bob)) {
+		t.Error("an admin was refused case.decide")
+	}
+	if ask(hosted, "", authorizer.ActionCaseDecide, own) || ask(hosted, admin, authorizer.ActionCaseDecide, authz.NewResource(authorizer.KindCase, authz.ProbeID, nil)) {
+		t.Error("the anonymous caller or the probe decided")
+	}
+	for _, action := range []string{authorizer.ActionCasePredict, authorizer.ActionCaseAnswer, authorizer.ActionCaseList, authorizer.ActionReliabilityRead} {
+		if !ask(hosted, alice, action, own) || ask(hosted, bob, action, own) {
+			t.Errorf("%s changed with AdminsDecide", action)
+		}
+	}
+	// Local is one person whose subject is the admin: unaffected either way.
+	h := New(stub.New(stub.Options{}), Local(tok, admin))
+	a := action(admin, "d1")
+	if w := do(t, h, req{http.MethodPost, "/v1/decisions", body(t, limen.Decision{Key: a.Key, Verdict: limen.Ask, ReviewProbability: 1, Source: "rules/1", Action: &a})}); w.Code != http.StatusNoContent {
+		t.Errorf("Local decides: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestRequestID(t *testing.T) {
 	h := New(stub.New(stub.Options{}), Local(tok, admin))
 	profile := req{http.MethodGet, "/v1/profiles?org=o", ""}
@@ -936,10 +974,11 @@ func (f failingAuthorizer) Authorize(context.Context, authz.Request) (authz.Deci
 	return authz.Decision{}, f.err
 }
 
-// An outage of the authorization endpoint tells the caller what was asked
-// and that no decision came, and nothing of where the endpoint is: the
-// address, its user info and its query stay out of the body. The log keeps
-// the cause and the host, with the user info and the query removed.
+// An outage of the authorization endpoint tells the caller that no decision
+// came, with the request id, and nothing of what was asked or where the
+// endpoint is: the address, its user info and its query stay out of the body.
+// The log keeps the detail, the cause and the host, with the user info and
+// the query removed.
 func TestAnOutageDoesNotNameTheAuthorizer(t *testing.T) {
 	cause := &url.Error{Op: "Post", URL: "http://user:secret@authz.internal/check?key=SECRETKEY", Err: errors.New("dial tcp 10.0.0.7:443: connection refused")}
 	var logs bytes.Buffer
@@ -956,10 +995,13 @@ func TestAnOutageDoesNotNameTheAuthorizer(t *testing.T) {
 			t.Errorf("the body names %q: %s", s, body)
 		}
 	}
-	if d := errorOf(t, w).Error.Details.Detail; !strings.Contains(d, authorizer.ActionCaseList) || !strings.Contains(d, authorizer.KindCase) {
-		t.Errorf("the detail names neither the permission nor the resource: %q", d)
+	if d := errorOf(t, w).Error.Details.Detail; d != "" {
+		t.Errorf("a 5xx answer carries the detail %q", d)
 	}
 	log := logs.String()
+	if !strings.Contains(log, authorizer.ActionCaseList) || !strings.Contains(log, authorizer.KindCase) {
+		t.Errorf("the log names neither the permission nor the resource: %s", log)
+	}
 	if !strings.Contains(log, "authz.internal") {
 		t.Errorf("the log lacks the host: %s", log)
 	}

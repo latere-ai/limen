@@ -11,6 +11,8 @@ import (
 	"latere.ai/x/pkg/authkit/jwt"
 	"latere.ai/x/pkg/authz"
 	"latere.ai/x/pkg/bearer"
+
+	"latere.ai/x/limen/authorizer"
 )
 
 // Caller is who sent a request: the rendered subject, "<issuer>|<sub>",
@@ -118,12 +120,22 @@ func JWT(v TokenVerifier) Authenticator {
 // refused.
 type OwnerPolicy struct {
 	Admins []string
+	// AdminsDecide holds case.decide to the Admins, on any subject: a
+	// hosted server's decision points are services, and a person who could
+	// record a decision on their own actions could set the review
+	// probabilities that Limen learns from.
+	AdminsDecide bool
 }
 
 // Authorize implements authz.Authorizer.
 func (p OwnerPolicy) Authorize(_ context.Context, req authz.Request) (authz.Decision, error) {
 	owner := req.Resource.String("subject")
-	return authz.Policy{Admins: p.Admins}.Decide(req, authz.Object{Exists: owner != "", Owner: owner}), nil
+	obj := authz.Object{Exists: owner != "", Owner: owner}
+	if p.AdminsDecide && req.Action == authorizer.ActionCaseDecide {
+		// No object is anyone's, so only the Admins are allowed.
+		obj = authz.Object{}
+	}
+	return authz.Policy{Admins: p.Admins}.Decide(req, obj), nil
 }
 
 var _ authz.Authorizer = OwnerPolicy{}

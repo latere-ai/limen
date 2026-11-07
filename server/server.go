@@ -5,15 +5,23 @@
 // api/openapi.yaml: the routes under /v1, the error envelope, the body
 // limits, and the authorization model.
 //
-// Every request is authenticated first, by an [Authenticator] that turns a
-// bearer into a [Caller]. Its body or query is then decoded and validated
-// against the contract, so a malformed request is answered with the route's
-// invalid_* code before anyone is asked about it. Then the route asks the
+// Every request is first counted against its client address, past the
+// proxies the installation trusts, so a client that sends no token or a
+// wrong one is bounded too; a request over the rate is rate_limited. It is
+// then authenticated, by an [Authenticator] that turns a bearer into a
+// [Caller]. Its body or query is then decoded and validated against the
+// contract, so a malformed request is answered with the route's invalid_*
+// code before anyone is asked about it. Then the route asks the
 // installation's authorizer, a latere.ai/x/pkg/authz Authorizer, exactly one
 // action of latere.ai/x/limen/authorizer about a resource of the kind and
 // fields spec 003 fixes for that action, and acts only on an allow. A deny
 // is forbidden and an authorizer that gives no decision is
-// authorizer_unavailable; neither reaches the service.
+// authorizer_unavailable; neither reaches the service. A replay streams its
+// body: each line is validated, and the first line that names an
+// organization has replay.create asked about that organization before the
+// next line is read, so a caller who may not replay for it makes the server
+// hold none of the upload. Every record is still validated before any is
+// replayed.
 //
 // The caller is in general not the subject a request names: a harness
 // predicts for the person its agent works for. Whether it may is the
@@ -30,7 +38,9 @@
 // An error the service returns that is not a contract error means Limen
 // could not answer, a store down or a deadline passed, and is served as
 // unavailable (503), the answer on which a decision point holds the action
-// for a person. A panic is internal (500).
+// for a person. A panic is internal (500). An answer of status 500 or more
+// carries the code, its message and the request id and no detail, which
+// stays in the log.
 package server
 
 import (
@@ -43,14 +53,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
+	"math"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"latere.ai/x/pkg/authz"
+	"latere.ai/x/pkg/clientip"
+	"latere.ai/x/pkg/ratelimit"
 	"latere.ai/x/pkg/requestid"
 
 	"latere.ai/x/limen"
@@ -63,6 +76,27 @@ import (
 const (
 	DefaultMaxBodyBytes   = 1 << 20
 	DefaultMaxReplayBytes = 256 << 20
+)
+
+// The default request rate and the read timeouts a server for the network
+// sets.
+const (
+	// DefaultAddressRequestsPerMinute bounds the requests of one client
+	// address that one replica answers in a minute, counted before the
+	// token is read.
+	DefaultAddressRequestsPerMinute = 6000
+	// ReadHeaderTimeout bounds how long a connection may take to send the
+	// request line and headers.
+	ReadHeaderTimeout = 10 * time.Second
+	// ReadTimeout bounds how long a request, body included, may take to
+	// arrive; a replay extends its own to ReplayReadTimeout.
+	ReadTimeout = time.Minute
+	// IdleTimeout bounds how long a kept-alive connection may wait for its
+	// next request.
+	IdleTimeout = 2 * time.Minute
+	// ReplayReadTimeout bounds how long a replay upload, up to
+	// DefaultMaxReplayBytes, may take to arrive.
+	ReplayReadTimeout = 10 * time.Minute
 )
 
 // RequestIDHeader carries the request id in and out. An id the caller sends
@@ -87,6 +121,18 @@ type Options struct {
 	// MaxReplayBytes bounds a whole replay upload; zero is
 	// DefaultMaxReplayBytes. limen.MaxReplayRecords bounds its records.
 	MaxReplayBytes int64
+	// AddressRequestsPerMinute bounds the requests of one client address
+	// that this handler answers in a minute, on every route, counted before
+	// the token is read; zero is DefaultAddressRequestsPerMinute and a
+	// negative value turns the limit off, for tests and for an embedder
+	// that limits in front.
+	AddressRequestsPerMinute int
+	// TrustedProxies are the proxies whose X-Forwarded-For names the client
+	// address the limit counts and the authorizer is told. A request from
+	// any other peer is counted under the peer's own address.
+	TrustedProxies []netip.Prefix
+	// Now is the clock of the request limit; nil is the wall clock.
+	Now func() time.Time
 	// BasePath, when set, serves every route a second time with this
 	// prefix in place of /v1, for a public route an Ingress forwards
 	// unchanged: "/v1/oversight" serves /v1/oversight/predictions beside
@@ -132,6 +178,10 @@ type handler struct {
 	log       *slog.Logger
 	maxBody   int64
 	maxReplay int64
+	// addresses counts requests per client address; trusted are the
+	// proxies whose forwarded address is that address.
+	addresses *ratelimit.Buckets
+	trusted   []netip.Prefix
 }
 
 // route is one row of the served API. The routes test holds this table to
@@ -168,6 +218,8 @@ func New(svc limen.Service, o Options) http.Handler {
 		log:       o.Logger,
 		maxBody:   cmp.Or(o.MaxBodyBytes, DefaultMaxBodyBytes),
 		maxReplay: cmp.Or(o.MaxReplayBytes, DefaultMaxReplayBytes),
+		addresses: ratelimit.New(ratelimit.Config{PerMinute: cmp.Or(o.AddressRequestsPerMinute, DefaultAddressRequestsPerMinute), Now: o.Now}),
+		trusted:   o.TrustedProxies,
 	}
 	if h.authz == nil {
 		h.authz = OwnerPolicy{}
@@ -189,7 +241,25 @@ func New(svc limen.Service, o Options) http.Handler {
 	if o.BasePath != "" {
 		mux.Handle("GET "+o.BasePath+"/version", buildIdentity(o))
 	}
-	return mux
+	return h.limited(mux)
+}
+
+// limited counts every request against its client address before anything
+// else reads it, the token included, and answers rate_limited, with the
+// whole seconds to wait in Retry-After, once the address is past its rate.
+func (h *handler) limited(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a := h.addresses.Allow(clientip.Address(r, h.trusted))
+		if a.OK {
+			next.ServeHTTP(w, r)
+			return
+		}
+		c := &call{w: w, r: r, id: requestid.FromRequest(r)}
+		w.Header().Set(RequestIDHeader, c.id)
+		w.Header().Set("Retry-After", strconv.FormatInt(max(1, int64(math.Ceil(a.Retry.Seconds()))), 10))
+		h.fail(c, &limen.Error{Code: limen.CodeRateLimited,
+			Detail: fmt.Sprintf("%d requests a minute from one client address to one replica", a.PerMinute)})
+	})
 }
 
 // buildIdentity answers the build the server runs as JSON, to anyone: the
@@ -257,14 +327,10 @@ func (h *handler) authenticate(c *call) error {
 // authorize asks the route's action about one resource and returns nil
 // only on an allow.
 func (h *handler) authorize(c *call, res authz.Resource) error {
-	ip, _, err := net.SplitHostPort(c.r.RemoteAddr)
-	if err != nil {
-		ip = c.r.RemoteAddr
-	}
 	req := authz.Request{
 		Subject: c.caller.Subject, Issuer: c.caller.Issuer, Sub: c.caller.Sub, Claims: c.caller.Claims,
 		Action: c.action, Resource: res,
-		Request: authz.Caller{ID: c.id, IP: ip, UserAgent: c.r.UserAgent()},
+		Request: authz.Caller{ID: c.id, IP: clientip.Address(c.r, h.trusted), UserAgent: c.r.UserAgent()},
 	}
 	d, err := h.authz.Authorize(c.r.Context(), req)
 	if err != nil {
@@ -362,9 +428,13 @@ func (h *handler) fail(c *call, err error) {
 		}
 		h.log.Error("limen request failed", args...)
 	}
-	body := envelope{Error: envelopeError{Code: le.Code, Message: le.Code.Message(),
-		Details: envelopeDetail{RequestID: c.id, Detail: le.Detail, Fields: le.Fields}}}
-	writeJSON(c.w, status, body)
+	// A server error answers with the request id only: its detail can name
+	// a store path or a subject, and stays in the log above.
+	details := envelopeDetail{RequestID: c.id}
+	if status < 500 {
+		details.Detail, details.Fields = le.Detail, le.Fields
+	}
+	writeJSON(c.w, status, envelope{Error: envelopeError{Code: le.Code, Message: le.Code.Message(), Details: details}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -674,15 +744,10 @@ func (h *handler) forget(c *call) error {
 	if err := h.decode(c, &f, limen.CodeInvalidQuery); err != nil {
 		return err
 	}
-	var fields []string
-	if f.Org == "" {
-		fields = append(fields, "org")
-	}
-	if f.Subject == "" {
-		fields = append(fields, "subject")
-	}
-	if len(fields) > 0 {
-		return &limen.Error{Code: limen.CodeInvalidQuery, Fields: fields, Detail: "forget needs an org and a subject"}
+	// The lengths are held before the authorizer is asked, so an oversized
+	// string never leaves this process.
+	if err := limen.ValidatePerson(f.Org, f.Subject); err != nil {
+		return err
 	}
 	if err := h.authorize(c, subjectResource(f.Org, f.Subject)); err != nil {
 		return err
@@ -694,11 +759,13 @@ func (h *handler) forget(c *call) error {
 	return nil
 }
 
-// replay reads every record before it asks or learns anything: a replay
-// past limen.MaxReplayRecords is body_too_large with nothing learned, a
-// record that does not parse or validate is invalid_replay naming its
-// line, and the authorizer is asked replay.create once for every
-// organization the records name.
+// replay streams its records: each line is validated, and the first record
+// that names an organization has replay.create asked about it before the
+// next line is read, so a denied or unavailable authorizer ends the read at
+// once. A replay past limen.MaxReplayRecords is body_too_large and a record
+// that does not parse or validate is invalid_replay naming its line; both
+// leave nothing learned, since nothing is replayed until every record has
+// been read.
 func (h *handler) replay(c *call) error {
 	var opts limen.ReplayOptions
 	if s := c.r.URL.Query().Get("keep"); s != "" {
@@ -708,21 +775,13 @@ func (h *handler) replay(c *call) error {
 		}
 		opts.Keep = b
 	}
+	// A replay may be 256 MiB, more than ReadTimeout allows a body to take.
+	if err := http.NewResponseController(c.w).SetReadDeadline(time.Now().Add(ReplayReadTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return fmt.Errorf("cannot extend the read deadline of a replay: %w", err)
+	}
 	recs, err := h.readReplay(c)
 	if err != nil {
 		return err
-	}
-	var orgs []string
-	for _, r := range recs {
-		if !slices.Contains(orgs, r.Action.Org) {
-			orgs = append(orgs, r.Action.Org)
-		}
-	}
-	slices.Sort(orgs)
-	for _, org := range orgs {
-		if err := h.authorize(c, replayResource(org)); err != nil {
-			return err
-		}
 	}
 	report, err := h.svc.Replay(c.r.Context(), func(yield func(limen.ReplayRecord, error) bool) {
 		for _, r := range recs {
@@ -741,6 +800,8 @@ func (h *handler) replay(c *call) error {
 	return nil
 }
 
+// readReplay reads and validates the records of a replay body, and asks
+// replay.create about each organization the first time a record names it.
 func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 	body := &readErr{r: http.MaxBytesReader(c.w, c.r.Body, h.maxReplay)}
 	sc := bufio.NewScanner(body)
@@ -748,6 +809,7 @@ func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 	// the maximum, so the buffer starts no larger than the bound.
 	sc.Buffer(make([]byte, 0, min(64<<10, int(h.maxBody))), int(h.maxBody))
 	var recs []limen.ReplayRecord
+	var asked []string
 	line := 0
 	for sc.Scan() {
 		line++
@@ -778,6 +840,12 @@ func (h *handler) readReplay(c *call) ([]limen.ReplayRecord, error) {
 				fields[i] = at + "." + f
 			}
 			return nil, &limen.Error{Code: limen.CodeInvalidReplay, Fields: fields, Detail: fmt.Sprintf("line %d: %s", line, le.Detail)}
+		}
+		if org := r.Action.Org; !slices.Contains(asked, org) {
+			if err := h.authorize(c, replayResource(org)); err != nil {
+				return nil, err
+			}
+			asked = append(asked, org)
 		}
 		recs = append(recs, r)
 	}

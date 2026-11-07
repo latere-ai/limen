@@ -114,6 +114,93 @@ func TestHostedAuthorizer(t *testing.T) {
 	}
 }
 
+// forwardedFor adds an X-Forwarded-For to every request it sends.
+type forwardedFor string
+
+func (f forwardedFor) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("X-Forwarded-For", string(f))
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// The authorization endpoint is told the address the forwarding proxy
+// named when LIMEN_TRUSTED_PROXIES trusts the peer, and the peer's own
+// address when it does not.
+func TestHostedAuthorizerSeesTheForwardedAddress(t *testing.T) {
+	for _, c := range []struct{ trusted, want string }{
+		{"127.0.0.1", "198.51.100.7"},
+		{"10.0.0.0/8", "127.0.0.1"},
+		{"", "127.0.0.1"},
+	} {
+		iss := issuertest.New(t, issuertest.WithDefaultAudience("limen"))
+		az := stub.New(t, stub.WithVocabulary(authorizer.Vocabulary()), stub.WithAllow())
+		az.Allow(stub.Rule{Subject: authz.Subject(iss.URL(), "svc_topos"), Action: authorizer.ActionCasePredict})
+		addr, stop := startWith(t, map[string]string{
+			"LIMEN_OIDC_ISSUERS":     iss.URL(),
+			"LIMEN_OIDC_AUDIENCE":    "limen",
+			"LIMEN_AUTHORIZER_URL":   az.URL(),
+			"LIMEN_AUTHORIZER_TOKEN": az.Token(),
+			"LIMEN_TRUSTED_PROXIES":  c.trusted,
+			"LIMEN_DATA_DIR":         t.TempDir(),
+		})
+		cl, err := client.New("http://"+addr, client.Options{HTTP: &http.Client{Transport: forwardedFor("198.51.100.7")}, Token: iss.Mint(issuertest.Claims{Sub: "svc_topos"})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cl.Predict(context.Background(), action(authz.Subject(iss.URL(), "usr_42"), "ses_1/call_1")); err != nil {
+			t.Fatalf("trusting %q: %v", c.trusted, err)
+		}
+		reqs := az.Requests()
+		if len(reqs) == 0 || reqs[0].Request.IP != c.want {
+			t.Errorf("trusting %q: the endpoint heard %+v, want ip %s", c.trusted, reqs, c.want)
+		}
+		if code, log := stop(); code != exitOK {
+			t.Errorf("stop: exit %d: %s", code, log)
+		}
+	}
+}
+
+// In hosted mode with LIMEN_ADMINS only an admin records decisions: a
+// person may predict and answer for themselves, but a decision, which sets
+// the review probability Limen learns from, is a service's.
+func TestHostedOnlyAdminsDecide(t *testing.T) {
+	iss := issuertest.New(t, issuertest.WithDefaultAudience("limen"))
+	service := authz.Subject(iss.URL(), "svc_topos")
+	person := authz.Subject(iss.URL(), "usr_42")
+	addr, stop := startWith(t, map[string]string{
+		"LIMEN_OIDC_ISSUERS":  iss.URL(),
+		"LIMEN_OIDC_AUDIENCE": "limen",
+		"LIMEN_ADMINS":        service,
+		"LIMEN_DATA_DIR":      t.TempDir(),
+	})
+	ctx := context.Background()
+	own := as(t, addr, iss.Mint(issuertest.Claims{Sub: "usr_42"}))
+	harness := as(t, addr, iss.Mint(issuertest.Claims{Sub: "svc_topos"}))
+
+	mine := action(person, "ses_1/call_1")
+	if _, err := own.Predict(ctx, mine); err != nil {
+		t.Fatalf("a person predicts for themselves: %v", err)
+	}
+	decision := limen.Decision{Key: mine.Key, Verdict: limen.Allow, ReviewProbability: 0, Source: "own/decision"}
+	if err := own.Record(ctx, decision); limen.CodeOf(err) != limen.CodeForbidden {
+		t.Fatalf("a person records a decision on their own action: %v", err)
+	}
+	page, err := own.Cases(ctx, limen.CaseQuery{Org: "org_7", Subject: person})
+	if err != nil || len(page.Entries) != 1 || page.Entries[0].Decision != nil {
+		t.Fatalf("after the refused decision: %+v, %v", page, err)
+	}
+	decision.Verdict, decision.ReviewProbability, decision.Source = limen.Ask, 1, "topos/confirm"
+	if err := harness.Record(ctx, decision); err != nil {
+		t.Fatalf("the admin records a decision: %v", err)
+	}
+	if err := own.Answer(ctx, limen.Answer{Key: mine.Key, Approve: true}); err != nil {
+		t.Errorf("a person answers for themselves: %v", err)
+	}
+	if code, log := stop(); code != exitOK {
+		t.Errorf("stop: exit %d: %s", code, log)
+	}
+}
+
 func TestAccessConfiguration(t *testing.T) {
 	empty := filepath.Join(t.TempDir(), "empty")
 	if err := os.WriteFile(empty, nil, 0o600); err != nil {

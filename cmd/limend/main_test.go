@@ -25,6 +25,7 @@ import (
 	"latere.ai/x/limen/conformance"
 	"latere.ai/x/limen/engine"
 	"latere.ai/x/limen/internal/version"
+	"latere.ai/x/limen/server"
 )
 
 func env(m map[string]string) func(string) string {
@@ -282,6 +283,8 @@ func TestConfiguration(t *testing.T) {
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FLOOR_MS": "2s"}, exitConfig, `LIMEN_ANSWER_FLOOR_MS is not correct: "2s"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ANSWER_FATIGUE": "-3"}, exitConfig, `LIMEN_ANSWER_FATIGUE is not correct: "-3"`},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_MODEL": "learned/3"}, exitConfig, `LIMEN_MODEL is not correct: "learned/3" is not a model version`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_TRUSTED_PROXIES": "10.0.0.0/8, not-an-address"}, exitConfig, `LIMEN_TRUSTED_PROXIES is not correct: clientip: "not-an-address" is neither a CIDR prefix nor an address`},
+		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_TRUSTED_PROXIES": "10.0.0.0/33"}, exitConfig, "LIMEN_TRUSTED_PROXIES is not correct"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "/dev/null/x"}, exitFail, "cannot open the ledger"},
 		{nil, map[string]string{"LIMEN_TOKEN": "x", "LIMEN_DATA_DIR": "DIR", "LIMEN_ADDR": "256.0.0.1:1"}, exitFail, "cannot listen"},
 	}
@@ -298,6 +301,29 @@ func TestConfiguration(t *testing.T) {
 		if code != c.code || !strings.Contains(out.String()+errOut.String(), c.want) {
 			t.Errorf("%v %v: exit %d, want %d with %q:\n%s%s", c.args, c.env, code, c.code, c.want, out.String(), errOut.String())
 		}
+	}
+}
+
+// limend's server bounds how long a connection may take to send its
+// headers and its request, and how long it may sit idle; it sets no write
+// timeout, which would cut a slow answer short.
+func TestServerCarriesTheReadTimeouts(t *testing.T) {
+	var got http.Server
+	restore(t)
+	hook := serverBuilt
+	t.Cleanup(func() { serverBuilt = hook })
+	built := make(chan struct{})
+	serverBuilt = func(s *http.Server) {
+		got = http.Server{ReadHeaderTimeout: s.ReadHeaderTimeout, ReadTimeout: s.ReadTimeout, WriteTimeout: s.WriteTimeout, IdleTimeout: s.IdleTimeout}
+		close(built)
+	}
+	_, stop := start(t, t.TempDir())
+	<-built
+	if code, log := stop(); code != exitOK {
+		t.Fatalf("exit %d: %s", code, log)
+	}
+	if got.ReadHeaderTimeout != server.ReadHeaderTimeout || got.ReadTimeout != server.ReadTimeout || got.IdleTimeout != server.IdleTimeout || got.WriteTimeout != 0 {
+		t.Errorf("timeouts: header %v, read %v, idle %v, write %v", got.ReadHeaderTimeout, got.ReadTimeout, got.IdleTimeout, got.WriteTimeout)
 	}
 }
 

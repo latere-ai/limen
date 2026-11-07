@@ -19,6 +19,13 @@
 //	LIMEN_BASE_PATH a second prefix for the API in place of /v1, for an
 //	                  ingress that forwards a public path unchanged, for
 //	                  example /v1/oversight; default none
+//	LIMEN_TRUSTED_PROXIES
+//	                the proxies whose X-Forwarded-For names the client
+//	                  address, comma-separated CIDR prefixes or addresses;
+//	                  default none, so the peer's address is the client's.
+//	                  limend counts every request per client address before
+//	                  it reads the token, and tells the authorizer the same
+//	                  address
 //	LIMEN_MIN_ALLOWS, LIMEN_MIN_SESSIONS
 //	                the cover rule: the total weight of the considered
 //	                  approvals that cover an action, and the sessions they
@@ -68,6 +75,7 @@ import (
 	"syscall"
 	"time"
 
+	"latere.ai/x/pkg/clientip"
 	"latere.ai/x/pkg/errwriter"
 	"latere.ai/x/pkg/otel"
 
@@ -119,6 +127,10 @@ var httpClient = func() *http.Client {
 	return &http.Client{Timeout: issuerTimeout, Transport: otel.Transport(nil)}
 }
 
+// serverBuilt is called with the http.Server before it serves; a test
+// replaces it to read the timeouts.
+var serverBuilt = func(*http.Server) {}
+
 // newEngine builds the engine; a test replaces it to read the options.
 var newEngine = engine.New
 
@@ -156,6 +168,11 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	base := strings.TrimSpace(getenv("LIMEN_BASE_PATH"))
 	if err := server.CheckBasePath(base); err != nil {
 		errOut.Printf("limend: LIMEN_BASE_PATH is not correct: %v. Use an absolute path with no slash at the end, for example /v1/oversight.\n", err)
+		return exitConfig
+	}
+	trusted, err := clientip.ParseTrusted(getenv("LIMEN_TRUSTED_PROXIES"))
+	if err != nil {
+		errOut.Printf("limend: LIMEN_TRUSTED_PROXIES is not correct: %v. Use comma-separated CIDR prefixes or addresses, for example 10.0.0.0/8,192.0.2.1.\n", err)
 		return exitConfig
 	}
 	var settings [4]int
@@ -223,12 +240,15 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	o := acc.options
 	o.Logger = slog.New(slog.NewTextHandler(errOut, nil))
 	o.BasePath = base
+	o.TrustedProxies = trusted
 	o.Version, o.Commit, o.BuildTime = version.Version, version.Commit, version.Date
 	srv := &http.Server{
 		Handler:           server.New(eng, o),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       2 * time.Minute,
+		ReadHeaderTimeout: server.ReadHeaderTimeout,
+		ReadTimeout:       server.ReadTimeout,
+		IdleTimeout:       server.IdleTimeout,
 	}
+	serverBuilt(srv)
 	out.Printf("Limen is available at http://%s. The ledger is in %s. Callers: %s. Use Ctrl-C to stop Limen.\n", ln.Addr(), dir, acc.describe)
 	if base != "" {
 		out.Printf("The API is also available under %s.\n", base)

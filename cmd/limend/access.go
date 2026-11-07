@@ -94,7 +94,7 @@ func readAccess(getenv func(string) string, client *http.Client) (access, error)
 	admins := list(getenv("LIMEN_ADMINS"))
 	url := strings.TrimSpace(getenv("LIMEN_AUTHORIZER_URL"))
 	if url == "" {
-		a.options.Authorizer = server.OwnerPolicy{Admins: admins}
+		a.options.Authorizer = server.OwnerPolicy{Admins: admins, AdminsDecide: true}
 		a.describe = fmt.Sprintf("tokens from %s, with the owner policy and %d %s", strings.Join(issuers, ", "), len(admins), plural(len(admins), "admin", "admins"))
 		return a, nil
 	}
