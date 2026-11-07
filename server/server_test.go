@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -926,4 +927,45 @@ func TestDecodingForeignInput(t *testing.T) {
 	}
 	nested := strings.Replace(body(t, action(alice, "u3")), `{`, `{"target":{"kind":3},`, 1)
 	wantCode(t, do(t, h, req{http.MethodPost, "/v1/predictions", nested}), limen.CodeInvalidAction, "target.kind")
+}
+
+// failingAuthorizer fails every question with err.
+type failingAuthorizer struct{ err error }
+
+func (f failingAuthorizer) Authorize(context.Context, authz.Request) (authz.Decision, error) {
+	return authz.Decision{}, f.err
+}
+
+// An outage of the authorization endpoint tells the caller what was asked
+// and that no decision came, and nothing of where the endpoint is: the
+// address, its user info and its query stay out of the body. The log keeps
+// the cause and the host, with the user info and the query removed.
+func TestAnOutageDoesNotNameTheAuthorizer(t *testing.T) {
+	cause := &url.Error{Op: "Post", URL: "http://user:secret@authz.internal/check?key=SECRETKEY", Err: errors.New("dial tcp 10.0.0.7:443: connection refused")}
+	var logs bytes.Buffer
+	h := New(seeded(t, stub.New(stub.Options{})), Options{
+		Authenticator: StaticToken(tok, admin),
+		Authorizer:    failingAuthorizer{err: cause},
+		Logger:        slog.New(slog.NewTextHandler(&logs, nil)),
+	})
+	w := do(t, h, req{method: "GET", target: "/v1/cases?org=o&subject=" + alice})
+	wantCode(t, w, limen.CodeAuthorizerUnavailable)
+	body := w.Body.String()
+	for _, s := range []string{"authz.internal", "secret", "SECRETKEY", "10.0.0.7", "connection refused"} {
+		if strings.Contains(body, s) {
+			t.Errorf("the body names %q: %s", s, body)
+		}
+	}
+	if d := errorOf(t, w).Error.Details.Detail; !strings.Contains(d, authorizer.ActionCaseList) || !strings.Contains(d, authorizer.KindCase) {
+		t.Errorf("the detail names neither the permission nor the resource: %q", d)
+	}
+	log := logs.String()
+	if !strings.Contains(log, "authz.internal") {
+		t.Errorf("the log lacks the host: %s", log)
+	}
+	for _, s := range []string{"secret", "SECRETKEY"} {
+		if strings.Contains(log, s) {
+			t.Errorf("the log holds %q: %s", s, log)
+		}
+	}
 }

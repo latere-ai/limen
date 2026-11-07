@@ -55,6 +55,7 @@ import (
 
 	"latere.ai/x/limen"
 	"latere.ai/x/limen/authorizer"
+	"latere.ai/x/limen/internal/redact"
 )
 
 // The default body bounds: spec 003's 1 MiB for a JSON body, and a bound on
@@ -267,7 +268,10 @@ func (h *handler) authorize(c *call, res authz.Resource) error {
 	}
 	d, err := h.authz.Authorize(c.r.Context(), req)
 	if err != nil {
-		return &limen.Error{Code: limen.CodeAuthorizerUnavailable, Detail: fmt.Sprintf("authorize %s on %s %s: %v", c.action, res.Kind, res.ID, err)}
+		return &outage{
+			answer: &limen.Error{Code: limen.CodeAuthorizerUnavailable, Detail: fmt.Sprintf("the authorization endpoint gave no decision on %s for %s %s", c.action, res.Kind, res.ID)},
+			cause:  redact.Error(err),
+		}
 	}
 	if !d.Allow {
 		return &limen.Error{Code: limen.CodeForbidden, Detail: fmt.Sprintf("authorizer denied %s on %s %s to %s: %s", c.action, res.Kind, res.ID, c.caller.Subject, d.Reason)}
@@ -352,8 +356,11 @@ func (h *handler) fail(c *call, err error) {
 	}
 	status := le.Code.Status()
 	if status >= 500 && !errors.Is(err, context.Canceled) {
-		h.log.Error("limen request failed", "request_id", c.id, "method", c.r.Method, "path", c.r.URL.Path,
-			"code", string(le.Code), "detail", le.Detail)
+		args := []any{"request_id", c.id, "method", c.r.Method, "path", c.r.URL.Path, "code", string(le.Code), "detail", le.Detail}
+		if o, ok := errors.AsType[*outage](err); ok {
+			args = append(args, "cause", o.cause)
+		}
+		h.log.Error("limen request failed", args...)
 	}
 	body := envelope{Error: envelopeError{Code: le.Code, Message: le.Code.Message(),
 		Details: envelopeDetail{RequestID: c.id, Detail: le.Detail, Fields: le.Fields}}}

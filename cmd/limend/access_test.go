@@ -160,3 +160,26 @@ func TestHostedIssuerUnreachable(t *testing.T) {
 		t.Errorf("exit %d: %s", code, errOut.String())
 	}
 }
+
+// The start line names the authorization endpoint by scheme, host and
+// path. A key in its user info or query stays out of the line, which is
+// printed and kept in logs.
+func TestTheStartLineDoesNotPrintTheAuthorizerSecrets(t *testing.T) {
+	acc, err := readAccess(env(map[string]string{
+		"LIMEN_OIDC_ISSUERS":     "https://issuer.example",
+		"LIMEN_OIDC_AUDIENCE":    "limen",
+		"LIMEN_AUTHORIZER_URL":   "http://user:secret@authz.internal/check?key=SECRETKEY",
+		"LIMEN_AUTHORIZER_TOKEN": "t",
+	}), http.DefaultClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(acc.describe, "http://authz.internal/check") {
+		t.Errorf("the line lacks the endpoint: %s", acc.describe)
+	}
+	for _, s := range []string{"secret", "SECRETKEY", "user"} {
+		if strings.Contains(acc.describe, s) {
+			t.Errorf("the line holds %q: %s", s, acc.describe)
+		}
+	}
+}

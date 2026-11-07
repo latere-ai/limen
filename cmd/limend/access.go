@@ -18,6 +18,7 @@ import (
 	"latere.ai/x/pkg/authz"
 
 	"latere.ai/x/limen/authorizer"
+	"latere.ai/x/limen/internal/redact"
 	"latere.ai/x/limen/server"
 )
 
@@ -112,7 +113,7 @@ func readAccess(getenv func(string) string, client *http.Client) (access, error)
 		return access{}, configErr("LIMEN_AUTHORIZER_URL: %v", err)
 	}
 	a.options.Authorizer = az
-	a.describe = fmt.Sprintf("tokens from %s, with the authorization endpoint %s", strings.Join(issuers, ", "), url)
+	a.describe = fmt.Sprintf("tokens from %s, with the authorization endpoint %s", strings.Join(issuers, ", "), redact.URL(url))
 	return a, nil
 }
 
