@@ -16,10 +16,8 @@
 #   start and as keys rotate: a public name this cluster serves, whose
 #   address inside the cluster is the load balancer's, which Cilium
 #   translates to the ingress controller's Pods before policy is evaluated,
-#   so those Pods on their https port are admitted;
-# - the collector the namespace's monitoring injects, dialed at the node's
-#   address on a host port that Cilium translates to the collector's Pod on
-#   4318.
+#   so those Pods on their https port are admitted.
+# No collector: limend sends no telemetry (docs/security.md).
 # Nothing outside the cluster: the core calls no service but platformd's
 # decider, and its ledger is the volume.
 apiVersion: networking.k8s.io/v1
@@ -77,14 +75,4 @@ spec:
               app.kubernetes.io/name: ingress-nginx
       ports:
         - port: 443
-          protocol: TCP
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: dash0-system
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: opentelemetry-collector
-      ports:
-        - port: 4318
           protocol: TCP
