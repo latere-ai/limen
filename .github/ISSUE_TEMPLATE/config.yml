@@ -1,8 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
     url: https://github.com/latere-ai/limen/blob/main/SECURITY.md
-    about: Send it to security@latere.ai. Do not report it as an issue.
+    about: Report it privately, as SECURITY.md tells. Do not report it as an issue.
   - name: Documents for limend and for decision points
     url: https://github.com/latere-ai/limen/blob/main/docs/README.md
-    about: The integration guide, the API, the principles, the theory, and the terms.
+    about: If the documents do not answer your question, report it as a bug in the documents.
