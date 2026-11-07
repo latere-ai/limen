@@ -12,8 +12,8 @@ pulls the image with (`ghcr-secret`) are created outside this tree and keep
 their names.
 
 The policy that admits the core's Pods to platformd's internal TLS listener,
-`limend-platformd-tls`, selects platformd's Pods, so platform's release applies
-it (latere-ai/platform, `deploy/prod`). No operator step remains for it.
+`limend-platformd-tls`, selects platformd's Pods, so platformd's own release
+applies it. No operator step remains for it.
 
 ## The rollout identity
 
