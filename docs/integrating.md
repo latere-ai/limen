@@ -47,7 +47,7 @@ model.
 
 The `source` of a prediction names the model version that made it:
 `learned/1`, or `learned/2` if the operator changed the model
-([Running](running.md#switch-the-model)). The fields of a prediction and
+([Install limend](install.md#switch-the-model)). The fields of a prediction and
 their meaning are the same in each version. Do not make your decision
 depend on the version.
 
@@ -365,7 +365,7 @@ approval with weight 1 builds the cover. Each answer still teaches the
 model `learned/1`. The model `learned/2` gives these approvals a weight
 between 0 and 1 in its fit ([Theory](theory.md#model-versions)). No
 error rate reads the weight. `LIMEN_ANSWER_FLOOR_MS` and
-`LIMEN_ANSWER_FATIGUE` set the two numbers ([Running](running.md)).
+`LIMEN_ANSWER_FATIGUE` set the two numbers ([Configuration](configuration.md#both-modes)).
 
 The time of an answer is the smallest of `answer_ms`, `waited_ms`, and
 the time from the recorded decision to the answer. A client cannot make
@@ -775,7 +775,7 @@ The Topos
 [configuration](https://github.com/latere-ai/topos/blob/main/docs/configuration.md)
 page gives the token settings, `TOPOS_DECISIONS_TOKEN` or
 `TOPOS_DECISIONS_AUDIENCE`. Use a hosted `limend` for hosted Topos
-([Running limend](running.md#hosted)).
+([Configuration](configuration.md#hosted)).
 
 #### Replay the history of Topos
 

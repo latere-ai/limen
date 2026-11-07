@@ -13,6 +13,12 @@ an automated action runs. Examples:
 All documents use the terms on the [Terms](terms.md) page. Each term has
 one meaning only.
 
+## Try Limen
+
+| Page | Contents |
+|---|---|
+| [Run limend on your computer](local.md) | The server from a checkout, for one person. One action, its decision, and its answer, and the case in the ledger. |
+
 ## Connect a decision point to Limen
 
 The first time, read these pages in this order.
@@ -23,6 +29,7 @@ The first time, read these pages in this order.
 | [The ledger](ledger.md) | What Limen records, the meaning of the review probability, and how answers count. How Limen calculates the error rate of each source of decisions, and the calibration report. |
 | [API](api.md) | Authentication, each route with an example, repeated requests, the order of calls, and pages of results. The errors, and the permission that each route needs. |
 | [OpenAPI](../api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document. |
+| [Security](security.md) | What Limen guarantees to a decision point, what it keeps, and what it does not defend. |
 
 ## Understand Limen
 
@@ -36,7 +43,10 @@ The first time, read these pages in this order.
 
 | Page | Contents |
 |---|---|
-| [Running limend](running.md) | How to get the server, its configuration, and its ledger directory. How to check that it runs, how to stop it, and how to run it in a container. |
+| [Install limend](install.md) | How to get the server and verify it. How to start, stop, check, and upgrade it, the ledger directory, how to run it in a container, how to switch the model, and what a production installation must have. |
+| [Configuration](configuration.md) | Each environment variable, for one person and hosted, its default, and the values that stop a start. |
+| [Security](security.md) | What Limen keeps and writes, what it does not defend, and what an operator keeps safe. |
+| [Writing an authorization endpoint](authorizer.md) | The question that `limend` asks for each request, the permissions, the answer, what occurs when the endpoint does not answer, and the owner policy without an endpoint. |
 
 ## Change Limen
 

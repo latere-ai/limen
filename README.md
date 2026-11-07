@@ -1,12 +1,12 @@
 # Limen
 
+**Limen learns from the answers of a person which actions of an agent can
+run without a question.** It also measures how often each automatic
+decision is wrong.
+
 [![verify](https://github.com/latere-ai/limen/actions/workflows/verify.yml/badge.svg)](https://github.com/latere-ai/limen/actions/workflows/verify.yml)
 [![Go Reference](https://pkg.go.dev/badge/latere.ai/x/limen.svg)](https://pkg.go.dev/latere.ai/x/limen)
 [![License](https://img.shields.io/github/license/latere-ai/limen)](LICENSE)
-
-**Limen learns from the answers of a person which actions of an agent can
-run without a question. It also measures how often each automatic decision
-is wrong.**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/teaser-dark.svg">
@@ -37,15 +37,38 @@ Limen is a Go library and a server, `limend`, with an HTTP API. The
 method is from the paper
 [*Learning When to Ask*](https://arxiv.org/abs/2605.19151).
 
-## Quick start
+## Status
 
-You need bash, Go 1.27 or later, and `jq` to format the output. Install
-and start the server for one person:
+Limen is before v1.0.0. A minor release can change the contract of the
+module root, the HTTP API, or the configuration. The section of each
+release in the [changelog](CHANGELOG.md) names each incompatible change.
+The [releases page](https://github.com/latere-ai/limen/releases) gives
+each release, with the signed image and the signed binaries. Limen keeps
+the answers of persons and the features of their actions. Limen has had
+no external security audit. [`SECURITY.md`](SECURITY.md#what-is-protected)
+gives each property that Limen keeps, and the test that checks it.
+
+| Part | State |
+|---|---|
+| Predictions, decisions, answers, and the ledger, over HTTP and in the process of a Go decision point | Works |
+| The error rate of each source of decisions, the calibration report, explanations, cost profiles, the report of an organization, and `Forget` | Works |
+| Replay of recorded decisions, and the comparison of `learned/1` with `learned/2` | Works |
+| The model `learned/2`, which reads the scope of an action | Works. Its spec is in testing, and `learned/1` stays the default |
+| Topos as the decision point | Works, with Topos v0.69.0 or later |
+| Hooks for Claude Code and Codex | Not built. [Integration](docs/integrating.md#claude-code-and-codex) tells what a hook must do |
+| More than one replica of `limend` on one ledger | Not possible. One process owns a ledger directory |
+
+## Quickstart
+
+You need bash, Go 1.27 or later, `curl`, and `jq` to format the output.
+Install and start the server for one person. The last line waits until
+the server answers:
 
 ```sh
 go install latere.ai/x/limen/cmd/limend@latest
 export LIMEN_TOKEN=example-token LIMEN_DATA_DIR=$(mktemp -d)
 limend > /dev/null &
+until curl -sf http://127.0.0.1:7720/v1/version > /dev/null; do sleep 0.2; done
 ```
 
 For each action, a decision point makes three calls: it gets a
@@ -75,8 +98,8 @@ predict 8 tuesday
 kill %1
 ```
 
-Limen v0.8.0 gives this output on each computer, because the model has no
-random part. A later version can change the numbers:
+This output is the same on each computer, because the model has no
+random part. A new release can change the numbers:
 
 ```
 {"action_id":"publish-1","approve":0.5,"evidence":0,"verdict":"ask","ask_kind":"unsure","weight":0,"sessions":0}
@@ -97,6 +120,36 @@ eighth publish is the first action that satisfies the two conditions. If
 the person allows each action in less than two seconds without the
 details, or if all the answers come in one session, the eighth publish
 also gets `ask`, with the `ask_kind` `few`.
+
+## How it fits
+
+A decision point calls `limend` for each action. `limend` keeps all its
+records in one directory. In hosted mode, it also reads the key sets of
+your token issuers and, if you set one, asks your authorization endpoint.
+
+```mermaid
+flowchart LR
+  Person[a person] -->|answers| DP[your decision point:<br/>an agent harness, a proxy,<br/>or a service]
+  DP -->|predictions, decisions,<br/>answers| L[limend]
+  Admin[an operator] -->|replays, reports| L
+  L -->|reads and writes| Dir[(the ledger directory)]
+  L -.->|key sets, hosted only| Iss[your token issuers]
+  L -.->|one question for each request,<br/>if set| Auth[your authorization endpoint]
+```
+
+- **Your decision point** sends each action, its decision, and the answer
+  of the person. It decides, not Limen. [Topos](https://github.com/latere-ai/topos)
+  is a decision point that Limen supports. A Go decision point can also
+  run the engine in its own process.
+- **The ledger directory** contains the records of each person, the
+  model of each person, the cost profiles, and the kept reports. One
+  `limend` process owns it.
+- **Your token issuers** sign the tokens of the callers of a hosted
+  `limend`. A `limend` for one person uses one token in place of them.
+- **Your authorization endpoint** decides if a caller can do a request.
+  Without it, the owner policy decides.
+  [Writing an authorization endpoint](docs/authorizer.md) gives the
+  contract.
 
 ## How it works
 
@@ -129,7 +182,8 @@ Each implementation of Limen obeys these rules:
 
 - **An unclear action waits for a person.** If the evidence is not clear,
   Limen suggests `ask`, not `block`. If Limen fails or does not answer in
-  time, the suggested verdict is `ask`. A failure never allows an action.
+  time, the suggested verdict is `ask`. A failure of Limen never makes
+  Limen suggest `allow`.
 - **The costs set the thresholds.** You state the cost of a false allow,
   of a false block, and of one question. A formula calculates the two
   thresholds from these costs. Nobody adjusts the thresholds by hand.
@@ -251,20 +305,6 @@ go run ./cmd/limen replay topos
 `limen compare` runs the two model versions, `learned/1` and `learned/2`,
 on the same records, before you choose one with `LIMEN_MODEL`.
 
-## Documentation
-
-| Page | Contents |
-|---|---|
-| [Integration](docs/integrating.md) | For authors of a decision point: the three calls, actions, your rules, answers, explanations, a safe start, and notes for each agent harness |
-| [API](docs/api.md) | Each HTTP route, its request, its response, its errors, and the permission that it needs |
-| [OpenAPI](api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document |
-| [Running limend](docs/running.md) | The configuration of the server, for one person or hosted, and how to run it in a container |
-| [The ledger](docs/ledger.md) | What Limen records, the review probability, and how Limen calculates the error rate of each source |
-| [Principles](docs/principles.md) | The rules that each implementation obeys, and their reasons |
-| [Theory](docs/theory.md) | The model, the decision rule, forgetting, the estimates, and the calibration report |
-| [Terms](docs/terms.md) | The meaning of each term in these documents |
-| [Specs](specs/README.md) | The design records, for contributors |
-
 ## Research
 
 Limen uses the method of the paper *Learning When to Ask: Trust
@@ -287,12 +327,30 @@ propositions of the paper are at
 }
 ```
 
+## Documentation
+
+| Page | Contents |
+|---|---|
+| [Run limend on your computer](docs/local.md) | The server from a checkout, for one person, and the requests that show that it works |
+| [Install limend](docs/install.md) | The image, the binaries and their signatures, the ledger directory, the checks that it runs, an upgrade, and what a production installation must have |
+| [Configuration](docs/configuration.md) | Each environment variable of `limend`, its default, and the values that stop a start |
+| [Integration](docs/integrating.md) | For authors of a decision point: the three calls, actions, your rules, answers, explanations, a safe start, and notes for each agent harness |
+| [API](docs/api.md) | Each HTTP route, its request, its response, its errors, and the permission that it needs |
+| [OpenAPI](api/openapi.yaml) | The HTTP API as an OpenAPI 3.1 document |
+| [Security](docs/security.md) | What Limen guarantees, what it keeps and writes, what it does not defend, and what an operator keeps safe |
+| [Writing an authorization endpoint](docs/authorizer.md) | The question that `limend` asks for each request, the permissions, the answer, and the owner policy without an endpoint |
+| [The ledger](docs/ledger.md) | What Limen records, the review probability, and how Limen calculates the error rate of each source |
+| [Principles](docs/principles.md) | The rules that each implementation obeys, and their reasons |
+| [Theory](docs/theory.md) | The model, the decision rule, forgetting, the estimates, and the calibration report |
+| [Terms](docs/terms.md) | The meaning of each term in these documents |
+| [Specs](specs/README.md) | The design records, for contributors |
+
 ## Contributing
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) tells how to build and test Limen and
-how to send a change. To report a vulnerability, follow
+how to send a change. Do not report a vulnerability in an issue. Follow
 [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-Apache License 2.0. See [`LICENSE`](LICENSE).
+`Apache-2.0`. See [`LICENSE`](LICENSE).

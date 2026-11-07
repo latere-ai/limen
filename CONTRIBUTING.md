@@ -30,7 +30,7 @@ and Codex ([spec 005](specs/005-adapters.md)), and a store that more
 than one server can share ([spec 004](specs/004-engine.md)). Work on one
 of them starts from its spec.
 
-## Set up
+## Getting set up
 
 You need Go 1.27 or newer, and `git`. You do not need other services.
 
@@ -74,7 +74,7 @@ A bug fix includes a test that fails without the fix. If a change lowers
 a threshold or adds a waiver, write the reason in `.lateregate.yaml`.
 Then a reviewer can see the exception.
 
-## Send a change
+## Sending a change
 
 1. Fork the repository.
 2. Make a branch.
@@ -188,7 +188,7 @@ Sentences and paragraphs:
 - Write a warning before the step that it applies to. Say what can go
   wrong and what to do.
 
-## Report a vulnerability
+## Reporting a vulnerability
 
 Do not open an issue. [`SECURITY.md`](SECURITY.md) tells you where to send
 the report.

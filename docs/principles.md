@@ -303,8 +303,10 @@ Limen uses the answers of a person only for that person. On request, it
 forgets all data about the person in an organization. The data are the
 cases, the answers, the model that it learned from them, and the cost
 profile of the person. The report of an organization never shows one person. Each of its
-numbers comes from 5 or more persons, and no person gave more than one
-half of the reviews in it.
+cells shows numbers only if 5 or more persons took part in it. A number
+that Limen calculates from reviews also needs reviews from 5 or more
+persons, and no person gave more than one half of them. The counts of
+persons and of decisions in a cell obey the first rule only.
 
 **Why.** The history of approvals and denials of a person shows how that
 person works. The person chooses if Limen uses it. The deletion must be

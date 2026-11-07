@@ -266,7 +266,7 @@ test in the tree.
 | the proofs of criteria 2 to 6 are `limend` handler tests | they are tests of `server/` | the handler moved to its own package so the client tests and `cmd/limend` share it |
 | a replay is bounded by its record count | the upload is also at most 256 MiB, and each line at most 1 MiB, both `body_too_large` | a record count alone does not bound the memory a line can take |
 | the owner policy covers cases and reports | it also lets a caller forget its own subject | a person's records are theirs ([[001-architecture]], invariant 8) |
-| not in the design | the server keeps a caller's `X-Request-Id` or makes one; an error that is not the contract's answers `unavailable`, and a panic `internal`; `CheckBasePath` also refuses a space and the characters `?`, `#`, `{` and `}`; the authorization endpoint's bearer comes from `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | operation details; `docs/api.md` gives the limits and the request ID, and `docs/running.md` the variables |
+| not in the design | the server keeps a caller's `X-Request-Id` or makes one; an error that is not the contract's answers `unavailable`, and a panic `internal`; `CheckBasePath` also refuses a space and the characters `?`, `#`, `{` and `}`; the authorization endpoint's bearer comes from `LIMEN_AUTHORIZER_TOKEN` or `LIMEN_AUTHORIZER_TOKEN_FILE` | operation details; `docs/api.md` gives the limits and the request ID, and `docs/configuration.md` the variables |
 
 ### What this leaves open
 

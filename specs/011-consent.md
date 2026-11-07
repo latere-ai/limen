@@ -487,8 +487,8 @@ the verdict of least expected cost among the choices that are left.
 The thresholds, the costs and the arithmetic of Proposition 2 do not
 change.
 
-The paper measured the problem that the cap solves (section
-Generalization to never-labelled actions). A force push to production
+The paper measured the problem that the cap solves, in its section on
+generalization to never-labeled actions. A force push to production
 infrastructure never had an answer. The kernel models allowed some of
 its occurrences, because it was similar to approved actions. The
 per-cell learner allowed none, because it asked about each cell that it

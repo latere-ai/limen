@@ -350,10 +350,10 @@ Proposition 2 gives the verdict of least expected cost among `allow`,
 `ask` and `block`. The cover rule removes `allow` from the choices where
 the person gave no consent to the reach of the action. Limen then takes
 the verdict of least expected cost among the choices that are left. The
-paper measured the problem that this solves (section Generalization to
-never-labelled actions). Where the scope is new, Limen asks, as the
-per-cell learner of the paper does. Where the scope is covered, the
-kernel still transfers approval.
+paper measured the problem that this solves, in its section on
+generalization to never-labeled actions. Where the scope is new, Limen
+asks, as the per-cell learner of the paper does. Where the scope is
+covered, the kernel still transfers approval.
 
 | Answers of `publish` (an update) | $\hat p$ | $e$ | Symmetric (0.65) | Safety-weighted (0.90) |
 |---|---|---|---|---|
@@ -425,7 +425,7 @@ reads the fitted model of a different version.
 The two versions use the same kernel, the same hyperparameters, and the
 512 most recent answered cases. In both versions, the cover rule reads
 `weights/1`. `limend` uses `learned/1` if the operator does not set
-`LIMEN_MODEL` ([Running](running.md#switch-the-model)).
+`LIMEN_MODEL` ([Install limend](install.md#switch-the-model)).
 
 ### The scope in the features
 
@@ -500,7 +500,7 @@ increases with the number of asks (section Limitations). A tempered
 likelihood is a version of that remedy, and the Laplace method applies to
 it with no change. Because the paper does not test it, an operator
 compares the two versions on the recorded history before the change
-([Running](running.md#switch-the-model)).
+([Install limend](install.md#switch-the-model)).
 
 ### The weights of `weights/2`
 

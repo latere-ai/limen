@@ -4,14 +4,14 @@ This page describes the HTTP API of the Limen server, `limend`. Use the
 API for a decision point that does not run the engine in its own process.
 The [OpenAPI document](../api/openapi.yaml) contains the same routes.
 [Integration](integrating.md) describes the Go interfaces for a decision
-point in Go. [Running limend](running.md) describes how to run the
+point in Go. [Install limend](install.md) describes how to run the
 server.
 
 ## Conventions
 
 - **Base path.** The server supplies each route under `/v1`. If
   `LIMEN_BASE_PATH` is set, the server also supplies each route with that
-  prefix in place of `/v1` ([Running limend](running.md#configuration)).
+  prefix in place of `/v1` ([Configuration](configuration.md#both-modes)).
   For example, with `/v1/oversight`, `GET /v1/oversight/learned` and
   `GET /v1/learned` are the same route, with the same permission.
 - **Build version.** `GET /v1/version`, and with `LIMEN_BASE_PATH` also
@@ -22,7 +22,7 @@ server.
   `Authorization: Bearer <token>`. The token must come from an issuer
   that the installation lists, for the audience that the installation
   verifies. A `limend` for one person accepts only the token in
-  `LIMEN_TOKEN` ([Running limend](running.md)).
+  `LIMEN_TOKEN` ([Configuration](configuration.md#one-person)).
 - **Permissions.** Limen verifies the token. Then Limen asks the
   authorization endpoint of the installation if the caller has the
   permission of the route. Limen asks before it does the work of the
@@ -487,6 +487,9 @@ refuses a different `subject` with `invalid_profile` or `invalid_query`.
 
 Add `?keep=true` to add the records to the live models and to the ledger.
 Without `keep`, the replay uses a temporary model and keeps nothing.
+With `keep`, a record that conflicts with a case in the ledger
+(`action_conflict` or `already_decided`) stops the replay, and the
+records before it stay in the ledger.
 
 The body is newline-delimited JSON
 (`Content-Type: application/x-ndjson`). Each line is one record. The
@@ -518,7 +521,8 @@ cover. Then Limen reports what it would suggest:
 ```
 
 The numbers are examples. Errors: `invalid_replay`, with the incorrect
-records in the details, `body_too_large`, and the common errors.
+records in the details, `body_too_large`, and the common errors. With
+`keep`, also `action_conflict` and `already_decided`.
 
 ## Forget a person
 
@@ -814,7 +818,7 @@ has one status and one message:
 |---|---|---|
 | `invalid_action` | 400 | The action has a missing field or a value that is not permitted. Correct the fields that the details list, then send the action again. |
 | `invalid_decision` | 400 | The decision has a missing field or a value that is not permitted. Correct the fields that the details list, then send the decision again. |
-| `invalid_answer` | 400 | The answer has a missing field. Correct the fields that the details list, then send the answer again. |
+| `invalid_answer` | 400 | The answer has a missing field or a value that is not permitted. Correct the fields that the details list, then send the answer again. |
 | `invalid_profile` | 400 | The cost profile has a missing field or a value that is not permitted. Correct the fields that the details list, then save the cost profile again. |
 | `invalid_query` | 400 | The request has a missing field or a value that is not permitted. Correct the fields that the details list, then send the request again. |
 | `invalid_replay` | 400 | A replayed record has a missing field or a value that is not permitted. Correct the records that the details list, then send the replay again. |
@@ -832,62 +836,13 @@ has one status and one message:
 | `unavailable` | 503 | Limen is not available now. Hold the action for a person, and send the request again after a short time. |
 
 Each route can return the common errors: `unauthenticated`, `forbidden`,
-`rate_limited`, `internal`, `authorizer_unavailable`, and `unavailable`.
+`internal`, `authorizer_unavailable`, and `unavailable`. `limend` does not
+limit the rate of requests, and never returns `rate_limited`. A proxy in
+front of `limend` that limits the rate can return it.
 
 ## Permissions
 
-Each route asks the authorization endpoint for one permission on one
-resource. An authorization endpoint for Limen answers these permissions
-and no others:
-
-| Route | Permission | Resource kind | Resource fields |
-|---|---|---|---|
-| `POST /v1/predictions` | `case.predict` | `Case` | `org`, `subject` |
-| `POST /v1/decisions` | `case.decide` | `Case` | `org`, `subject` |
-| `POST /v1/answers` | `case.answer` | `Case` | `org`, `subject` |
-| `GET /v1/cases` | `case.list` | `Case` | `org`, `subject` |
-| `GET /v1/reliability` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/calibration` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/profiles` | `profile.read` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
-| `PUT /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
-| `DELETE /v1/profiles` | `profile.write` | `Profile` | `org`, `action_kind`, `agent`, and `subject` for a cost profile of a person or the context of a person |
-| `POST /v1/replays` | `replay.create` | `Replay` | `org` |
-| `POST /v1/subjects/forget` | `subject.forget` | `Subject` | `org`, `subject` |
-| `GET /v1/explanations` | `case.list` | `Case` | `org`, `subject` |
-| `GET /v1/learned` | `case.list` | `Case` | `org`, `subject` |
-| `POST /v1/previews` | `reliability.read` | `Reliability` | `org`, `subject` |
-| `GET /v1/reports` | `report.read` | `Report` | `org` |
-
-The `Profile` resource gives the kind of action as `action_kind`. The
-reason is that the resource object of the shared authorizer uses `kind`
-for the kind of the resource itself.
-
-A cost profile can be for the context of a person. The `org` of such a
-cost profile is the subject of the person, with the issuer and the `sub`
-and a pipe between them. A decision point puts the actions of a person
-without an organization in this context. Then the `Profile` resource also
-has `subject`, equal to `org`, and the shared owner policy lets the
-person read and save these cost profiles.
-
-An organization ID never contains a pipe. Because of this, the cost
-profiles of an organization have no `subject`, and only an admin can read
-or save them. Replays have no `subject`, also for the context of a
-person.
-
-A cost profile of a person has `subject` in its `Profile` resource. The
-shared owner policy lets that person read, save, and remove it. An
-authorization endpoint must decide it for that person and for no other
-person. The owners of an organization must not read or save the cost
-profile of a different person. A resource never names two persons: in the
-context of a person, `subject` is equal to `org`.
-
-A `Report` resource has no `subject`, because a report is about an
-organization. Under the shared owner policy, only an admin can read a
-report. An authorization endpoint must not let a person read the report
-of an organization only because the person belongs to it.
-
-Usually, the caller is the person of the request. A decision point can
-predict, decide, or answer for the person that it runs for. An agent
-harness is an example. The authorization endpoint must give this decision
-point the `Case` permissions for that person. These permissions also let
-it send an answer with `by`.
+Each route above gives its permission.
+[Writing an authorization endpoint](authorizer.md#the-permissions) gives
+the resource of each permission, and the rules that an authorization
+endpoint for Limen must obey.
