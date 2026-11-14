@@ -44,6 +44,9 @@ the commit log.
   different from the README.
 - **Issues are filed through the forms only.** A blank issue is no
   longer offered.
+- **The network policy no longer admits the Dash0 collector.** The collector
+  is retired, so the egress rule to it is gone. Telemetry export stays off
+  until a deployment sets `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 ### Fixed
 
