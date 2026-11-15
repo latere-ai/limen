@@ -11,6 +11,8 @@ the commit log.
 
 ## Unreleased
 
+## v0.10.0 - 2026-11-15
+
 ### Added
 
 - **Pages for each reader of a service:** `docs/local.md` runs `limend`
