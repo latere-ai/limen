@@ -16,7 +16,8 @@
 //     never an allow that the person's approvals do not cover: approvals
 //     of the same family whose scope ([Reach]) the action is within, with
 //     enough weight from enough sessions ([Cover], [MinWeight],
-//     [MinSessions]).
+//     [MinSessions]), and never a block that rests on the denials of other
+//     families alone: a family with no answer of its own asks.
 //   - The decision point decides. It composes the suggestion with the
 //     ceiling its deterministic rules leave open and with random review
 //     sampling (latere.ai/x/pkg/verdict.Decide), applies the verdict, and

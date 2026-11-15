@@ -299,6 +299,25 @@ func Nearest(fams []string, s limen.Reach, recs []Record, set Settings, n int) [
 	return out
 }
 
+// Answered reports whether every family of fams has an answer of its own:
+// an answered record in the window that shares the family. Only such
+// answers can lead to a block, because the denials of other families move
+// the tolerance every family shares. An action with no family is not
+// answered.
+func Answered(fams []string, recs []Record, set Settings) bool {
+	in := window(recs, set.Window)
+	fams = families(fams)
+	if len(fams) == 0 {
+		return false
+	}
+	for _, f := range fams {
+		if !slices.ContainsFunc(in, func(i int) bool { return slices.Contains(recs[i].Families, f) }) {
+			return false
+		}
+	}
+	return true
+}
+
 // Disagree reports whether, in some family of fams, the latest answers of
 // the answered records in the window hold an approval and a denial: an ask
 // in the ask band on such evidence is [limen.AskSplit], and on agreeing
@@ -359,12 +378,17 @@ func plural(n int, word string) string {
 
 // Previewed is the verdict a preview gives a recorded prediction under the
 // thresholds th: theirs, except that an allow is an ask where the
-// prediction recorded a cover that does not cover it. A preview applies
+// prediction recorded a cover that does not cover it, and a block is an
+// ask where the prediction itself was an ask although its own thresholds
+// gave a block, the hold of a family with no answers. A preview applies
 // the cover rule as it was recorded and does not read it again. A
 // prediction from before the cover rule has no cover, and is not held.
 func Previewed(th limen.Thresholds, p limen.Prediction) limen.Verdict {
 	v := th.Verdict(p.Approve)
 	if v == limen.Allow && p.Cover != (limen.Cover{}) && !p.Cover.Covered {
+		return limen.Ask
+	}
+	if v == limen.Block && p.Verdict == limen.Ask && p.Thresholds.Verdict(p.Approve) == limen.Block {
 		return limen.Ask
 	}
 	return v
@@ -391,8 +415,9 @@ type Judged struct {
 // scope s, whose model gives approve and the evidence ratio er, under the
 // thresholds th, over the person's records and their weights. The
 // thresholds give the verdict. An allow the approvals do not cover is an
-// ask of kind wider or few, and an ask in the band is unsure, split or
-// short. Every implementation judges with it, so two of them suggest
+// ask of kind wider or few, a block of an action with a family that has no
+// answer of its own is an ask of kind unsure, and an ask in the band is
+// unsure, split or short. Every implementation judges with it, so two of them suggest
 // alike for the same ledger and the same model.
 func Judge(approve, er float64, th limen.Thresholds, fams []string, s limen.Reach, recs []Record, w []Weights, set Settings) Judged {
 	j := Judged{Verdict: th.Verdict(approve)}
@@ -404,6 +429,9 @@ func Judge(approve, er float64, th limen.Thresholds, fams []string, s limen.Reac
 		if wider {
 			j.Kind = limen.AskWider
 		}
+	case j.Verdict == limen.Block && !Answered(fams, recs, set):
+		// The block rests on denials of other families, so it is an ask.
+		j.Verdict, j.Kind = limen.Ask, limen.AskUnsure
 	case j.Verdict != limen.Ask:
 	case er < EvidenceCut:
 		j.Kind = limen.AskUnsure

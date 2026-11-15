@@ -237,6 +237,15 @@ var defects = []defect{
 			return p, err
 		}
 	}},
+	{"BlockNeedsOwnAnswers", "a block ignores the families with no answers", func(f *faulty) {
+		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
+			p, err := f.Service.Predict(ctx, a)
+			if p.Approve < p.Thresholds.BlockBelow {
+				p.Verdict, p.AskKind = limen.Block, ""
+			}
+			return p, err
+		}
+	}},
 	{"ScopeOfAnAction", "a claim makes the scope narrower", func(f *faulty) {
 		f.predict = func(ctx context.Context, a limen.Action) (limen.Prediction, error) {
 			p, err := f.Service.Predict(ctx, a)

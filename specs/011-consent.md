@@ -459,12 +459,42 @@ The cap applies after the model:
 The cap changes only the verdict. `approve`, `uncertainty` and the
 evidence ratio stay the numbers of the model. The cap can change
 `allow` to `ask` and nothing else, so it never makes a suggestion more
-permissive. There is no cap on `block`. The cover rule tests if the
-person consented to the run of an action. Because of this, it removes
-only `allow` from the choices. Limen then takes the verdict of least
-expected cost from the choices that are left. For an action below the
-block threshold, that verdict is still `block` (see Why this is correct
+permissive. The cover rule tests if the person consented to the run of
+an action. Because of this, it removes only `allow` from the choices.
+Limen then takes the verdict of least expected cost from the choices
+that are left. For an action below the block threshold whose families
+all have answers, that verdict is still `block` (see Why this is correct
 for the model).
+
+#### The cover for `block`
+
+The tolerance the model learns is shared by every family. A denial of
+one family lowers the approval probability of the others, so a family
+that nobody ever answered can fall below the block threshold. Measured
+with v0.8.0 under Careful: after 10, 30 and 60 considered denials spread
+over `git_push`, `bash` and `write_file`, a never-answered `deploy`
+scored 0.288, 0.255 and 0.247, and at 60 it was blocked without anyone
+being asked.
+
+The rule: a block rests on the answers of the person about that family.
+
+If the verdict is `block` and some family of the action has no answer of
+its own, the verdict is `ask` of kind `unsure`.
+
+An answer of a family is any answered case in the window of the model
+whose families hold it, an approval or a denial, whatever its weight. An
+action with no family has none. A chain of commands has the families of
+its segments, so one unanswered family holds the block of the chain. The
+hold is the mirror of the cap on `allow`: it can change `block` to `ask`
+and nothing else. The numbers of the prediction stay those of the model.
+A block the person set as an explicit rule is a rule of the decision
+point and does not pass through this rule. The first answer of the
+family, in any direction, ends the hold, and a family's own denials can
+then lead to a block.
+
+A preview applies the hold as the prediction recorded it: a prediction
+that is an `ask` although its own thresholds gave a block is an `ask` in
+every preview.
 
 A capped `ask` has one of two new values of `ask_kind`:
 
@@ -482,7 +512,8 @@ the person ([[005-adapters]]).
 
 Proposition 2 gives the verdict of least expected cost among `allow`,
 `ask` and `block`. The cap removes `allow` from the choices where the
-person gave no consent to the reach of the action. Limen then takes
+person gave no consent to the reach of the action, and the cover for
+`block` removes `block` where the family has no answer. Limen then takes
 the verdict of least expected cost among the choices that are left.
 The thresholds, the costs and the arithmetic of Proposition 2 do not
 change.
@@ -1021,6 +1052,7 @@ recommendation, with decision 7 and decision 10 as below.
 | 21 | A replay of the ledger gives the would-be verdicts of version 2 beside the recorded predictions of version 1 before version 2 serves | the replay command and the record of the deployment |
 | 22 | `split` needs an approval and a denial in the family, `short` is agreeing answers, and an older client reads `short` as `unsure` | an engine test and a decision point test |
 | 23 | A replay records an answer at `answered_at` with its six fields, and the importer of Topos logs sets `answered_at` from the confirmation | an engine test and an importer test |
+| 24 | A block the thresholds give is an `ask` of kind `unsure` while some family of the action has no answer of its own. A family's own answers lead to a block | an engine test of the measurement above, an `estimate/` test, and a conformance case |
 
 ## Outcome
 
@@ -1072,6 +1104,7 @@ installation, with the record of its deployment, waits for the owner.
 | 20, the scope of old cases | `TestMigrated` (`engine/featurize`), `TestOldCasesMigrate` (`engine`) |
 | 22 | `TestSplitNeedsADenial`, `TestShortOnAnswersThatAgree` (`engine`). The decision point test is Topos's |
 | 23 | `TestReplayIsHeld` (`engine`, `stub`), `TestAnswersFollowTheSettlements` and the importer test of the record (`importer/topos`) |
+| 24 | `TestUnansweredFamilyAsksInsteadOfBlock` (`engine`), `TestJudgeBlockNeedsOwnAnswers`, `TestPreviewedHoldsAHeldBlock` (`estimate`), conformance `BlockNeedsOwnAnswers` |
 
 ### What diverges from the design as written
 

@@ -37,6 +37,17 @@ the commit log.
 
 ### Changed
 
+- **A kind of step you never answered now asks you instead of being
+  blocked by your answers to other kinds.** Only your own answers about a
+  kind, or a rule you set, can lead Limen to suggest a block for it.
+  Before, enough denials of other kinds could push a kind you had never
+  seen below the block threshold, and it was blocked without anyone
+  being asked.
+- **A profile saved with the old Strict costs (50, 4, 1) now reads as
+  Strict (20, 4, 1).** The self-hosted file store changes it when it
+  loads the organization's profiles, once, and every client shows Strict
+  at 95% again instead of Custom at 98%. A profile with any other costs
+  is left as it is.
 - **The README starts with what Limen is, then its status, a quickstart,
   and how it fits with the other services.** The quickstart waits until
   `limend` answers before the first request. Before, the first

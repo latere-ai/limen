@@ -73,8 +73,8 @@ type Tally struct {
 	// Looser counts the records where Next is more permissive than Base,
 	// and Outside those of them that the cover rule does not hold: all but
 	// an allow of Next on an action that the person's considered approvals
-	// cover. The cover rule holds no block, so an ask of Next where Base
-	// blocks is outside it.
+	// cover. The hold of a block is not read here, so an ask of Next where
+	// Base blocks is outside it.
 	Looser  int `json:"looser"`
 	Outside int `json:"outside"`
 	// CoverDiffers counts the records whose cover differs between the two

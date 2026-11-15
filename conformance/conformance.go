@@ -60,6 +60,7 @@ var rules = []rule{
 	{"PredictionFollowsTheProfile", predictionFollowsTheProfile},
 	{"SteeredVerdicts", steeredVerdicts},
 	{"CoverCapsAllow", coverCapsAllow},
+	{"BlockNeedsOwnAnswers", blockNeedsOwnAnswers},
 	{"ScopeOfAnAction", scopeOfAnAction},
 	{"AnswerWeights", answerWeights},
 	{"ConsentOfAProfile", consentOfAProfile},
@@ -325,6 +326,8 @@ func followsTheCap(t *testing.T, what string, approve float64, v limen.Verdict, 
 		expect(t, v != limen.Allow || c.Covered, "%s: an allow with the cover %+v, which does not cover it", what, c)
 	case v == limen.Ask && want == limen.Allow:
 		expect(t, !c.Covered && slices.Contains(capped, kind), "%s: an ask of kind %q in place of an allow, with the cover %+v", what, kind, c)
+	case v == limen.Ask && want == limen.Block:
+		expect(t, kind == limen.AskUnsure, "%s: an ask of kind %q in place of a block", what, kind)
 	default:
 		t.Errorf("%s: verdict %q, the thresholds give %q for %v", what, v, want, approve)
 	}
@@ -451,6 +454,43 @@ func coverCapsAllow(t *testing.T, target Target) {
 		expect(t, len(l.Entries) == 1 && l.Entries[0].Verdict == limen.Ask && l.Entries[0].AskKind == limen.AskFew && l.Entries[0].Cover == want,
 			"the learned entry of one approval: %+v, want a few ask with %+v", l.Entries, want)
 	}
+}
+
+// blockNeedsOwnAnswers (spec 011): a block the thresholds give is an ask
+// of kind unsure while some family of the action has no answer of its own,
+// whatever the person answered about other families. An answer of the
+// family, a denial or an approval, ends the hold. The hold changes no
+// number of the prediction. It needs a prediction below the block
+// threshold, so it runs against Steered.
+func blockNeedsOwnAnswers(t *testing.T, target Target) {
+	if target.Steered == nil {
+		t.Skip("the target learns its predictions; Target.Steered is nil")
+	}
+	s := target.Steered(t, func(limen.Action) (float64, float64) { return 0.1, 0.1 })
+	probes := 0
+	check := func(a limen.Action, want limen.Verdict) {
+		t.Helper()
+		probes++
+		a.Key = key("bnp" + strconv.Itoa(probes))
+		p := predict(t, s, a)
+		expect(t, p.Verdict == want && p.Approve == 0.1 && p.Uncertainty == 0.1, "probe %d: %+v, want %q at 0.1", probes, p, want)
+		if want == limen.Ask {
+			expect(t, p.AskKind == limen.AskUnsure && p.Reason != "" && !strings.Contains(p.Reason, "block"), "probe %d: an ask of kind %q with reason %q", probes, p.AskKind, p.Reason)
+		} else {
+			expect(t, p.AskKind == "", "probe %d: a block of kind %q", probes, p.AskKind)
+		}
+		x, err := s.Explain(ctx, a.Key)
+		must(t, err)
+		expect(t, x.Verdict == want && x.Approve == 0.1, "probe %d, the explanation: %+v, want %q", probes, x, want)
+	}
+	probe := in("", "ses_1")
+	check(probe, limen.Ask)
+	for i := range 3 {
+		approved(t, s, command("bnd"+strconv.Itoa(i), "ls -la"), false)
+	}
+	check(probe, limen.Ask)
+	approved(t, s, in("bn1", "ses_1"), false)
+	check(probe, limen.Block)
 }
 
 // scopeOfAnAction (spec 011): a prediction gives the scope Limen used,

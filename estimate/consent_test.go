@@ -332,3 +332,54 @@ func value(e limen.Estimate) float64 {
 	}
 	return *e.Value
 }
+
+// Only a family's own answers lead to a block: with none in some family of
+// the action, a block is an ask of kind unsure; an allow and an ask are
+// untouched.
+func TestJudgeBlockNeedsOwnAnswers(t *testing.T) {
+	th := limen.Thresholds{AllowAbove: 0.9, BlockBelow: 0.25}
+	d := approval(1, "bash", "s", update)
+	d.Answers[0].Approve = false
+	recs := []Record{d}
+	judge := func(approve float64, fams ...string) Judged {
+		return Judge(approve, 1, th, fams, update, recs, DefaultPolicy().Weigh(recs), set)
+	}
+	if j := judge(0.1, "deploy"); j.Verdict != limen.Ask || j.Kind != limen.AskUnsure {
+		t.Errorf("a block of an unanswered family: %+v", j)
+	}
+	if j := judge(0.1, "bash", "deploy"); j.Verdict != limen.Ask || j.Kind != limen.AskUnsure {
+		t.Errorf("a block of a chain with one unanswered family: %+v", j)
+	}
+	if j := judge(0.1); j.Verdict != limen.Ask {
+		t.Errorf("a block of an action with no family: %+v", j)
+	}
+	if j := judge(0.1, "bash"); j.Verdict != limen.Block || j.Kind != "" {
+		t.Errorf("a block of an answered family: %+v", j)
+	}
+	if j := judge(0.5, "deploy"); j.Verdict != limen.Ask {
+		t.Errorf("an ask in the band: %+v", j)
+	}
+	if Answered([]string{"bash"}, recs, Settings{Window: 1}) != true || Answered([]string{"bash"}, nil, set) {
+		t.Error("the answered families are not read from the window")
+	}
+}
+
+// A preview holds a block the prediction recorded as an ask, and releases
+// nothing else.
+func TestPreviewedHoldsAHeldBlock(t *testing.T) {
+	th := limen.Thresholds{AllowAbove: 0.9, BlockBelow: 0.25}
+	held := limen.Prediction{Approve: 0.1, Verdict: limen.Ask, Thresholds: th}
+	if v := Previewed(th, held); v != limen.Ask {
+		t.Errorf("a held block previews as %q", v)
+	}
+	blocked := limen.Prediction{Approve: 0.1, Verdict: limen.Block, Thresholds: th}
+	if v := Previewed(th, blocked); v != limen.Block {
+		t.Errorf("a block previews as %q", v)
+	}
+	// An ask below the new block threshold but inside the recorded band
+	// was no hold.
+	band := limen.Prediction{Approve: 0.2, Verdict: limen.Ask, Thresholds: limen.Thresholds{AllowAbove: 0.9, BlockBelow: 0.1}}
+	if v := Previewed(th, band); v != limen.Block {
+		t.Errorf("an ask in the recorded band previews as %q", v)
+	}
+}

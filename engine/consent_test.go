@@ -615,3 +615,44 @@ func TestReliabilityCountsConsidered(t *testing.T) {
 		t.Errorf("reliability %+v", r)
 	}
 }
+
+// A family with no answers of its own asks instead of being blocked by the
+// denials of other families (spec 011, the cap on block). The measurement
+// of v0.8.0 under Careful: after 60 denials over git_push, bash and
+// write_file, a never-answered deploy scored 0.247 and was blocked.
+func TestUnansweredFamilyAsksInsteadOfBlock(t *testing.T) {
+	e := coverEngine(t, careful, engine.Options{})
+	named := func(name, id, ses string) limen.Action {
+		a := publish(id, ses)
+		a.Name = name
+		return a
+	}
+	probe := func(id string) limen.Prediction {
+		t.Helper()
+		return predicted(t, e, named("deploy", id, "ses-p"))
+	}
+	for i := range 60 {
+		name := []string{"git_push", "bash", "write_file"}[i%3]
+		answer(t, e, named(name, fmt.Sprintf("d%d", i), fmt.Sprintf("ses-%d", i%5)), false)
+		if n := i + 1; n == 10 || n == 30 || n == 60 {
+			p := probe(fmt.Sprintf("probe%d", n))
+			if p.Approve >= p.Thresholds.BlockBelow && n == 60 {
+				t.Fatalf("after %d denials a never-answered deploy scores %.3f, not below the block threshold %.2f; the test does not reproduce the measurement", n, p.Approve, p.Thresholds.BlockBelow)
+			}
+			if p.Verdict != limen.Ask || p.AskKind != limen.AskUnsure || strings.Contains(p.Reason, "block") {
+				t.Fatalf("after %d denials a never-answered deploy: %+v, want an unsure ask", n, p)
+			}
+			x, err := e.Explain(ctx, p.Key)
+			if err != nil || x.Verdict != limen.Ask || x.AskKind != limen.AskUnsure || x.Reason != p.Reason {
+				t.Fatalf("the explanation after %d denials: %+v, %v", n, x, err)
+			}
+		}
+	}
+	// A family's own denials still lead to a block.
+	for i := range 3 {
+		answer(t, e, named("deploy", fmt.Sprintf("own%d", i), "ses-p"), false)
+	}
+	if p := probe("after"); p.Verdict != limen.Block || p.AskKind != "" {
+		t.Fatalf("after three denials of deploy itself: %+v, want a block", p)
+	}
+}

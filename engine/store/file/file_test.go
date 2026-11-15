@@ -661,3 +661,71 @@ func TestMetaBytes(t *testing.T) {
 		t.Errorf("subjects %v %v", subs, err)
 	}
 }
+
+// A profile saved with the costs Strict had until 2026-11-03 (50, 4, 1)
+// reads as the Strict of now (20, 4, 1) with its thresholds, in every
+// scope, and the file is rewritten; a profile with any other costs is
+// left alone, and a second open changes nothing.
+func TestOldStrictProfilesMigrate(t *testing.T) {
+	dir := t.TempDir()
+	s := open(t, dir)
+	old := limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}
+	save := func(p limen.Profile) {
+		t.Helper()
+		th, err := p.Costs.Thresholds()
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.Thresholds = th
+		if err := s.PutProfile(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save(limen.Profile{Org: "o", Costs: old, AuditRate: 0.2, Consent: limen.Consent{MinWeight: 4}})
+	save(limen.Profile{Org: "o", Kind: "tool", Costs: old, AuditRate: 0.05})
+	save(limen.Profile{Org: "o", Subject: "s", Costs: old, AuditRate: 0.05})
+	save(limen.Profile{Org: "o", Agent: "a", Costs: limen.Costs{FalseAllow: 50, FalseBlock: 5, Ask: 1}, AuditRate: 0.05})
+	save(limen.Profile{Org: "o", Kind: "x", Agent: "a", Costs: limen.Costs{FalseAllow: 100, FalseBlock: 8, Ask: 2}, AuditRate: 0.05})
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := limen.Thresholds{AllowAbove: 0.95, BlockBelow: 0.25}
+	strict := limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}
+	check := func() {
+		t.Helper()
+		s := open(t, dir)
+		defer func() { _ = s.Close() }()
+		for _, sc := range []limen.Scope{{Org: "o"}, {Org: "o", Kind: "tool"}, {Org: "o", Subject: "s"}} {
+			p, ok, err := s.Profile(ctx, sc)
+			if err != nil || !ok || p.Costs != strict || p.Thresholds != want {
+				t.Errorf("%+v: %+v, %v, %v; want Strict costs and thresholds %+v", sc, p, ok, err, want)
+			}
+		}
+		if p, _, _ := s.Profile(ctx, limen.Scope{Org: "o"}); p.AuditRate != 0.2 || p.Consent.MinWeight != 4 {
+			t.Errorf("the migration changed the other fields: %+v", p)
+		}
+		for _, c := range []struct {
+			sc    limen.Scope
+			costs limen.Costs
+		}{{limen.Scope{Org: "o", Agent: "a"}, limen.Costs{FalseAllow: 50, FalseBlock: 5, Ask: 1}},
+			{limen.Scope{Org: "o", Kind: "x", Agent: "a"}, limen.Costs{FalseAllow: 100, FalseBlock: 8, Ask: 2}}} {
+			if p, ok, err := s.Profile(ctx, c.sc); err != nil || !ok || p.Costs != c.costs {
+				t.Errorf("%+v: %+v, %v, %v; want costs %+v left alone", c.sc, p, ok, err, c.costs)
+			}
+		}
+	}
+	check()
+	first, err := os.ReadFile(filepath.Join(dir, "profiles", "o.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the profile with the costs 50, 5, 1 keeps a false_allow of 50.
+	if bytes.Count(first, []byte(`"false_allow": 50`)) != 1 {
+		t.Errorf("the file still holds old Strict costs:\n%s", first)
+	}
+	check()
+	second, err := os.ReadFile(filepath.Join(dir, "profiles", "o.json"))
+	if err != nil || !bytes.Equal(first, second) {
+		t.Errorf("a second open changed the file: %v", err)
+	}
+}

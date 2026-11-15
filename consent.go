@@ -12,7 +12,10 @@ import "time"
 // total weight of MinWeight or more, from MinSessions or more different
 // sessions. The rule applies after the model and the thresholds: an allow
 // the thresholds give that is not covered becomes an [Ask] of kind
-// [AskWider] or [AskFew], and an ask or a block is never changed.
+// [AskWider] or [AskFew]. A block is held the other way: a block of an
+// action with a family that has none of the person's answers becomes an
+// [Ask] of kind [AskUnsure], because the denials of other families move
+// the tolerance every family shares. An ask is never changed.
 //
 // A case counts when its latest answer, the one the model learns,
 // approves. Only the person's own cases count, in the window of the model,

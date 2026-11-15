@@ -447,13 +447,40 @@ func (s *Store) orgProfiles(org string) (map[limen.Scope]limen.Profile, error) {
 		if err := json.Unmarshal(data, &list); err != nil {
 			return nil, fmt.Errorf("file store: %s does not parse: %w", path, err)
 		}
+		migrated := false
 		for _, p := range list {
+			if p.Costs == oldStrict {
+				p.Costs = strict
+				if p.Thresholds, err = strict.Thresholds(); err != nil {
+					return nil, fmt.Errorf("file store: thresholds of the Strict costs: %w", err)
+				}
+				migrated = true
+			}
 			ps[p.Scope] = p
+		}
+		if migrated {
+			// Written back at once, so the file holds the new costs and
+			// the next load finds nothing to migrate.
+			if err := s.writeProfiles(org, ps); err != nil {
+				return nil, err
+			}
+			return ps, nil
 		}
 	}
 	s.profiles[org] = ps
 	return ps, nil
 }
+
+// oldStrict is the costs Strict had until 2026-11-03: it allowed only
+// above 98%, which the model never reaches. strict is the costs Strict has
+// now. A profile saved with oldStrict exactly is a Strict profile the
+// clients show as Custom, so it takes the new costs when its file is
+// loaded; a profile with any other costs is the person's own and is not
+// touched.
+var (
+	oldStrict = limen.Costs{FalseAllow: 50, FalseBlock: 4, Ask: 1}
+	strict    = limen.Costs{FalseAllow: 20, FalseBlock: 4, Ask: 1}
+)
 
 // Profile implements [store.Store].
 func (s *Store) Profile(ctx context.Context, sc limen.Scope) (limen.Profile, bool, error) {
