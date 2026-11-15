@@ -37,6 +37,8 @@ the commit log.
 
 ### Changed
 
+- Built with Go 1.27.4, which fixes GO-2026-6859.
+
 - **A kind of step you never answered now asks you instead of being
   blocked by your answers to other kinds.** Only your own answers about a
   kind, or a rule you set, can lead Limen to suggest a block for it.
